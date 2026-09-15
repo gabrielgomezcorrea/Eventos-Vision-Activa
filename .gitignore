@@ -1,0 +1,48 @@
+/.phpunit.cache
+/bootstrap/ssr
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/resources/js/actions
+/resources/js/routes
+/resources/js/wayfinder
+/vendor
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/auth.json
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Base de datos local
+/database/*.sqlite
+
+# Ningún .md viaja al repositorio salvo los que tiene cualquier proyecto.
+# Instrucciones de IA, roadmaps, specs, actas y notas son método propio y no se
+# publican. Regla general para no tener que ir agregando archivos uno por uno.
+*.md
+!README.md
+!LICENSE.md
+!CHANGELOG.md
+
+# Specs y planes de Superpowers: método propio (incluye lo que no es .md)
+/docs/superpowers/
+
+# Carpetas de agentes
+/.claude
+/.codex
+/.agents
