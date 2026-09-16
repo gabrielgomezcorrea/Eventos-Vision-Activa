@@ -21,7 +21,9 @@ return new class extends Migration
             // no vuelve a existir en el sistema.
             $table->string('token_hash', 64)->unique();
 
-            $table->timestamp('expires_at')->index();
+            // dateTime, no timestamp: MySQL le pone ON UPDATE CURRENT_TIMESTAMP a la
+            // primera columna TIMESTAMP no nula y reescribiría el vencimiento.
+            $table->dateTime('expires_at')->index();
             $table->timestamp('last_used_at')->nullable();
             $table->unsignedInteger('uses')->default(0);
             $table->timestamp('revoked_at')->nullable();
