@@ -6,7 +6,7 @@ import {
     useForm,
     usePage,
 } from '@inertiajs/react';
-import { Copy, Flag, Pencil, Trash2 } from 'lucide-react';
+import { ArrowRight, Copy, Flag, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
@@ -223,13 +223,14 @@ function CambiarEstado({
 }
 
 /** El mismo lápiz de las demás secciones, pero lleva a su propia pantalla. */
+/** Goes to the block's own screen: arrow, not pencil, because it is not edited here. */
 function IrA({ href, texto }: { href: string; texto: string }) {
     return (
         <Tooltip>
             <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" asChild>
                     <Link href={href} aria-label={texto}>
-                        <Pencil />
+                        <ArrowRight />
                     </Link>
                 </Button>
             </TooltipTrigger>
@@ -979,7 +980,7 @@ export default function EventoShow({
                         puede.editar && (
                             <IrA
                                 href={CuposYPreciosController.url(evento.id)}
-                                texto="Editar cupos y precios"
+                                texto="Ir a cupos y precios"
                             />
                         )
                     }
@@ -1014,7 +1015,7 @@ export default function EventoShow({
                                 href={FormularioPublicoController.edit.url(
                                     evento.id,
                                 )}
-                                texto="Editar el formulario"
+                                texto="Ir al formulario público"
                             />
                         )
                     }
