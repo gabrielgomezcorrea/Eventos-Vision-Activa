@@ -1,0 +1,88 @@
+name: deploy
+
+# Se despliega solo si el workflow "tests" terminó en verde sobre main.
+on:
+  workflow_run:
+    workflows: ['tests']
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    env:
+      DESTINO: /home/visionac/apps/eventos
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # Dependencias y assets se arman acá: CentOS 7 tiene glibc 2.17 y Node 22
+      # no corre en el servidor.
+      - name: Install dependencies
+        run: |
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          npm ci
+
+      - name: Build assets
+        run: |
+          php artisan wayfinder:generate --with-form
+          npm run build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      # --delete mantiene el servidor igual al repo, pero storage y .env son del
+      # servidor: ahí viven los comprobantes y las credenciales de producción.
+      - name: Upload
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy -p ${{ secrets.DEPLOY_PORT }}" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude '.env' \
+            --exclude 'storage' \
+            --exclude 'tests' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:$DESTINO/
+
+      - name: Migrate and refresh caches
+        run: |
+          ssh -i ~/.ssh/deploy -p ${{ secrets.DEPLOY_PORT }} \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "chown -R visionac:visionac $DESTINO \
+             && cd /opt/eventos \
+             && docker compose exec -T app php artisan migrate --force \
+             && docker compose exec -T app php artisan config:cache \
+             && docker compose exec -T app php artisan route:cache \
+             && docker compose exec -T app php artisan view:cache \
+             && docker compose restart cola scheduler"
