@@ -76,7 +76,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy -p ${{ secrets.DEPLOY_PORT }} \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "chown -R visionac:visionac $DESTINO \
+            "chown -R 33:33 $DESTINO \
              && cd /opt/eventos \
              && docker compose exec -T app php artisan migrate --force \
              && docker compose exec -T app php artisan config:cache \
