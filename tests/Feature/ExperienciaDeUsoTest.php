@@ -44,7 +44,7 @@ class ExperienciaDeUsoTest extends TestCase
             // El mensaje dice qué se espera, no que el campo es inválido: con
             // "revisa el formato" la persona tiene que adivinar y abandona.
             ->assertSee('Escribe un solo correo, como nombre@colegio.cl.')
-            ->assertSee('Debes seguir el formato +56912345678.')
+            ->assertSee('Escribe un celular con código de país, como 56912345678.')
             ->assertDontSee('must be a valid email address');
     }
 
@@ -54,7 +54,7 @@ class ExperienciaDeUsoTest extends TestCase
             'first_name' => 'María José',
             'last_name' => 'Pérez Soto',
             'email' => 'correo-malo',
-            'phone' => '+56912345678',
+            'phone' => '56912345678',
             'position' => 'Otro',
             'position_otro' => 'Jefa UTP',
             'institution' => 'Liceo A-12',

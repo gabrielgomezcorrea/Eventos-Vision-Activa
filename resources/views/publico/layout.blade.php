@@ -20,6 +20,29 @@
         body{margin:0;background:var(--fondo);color:var(--texto);
              font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
         .envoltura{max-width:820px;margin:0 auto;padding:28px 16px 60px}
+        /* La pantalla de estado lleva menú lateral y necesita algo más de aire.
+           Los pasos del recorrido siguen en 820: son una columna de formulario. */
+        .envoltura.ancha{max-width:1040px}
+        .columnas{display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start}
+        .lado{position:sticky;top:24px;display:flex;flex-direction:column;gap:14px}
+        .lado-caja{background:var(--superficie);border:1px solid var(--borde);border-radius:12px;padding:16px}
+        .lado-titulo{margin:0 0 10px;font-size:.78rem;text-transform:uppercase;
+                     letter-spacing:.03em;color:var(--texto-suave);font-weight:600}
+        .lado-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+        .lado-item{display:block;padding:9px 11px;border-radius:8px;text-decoration:none;
+                   color:var(--texto);border:1px solid transparent}
+        .lado-item:hover{background:var(--fondo)}
+        .lado-item.activo{background:var(--info-suave);border-color:#BBD3EE}
+        .lado-item-nombre{display:block;font-weight:600;font-size:.9rem;line-height:1.3}
+        .lado-item-estado{display:block;font-size:.78rem;color:var(--texto-suave);margin-top:2px}
+        .lado-item.activo .lado-item-nombre{color:var(--primario)}
+        .lado-nota{margin:10px 0 0;font-size:.78rem;color:var(--texto-suave)}
+        /* En el celular el menú va arriba, no al costado: el contenido manda. */
+        @media(max-width:820px){
+            .columnas{grid-template-columns:1fr;gap:16px}
+            .lado{position:static}
+        }
+        .banner{display:block;width:100%;height:auto;border-radius:10px;margin-bottom:20px}
         .cabecera{margin-bottom:20px}
         .cabecera h1{font-size:1.3rem;margin:0 0 4px}
         .cabecera p{margin:0;color:var(--texto-suave);font-size:.9rem}
@@ -49,6 +72,8 @@
         .error-campo{color:var(--error);font-size:.83rem;margin-top:4px}
         .aviso{border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:.9rem}
         .aviso-error{background:var(--error-suave);color:var(--error)}
+        /* Aviso sin fondo: el bloque rojo entero grita, cuando basta el texto. */
+        .aviso-texto{color:var(--error);font-size:.92rem;margin-bottom:16px}
         .aviso-info{background:var(--info-suave);color:var(--primario)}
         .aviso-exito{background:var(--exito-suave);color:var(--exito)}
         .acciones{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
@@ -74,7 +99,9 @@
     </style>
 </head>
 <body>
-<div class="envoltura">
+<div class="envoltura @yield('envoltura')">
+    @include('publico._banner', ['evento' => $event])
+
     <div class="cabecera">
         <h1>{{ $event->name }}</h1>
         <p>@yield('subtitulo', 'Inscripción de participantes')</p>
@@ -82,8 +109,8 @@
 
     @isset($paso)
         @php
-            $orden_pasos = ['responsable' => 'Responsable', 'pagador' => 'Facturación',
-                            'establecimientos' => 'Establecimientos', 'participantes' => 'Participantes',
+            $orden_pasos = ['responsable' => 'Responsable', 'establecimientos' => 'Establecimiento',
+                            'participantes' => 'Participantes', 'pagador' => 'Facturación',
                             'resumen' => 'Resumen'];
             $indice = array_search($paso, array_keys($orden_pasos), true);
         @endphp

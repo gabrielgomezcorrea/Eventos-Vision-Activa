@@ -40,7 +40,12 @@
                     <p class="institucion">{{ $participante->establishment->name }}</p>
                 @endif
 
-                <p class="acceso">{{ $acceso?->name }}</p>
+                <p class="acceso">
+                    {{ $acceso?->name }}
+                    @if ($ticket->order->kind === \App\Enums\OrderKind::Invitado)
+                        · Invitado especial
+                    @endif
+                </p>
                 <p class="orden">Inscripción {{ $ticket->order->number }} · Código {{ $ticket->code }}</p>
             </div>
 

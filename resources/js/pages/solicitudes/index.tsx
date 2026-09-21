@@ -26,6 +26,7 @@ type SolicitudFila = {
     persona: string;
     cargo: string | null;
     correo: string;
+    telefono: string | null;
     institucion: string | null;
     evento: string | null;
     estado: Estado;
@@ -168,7 +169,7 @@ export default function SolicitudesIndex({
                             <TableRow className="hover:bg-transparent">
                                 <TableHead className="pl-5">Recibida</TableHead>
                                 <TableHead>Persona</TableHead>
-                                <TableHead>Correo</TableHead>
+                                <TableHead>Contacto</TableHead>
                                 <TableHead>Institución</TableHead>
                                 <TableHead>Evento</TableHead>
                                 <TableHead>Estado</TableHead>
@@ -216,8 +217,15 @@ export default function SolicitudesIndex({
                                             </span>
                                         )}
                                     </TableCell>
-                                    <TableCell className="max-w-56 truncate">
-                                        {s.correo}
+                                    <TableCell>
+                                        <span className="block max-w-56 truncate">
+                                            {s.correo}
+                                        </span>
+                                        {s.telefono && (
+                                            <span className="text-muted-foreground block text-xs">
+                                                {s.telefono}
+                                            </span>
+                                        )}
                                     </TableCell>
                                     <TableCell className="max-w-48 truncate">
                                         {s.institucion ?? '—'}

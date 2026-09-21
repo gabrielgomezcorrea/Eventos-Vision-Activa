@@ -1,16 +1,21 @@
+{{--
+    Goes to the person who attends, not to whoever bought: no purchase steps,
+    only their entry. Carries the program attached because the buyer often does
+    not forward it (meeting of 17/09/2026).
+--}}
 <x-mail::message>
+@include('mail._banner', ['evento' => $evento])
+
 # Tu credencial de acceso
 
 Hola {{ $participante->first_name }},
 
-@include('mail._pasos', ['actual' => 4])
-
 Tu inscripción a **{{ $evento->name }}** está confirmada. Esta es tu credencial de acceso.
 
 <x-mail::panel>
-**Participante:** {{ $participante->nombre_completo }}
+**Participante:** {{ $participante->nombre_completo }}<br>
 @if ($participante->establishment?->name)
-**Establecimiento:** {{ $participante->establishment->name }}
+**Establecimiento:** {{ $participante->establishment->name }}<br>
 @endif
 **Acceso:** {{ $participante->accessType?->name }}<br>
 **Código de respaldo:** {{ $ticket->code }}
@@ -20,10 +25,14 @@ Tu inscripción a **{{ $evento->name }}** está confirmada. Esta es tu credencia
 Ver mi credencial
 </x-mail::button>
 
-Puedes presentarla desde tu teléfono o impresa. Si el código QR no se puede leer, indica en
-el ingreso tu código de respaldo: **{{ $ticket->code }}**.
+**Presenta tu código QR para ingresar**, desde tu teléfono o impreso. Si no se puede leer,
+indica en el ingreso tu código de respaldo: **{{ $ticket->code }}**.
 
-La acreditación se realiza una sola vez, en tu primer ingreso al evento.
+La credencial es personal y **no es transferible** a otra persona.
+
+@if ($evento->attachments->isNotEmpty())
+Adjuntamos el programa del evento.
+@endif
 
 @include('mail._contacto', ['evento' => $evento])
 

@@ -5,13 +5,17 @@ namespace Tests\Feature;
 use App\Actions\ConfirmarOrden;
 use App\Actions\EmitirTickets;
 use App\Enums\EventStatus;
+use App\Enums\OrderKind;
 use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
+use App\Mail\CredencialParticipante;
 use App\Mail\FacturaEmitida;
+use App\Models\Establishment;
 use App\Models\Event;
 use App\Models\Order;
+use App\Models\OrderGroup;
 use App\Models\Participant;
 use App\Models\PayerEntity;
 use App\Models\User;
@@ -50,7 +54,8 @@ class PanelInscripcionesTest extends TestCase
 
         $orden = Order::create([
             'event_id' => $evento->id,
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_email' => 'ana@colegio.cl',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,
         ]);
@@ -72,6 +77,9 @@ class PanelInscripcionesTest extends TestCase
         return [
             'amount' => 90000,
             'paid_on' => now()->toDateString(),
+            'bank_name' => 'BancoEstado',
+            'payer_name' => 'Fundación Educar',
+            'payer_rut' => '76.086.428-5',
             'proof' => UploadedFile::fake()->create('transferencia.pdf', 100, 'application/pdf'),
         ];
     }
@@ -95,7 +103,7 @@ class PanelInscripcionesTest extends TestCase
 
     public function test_solo_administracion_ve_las_credenciales_completas(): void
     {
-        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->aprobarElPago();
         app(EmitirTickets::class)($this->orden->fresh());
 
         foreach ([Rol::Coordinacion, Rol::Contabilidad] as $rol) {
@@ -117,6 +125,51 @@ class PanelInscripcionesTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->whereNot('credenciales.0.url', null)
                 ->where('puede.verCredenciales', true));
+    }
+
+    public function test_la_ficha_de_un_colegio_muestra_a_sus_hermanas_del_conjunto(): void
+    {
+        $grupo = OrderGroup::create([
+            'event_id' => $this->orden->event_id,
+            'responsible_email' => $this->orden->responsible_email,
+        ]);
+        $this->orden->forceFill(['group_id' => $grupo->id])->save();
+        $this->orden->establishments()->attach(Establishment::factory()->create(['name' => 'Colegio San José']));
+
+        $hermana = Order::create([
+            'event_id' => $this->orden->event_id,
+            'group_id' => $grupo->id,
+            'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez',
+            'responsible_email' => 'ana@colegio.cl', 'status' => OrderStatus::Reservada,
+            'total' => 50000,
+        ]);
+        $hermana->establishments()->attach(Establishment::factory()->create(['name' => 'Colegio Los Robles']));
+
+        $this->actingAs($this->usuario(Rol::Contabilidad));
+
+        $this->get(route('inscripciones.show', $this->orden))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('conjunto', 1)
+                ->where('conjunto.0.id', $hermana->id)
+                ->where('conjunto.0.colegio', 'Colegio Los Robles')
+                ->where('conjunto.0.total', 50000));
+
+        // En un clic se llega a la ficha de la hermana.
+        $this->get(route('inscripciones.show', $hermana))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('conjunto', 1)
+                ->where('conjunto.0.id', $this->orden->id));
+    }
+
+    public function test_con_un_solo_colegio_no_hay_conjunto_que_mostrar(): void
+    {
+        $this->actingAs($this->usuario(Rol::Contabilidad));
+
+        $this->get(route('inscripciones.show', $this->orden))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('conjunto', null));
     }
 
     public function test_acreditacion_no_entra_a_inscripciones(): void
@@ -158,8 +211,9 @@ class PanelInscripcionesTest extends TestCase
             ->post(route('inscripciones.reemplazar', [$this->orden, $this->participante]), [
                 'first_name' => 'Daniela',
                 'last_name' => 'Soto',
-                'position' => 'Docente',
+                'position' => 'Docente Enseñanza Básica',
                 'email' => 'daniela@colegio.cl',
+                'rut' => '11.111.111-1',
             ])
             ->assertSessionHasNoErrors();
 
@@ -273,7 +327,7 @@ class PanelInscripcionesTest extends TestCase
                 'first_name' => 'Carlos',
                 'last_name' => 'Muñoz',
                 'rut' => '12.345.678-5',
-                'position' => 'Docente',
+                'position' => 'Docente Enseñanza Básica',
                 'email' => 'carlos@colegio.cl',
             ])
             ->assertSessionHasNoErrors();
@@ -297,7 +351,7 @@ class PanelInscripcionesTest extends TestCase
         $this->actingAs($this->usuario(Rol::Coordinacion))
             ->patch($ruta, [
                 'first_name' => 'PEDRO', 'last_name' => 'soto', 'position' => 'Otro',
-                'position_otro' => 'inspector general', 'email' => 'Pedro@Colegio.cl',
+                'position_otro' => 'inspector general', 'email' => 'Pedro@Colegio.cl', 'rut' => '11.111.111-1',
             ])
             ->assertSessionHasNoErrors();
 
@@ -321,7 +375,7 @@ class PanelInscripcionesTest extends TestCase
             ->post(route('inscripciones.factura', $this->orden), $factura)
             ->assertForbidden();
 
-        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->aprobarElPago();
 
         $this->actingAs($this->usuario(Rol::Coordinacion))
             ->post(route('inscripciones.factura', $this->orden), $factura)
@@ -338,7 +392,7 @@ class PanelInscripcionesTest extends TestCase
     {
         config(['facturacion.copia_administracion' => 'administracion@test.cl']);
 
-        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->aprobarElPago();
         $this->orden->payerEntity->forceFill(['billing_email' => 'pagos@fundacion.cl'])->save();
 
         $this->actingAs($this->usuario(Rol::Contabilidad))
@@ -366,7 +420,7 @@ class PanelInscripcionesTest extends TestCase
 
     public function test_la_factura_puede_registrarse_sin_enviarla(): void
     {
-        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->aprobarElPago();
 
         $this->actingAs($this->usuario(Rol::Contabilidad))
             ->post(route('inscripciones.factura', $this->orden), [
@@ -380,5 +434,47 @@ class PanelInscripcionesTest extends TestCase
 
         Mail::assertNotQueued(FacturaEmitida::class);
         $this->assertNull($this->orden->invoiceRecords()->first()->sent_at);
+    }
+
+    /** Facturar exige un abono aprobado: es lo que el colegio va a rendir. */
+    private function aprobarElPago(): void
+    {
+        $this->orden->payments()->create([
+            'status' => PaymentStatus::Aprobado,
+            'amount' => $this->orden->total,
+            'paid_on' => now()->toDateString(),
+        ]);
+        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->orden->refresh();
+    }
+
+    public function test_administracion_registra_un_invitado_sin_costo_que_toma_cupo_y_recibe_credencial(): void
+    {
+        $datos = [
+            'event_id' => $this->orden->event_id,
+            'first_name' => 'Patricia', 'last_name' => 'Rojas', 'rut' => '11.111.111-1',
+            'email' => 'patricia@invitada.cl', 'position' => 'Sostenedor/a',
+            'establecimiento' => 'Corporación Municipal',
+            'access_type_id' => $this->orden->participants()->first()->access_type_id,
+        ];
+
+        $this->actingAs($this->usuario(Rol::Coordinacion))
+            ->post(route('inscripciones.invitado'), $datos)
+            ->assertForbidden();
+
+        $cuposAntes = $this->orden->event->sessions()->sum('reserved_seats');
+
+        $this->actingAs($this->usuario(Rol::Administrador))
+            ->post(route('inscripciones.invitado'), $datos)
+            ->assertSessionHasNoErrors();
+
+        $invitado = Order::where('kind', OrderKind::Invitado)->sole();
+
+        $this->assertSame(0, $invitado->total);
+        $this->assertSame(PaymentStatus::Aprobado, $invitado->payment_status);
+        $this->assertNotNull($invitado->number);
+        $this->assertSame(1, $invitado->tickets()->count(), 'El invitado recibe su credencial.');
+        $this->assertGreaterThan($cuposAntes, $this->orden->event->sessions()->sum('reserved_seats'), 'Ocupa cupo.');
+        Mail::assertQueued(CredencialParticipante::class);
     }
 }

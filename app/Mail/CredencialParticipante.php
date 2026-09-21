@@ -2,9 +2,11 @@
 
 namespace App\Mail;
 
+use App\Models\EventAttachment;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Mail\Attachment;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -35,5 +37,20 @@ class CredencialParticipante extends Mailable implements ShouldQueue
                 'participante' => $this->ticket->participant,
             ],
         );
+    }
+
+    /**
+     * The event program, as in the first email.
+     *
+     * @return array<int, Attachment>
+     */
+    public function attachments(): array
+    {
+        return $this->ticket->event->attachments
+            ->filter(fn (EventAttachment $a): bool => $a->existe())
+            ->map(fn (EventAttachment $a): Attachment => Attachment::fromStorageDisk($a->disk, $a->path)
+                ->as($a->original_name))
+            ->values()
+            ->all();
     }
 }

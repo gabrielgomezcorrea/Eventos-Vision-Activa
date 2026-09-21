@@ -25,7 +25,8 @@ class ProgramaRequest extends FormRequest
         return [
             'programa' => [
                 'required', 'file',
-                'mimes:pdf,doc,docx',
+                // Only PDF: a Word file can be edited by whoever receives it.
+                'mimes:pdf',
                 'max:'.(EventAttachment::MAX_MB * 1024),
                 function (string $atributo, mixed $valor, callable $falla): void {
                     // El tope se comprueba en el servidor y no solo en el
@@ -44,7 +45,7 @@ class ProgramaRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'programa.mimes' => 'El archivo debe ser un PDF o un documento de Word.',
+            'programa.mimes' => 'El programa debe ser un PDF.',
             'programa.max' => 'El archivo no puede pesar más de '.EventAttachment::MAX_MB.' MB.',
         ];
     }

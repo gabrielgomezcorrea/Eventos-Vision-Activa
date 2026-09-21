@@ -9,6 +9,7 @@ import {
 import {
     ArrowRight,
     Ban,
+    ChevronDown,
     FileText,
     Paperclip,
     RefreshCw,
@@ -23,6 +24,11 @@ import { Campo } from '@/components/campo';
 import { Confirmar } from '@/components/confirmar';
 import { EditarSeccion } from '@/components/editar-seccion';
 import { EstadoBadge } from '@/components/estado-badge';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { NativeSelect } from '@/components/native-select';
 import { RutInput } from '@/components/rut-input';
 import { Dato, Datos, SeccionFicha } from '@/components/seccion-ficha';
@@ -114,6 +120,16 @@ type Props = {
     };
     participantes: Participante[];
     establecimientos: Record<string, string>;
+    conjunto:
+        | {
+              id: number;
+              colegio: string;
+              numero: string | null;
+              total: number;
+              saldo: number;
+              estado: Estado;
+          }[]
+        | null;
     cargos: string[];
     credenciales: {
         id: number;
@@ -124,6 +140,7 @@ type Props = {
         estado: Estado;
         acreditado_el: string | null;
     }[];
+    cobranza: { total: number; pagado: number; saldo: number };
     pagos:
         | {
               id: number;
@@ -131,6 +148,7 @@ type Props = {
               monto: number;
               recibido: string;
               informado_por: string | null;
+              observaciones_factura: string | null;
           }[]
         | null;
     facturacion: {
@@ -155,6 +173,7 @@ type Props = {
     cancelacion: { impedimento: string | null } | null;
     reactivacion: { impedimento: string | null; plazo: string } | null;
     opciones: {
+        abonos: Record<string, string>;
         tiposDocumento: Record<string, string>;
         correoFacturacion: string | null;
         hoy: string;
@@ -164,7 +183,7 @@ type Props = {
 const clp = (valor: number): string => `$${valor.toLocaleString('es-CL')}`;
 
 /** Panel lateral con un formulario propio y su botón de enviar. */
-function Panel({
+export function Panel({
     titulo,
     descripcion,
     trigger,
@@ -220,6 +239,7 @@ function CargarComprobante({
         paid_on: string;
         bank_name: string;
         payer_name: string;
+        payer_rut: string;
         proof: File | null;
         notes: string;
     }>({
@@ -227,6 +247,7 @@ function CargarComprobante({
         paid_on: '',
         bank_name: '',
         payer_name: '',
+        payer_rut: '',
         proof: null,
         notes: '',
     });
@@ -306,6 +327,7 @@ function CargarComprobante({
             >
                 <Input
                     id="bank_name"
+                    required
                     value={form.data.bank_name}
                     onChange={(e) => form.setData('bank_name', e.target.value)}
                 />
@@ -317,8 +339,22 @@ function CargarComprobante({
             >
                 <Input
                     id="payer_name"
+                    required
                     value={form.data.payer_name}
                     onChange={(e) => form.setData('payer_name', e.target.value)}
+                />
+            </Campo>
+            <Campo
+                label="RUT de quien pagó"
+                htmlFor="payer_rut"
+                error={form.errors.payer_rut}
+            >
+                <Input
+                    id="payer_rut"
+                    required
+                    placeholder="12.345.678-9"
+                    value={form.data.payer_rut}
+                    onChange={(e) => form.setData('payer_rut', e.target.value)}
                 />
             </Campo>
             <Campo
@@ -380,6 +416,7 @@ function RegistrarFactura({
         number: string;
         issued_on: string;
         amount: string;
+        payment_id: string;
         archivo: File | null;
         enviar: boolean;
         notes: string;
@@ -388,6 +425,7 @@ function RegistrarFactura({
         number: '',
         issued_on: opciones.hoy,
         amount: String(total),
+        payment_id: '',
         archivo: null,
         enviar: true,
         notes: '',
@@ -475,6 +513,28 @@ function RegistrarFactura({
                             form.setData('issued_on', e.target.value)
                         }
                     />
+                </Campo>
+                <Campo
+                    label="Abono que cubre (opcional)"
+                    htmlFor="factura-payment"
+                    error={form.errors.payment_id}
+                >
+                    <NativeSelect
+                        id="factura-payment"
+                        value={form.data.payment_id}
+                        onChange={(e) =>
+                            form.setData('payment_id', e.target.value)
+                        }
+                    >
+                        <option value="">Sin abono asociado</option>
+                        {Object.entries(opciones.abonos).map(
+                            ([id, etiqueta]) => (
+                                <option key={id} value={id}>
+                                    {etiqueta}
+                                </option>
+                            ),
+                        )}
+                    </NativeSelect>
                 </Campo>
                 <Campo
                     label="Monto"
@@ -1046,7 +1106,9 @@ export default function InscripcionShow({
     orden,
     participantes,
     establecimientos,
+    conjunto,
     credenciales,
+    cobranza,
     pagos,
     facturacion,
     puede,
@@ -1082,6 +1144,49 @@ export default function InscripcionShow({
                                 {orden.evento.nombre}
                             </Link>
                         </div>
+                        {conjunto && (
+                            <Collapsible>
+                                <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm hover:underline">
+                                    <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+                                    Parte de una inscripción de{' '}
+                                    {conjunto.length + 1} colegios
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                    <Table className="mt-2 w-auto">
+                                        <TableBody>
+                                            {conjunto.map((hermana) => (
+                                                <TableRow key={hermana.id}>
+                                                    <TableCell className="font-medium">
+                                                        <Link
+                                                            href={InscripcionController.show(
+                                                                hermana.id,
+                                                            )}
+                                                            className="hover:underline"
+                                                        >
+                                                            {hermana.colegio}
+                                                        </Link>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {clp(hermana.total)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        Saldo{' '}
+                                                        {clp(hermana.saldo)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <EstadoBadge
+                                                            estado={
+                                                                hermana.estado
+                                                            }
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </CollapsibleContent>
+                            </Collapsible>
+                        )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {puede.cargarComprobante && (
@@ -1152,7 +1257,7 @@ export default function InscripcionShow({
                 <div className="grid gap-6 lg:grid-cols-2">
                     <SeccionFicha titulo="Responsable">
                         <Datos>
-                            <Dato etiqueta="Nombre">
+                            <Dato etiqueta="Nombre completo">
                                 {orden.responsable.nombre}
                             </Dato>
                             <Dato etiqueta="Cargo">
@@ -1299,6 +1404,26 @@ export default function InscripcionShow({
 
                 {pagos !== null && pagos.length > 0 && (
                     <SeccionFicha titulo="Pagos informados">
+                        <div className="mb-3 flex flex-wrap gap-6 text-sm">
+                            <span>
+                                Total:{' '}
+                                <strong className="tabular-nums">
+                                    {clp(cobranza.total)}
+                                </strong>
+                            </span>
+                            <span>
+                                Pagado:{' '}
+                                <strong className="tabular-nums">
+                                    {clp(cobranza.pagado)}
+                                </strong>
+                            </span>
+                            <span>
+                                Saldo:{' '}
+                                <strong className="tabular-nums">
+                                    {clp(cobranza.saldo)}
+                                </strong>
+                            </span>
+                        </div>
                         <ul className="divide-y text-sm">
                             {pagos.map((pago) => (
                                 <li
@@ -1320,6 +1445,8 @@ export default function InscripcionShow({
                                         {pago.recibido}
                                         {pago.informado_por &&
                                             ` · ${pago.informado_por}`}
+                                        {pago.observaciones_factura &&
+                                            ` · Factura: ${pago.observaciones_factura}`}
                                     </span>
                                 </li>
                             ))}

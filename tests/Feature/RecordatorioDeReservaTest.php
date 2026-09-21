@@ -6,9 +6,11 @@ use App\Actions\ConfirmarOrden;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Mail\RecordatorioDeReserva;
+use App\Mail\RecordatorioDeReservaConjunto;
 use App\Models\Establishment;
 use App\Models\Event;
 use App\Models\Order;
+use App\Models\OrderGroup;
 use App\Models\Participant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -124,6 +126,35 @@ class RecordatorioDeReservaTest extends TestCase
 
         $this->artisan('reservas:recordar', ['--horas' => 24 * 7]);
         Mail::assertQueued(RecordatorioDeReserva::class, 1);
+    }
+
+    public function test_dos_ordenes_del_mismo_conjunto_que_vencen_el_mismo_dia_van_en_un_solo_correo(): void
+    {
+        $grupo = OrderGroup::create(['event_id' => $this->event->id, 'responsible_email' => 'ana@colegio.cl']);
+
+        $sanJose = $this->ordenReservada();
+        $sanJose->forceFill(['group_id' => $grupo->id, 'responsible_email' => 'ana@colegio.cl', 'reserved_until' => now()->addHours(10)])->save();
+
+        $losRobles = $this->ordenReservada();
+        $losRobles->forceFill(['group_id' => $grupo->id, 'responsible_email' => 'ana@colegio.cl', 'reserved_until' => now()->addHours(15)])->save();
+
+        $this->artisan('reservas:recordar')->assertSuccessful();
+
+        Mail::assertQueued(RecordatorioDeReservaConjunto::class, 1);
+        Mail::assertNotQueued(RecordatorioDeReserva::class);
+        $this->assertNotNull($sanJose->fresh()->reminder_sent_at);
+        $this->assertNotNull($losRobles->fresh()->reminder_sent_at);
+    }
+
+    public function test_una_orden_sin_conjunto_sigue_con_su_propio_correo(): void
+    {
+        $orden = $this->ordenReservada();
+        $orden->forceFill(['reserved_until' => now()->addHours(10)])->save();
+
+        $this->artisan('reservas:recordar')->assertSuccessful();
+
+        Mail::assertQueued(RecordatorioDeReserva::class, 1);
+        Mail::assertNotQueued(RecordatorioDeReservaConjunto::class);
     }
 
     public function test_el_correo_lleva_el_folio_el_monto_y_como_pagar(): void

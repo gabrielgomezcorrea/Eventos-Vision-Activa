@@ -11,6 +11,7 @@ use App\Enums\Permiso;
 use App\Enums\ReservationDurationUnit;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Eventos\ActualizarEventoRequest;
+use App\Http\Requests\Eventos\BannerRequest;
 use App\Http\Requests\Eventos\CambiarEstadoEventoRequest;
 use App\Http\Requests\Eventos\CrearEventoRequest;
 use App\Models\AccessType;
@@ -23,6 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -71,6 +73,7 @@ class EventoController extends Controller
     public function store(CrearEventoRequest $request): RedirectResponse
     {
         $evento = Event::create([
+            ...config('contacto_eventos'),
             ...$request->validated(),
             'slug' => Event::identificadorLibre($request->validated('name')),
             'status' => EventStatus::Borrador,
@@ -110,8 +113,7 @@ class EventoController extends Controller
                 'reservation_duration_value' => $event->reservation_duration_value,
                 'reservation_duration_unit' => $event->reservation_duration_unit->value,
                 'reserva' => self::plazo($event),
-                'replacement_deadline' => $event->replacement_deadline?->format('Y-m-d'),
-                'fecha_limite_reemplazos' => $event->replacement_deadline?->format('d/m/Y'),
+                'fecha_limite_reemplazos' => $event->limiteDeReemplazos()?->format('d/m/Y \a \l\a\s H:i'),
                 'bank_account_id' => $event->bank_account_id,
                 'cuenta' => $event->bankAccount === null ? null : [
                     'label' => $event->bankAccount->label,
@@ -123,6 +125,9 @@ class EventoController extends Controller
                     'payment_instructions' => $event->bankAccount->payment_instructions,
                 ],
                 'enlace_publico' => route('publico.programa', ['event' => $event->slug]),
+                'banner' => $event->tieneBanner() ? $event->bannerUrl() : null,
+                'banner_max_mb' => Event::BANNER_MAX_MB,
+                'banner_formatos' => implode(', ', array_map('mb_strtoupper', Event::BANNER_FORMATOS)),
                 'usa_lugar' => $event->modality !== EventModality::Online,
             ],
             'resumen' => self::resumen($event, $usuario->can(Permiso::VerComprobantes->value)),
@@ -160,6 +165,43 @@ class EventoController extends Controller
         $event->update($request->validated());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cambios guardados.']);
+
+        return back();
+    }
+
+    public function subirBanner(BannerRequest $request, Event $event): RedirectResponse
+    {
+        $disco = config('filesystems.private_disk');
+        $anterior = $event->banner_path;
+        $archivo = $request->file('banner');
+
+        $event->update([
+            'banner_disk' => $disco,
+            'banner_path' => $archivo->store('banners/'.$event->getKey(), $disco),
+            'banner_mime' => $archivo->getClientMimeType(),
+            'banner_updated_at' => now(),
+        ]);
+
+        if (filled($anterior)) {
+            Storage::disk($event->banner_disk)->delete($anterior);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Banner cargado. Ya se ve en los correos y en las páginas del evento.']);
+
+        return back();
+    }
+
+    public function quitarBanner(Event $event): RedirectResponse
+    {
+        Gate::authorize('update', $event);
+
+        if (filled($event->banner_path)) {
+            Storage::disk($event->banner_disk)->delete($event->banner_path);
+        }
+
+        $event->update(['banner_disk' => null, 'banner_path' => null, 'banner_mime' => null, 'banner_updated_at' => null]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Banner quitado.']);
 
         return back();
     }

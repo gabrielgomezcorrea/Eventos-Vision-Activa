@@ -87,11 +87,12 @@ class Texto
     }
 
     /**
-     * Teléfono móvil chileno en formato único: +56912345678.
+     * Teléfono móvil chileno en formato único: 56912345678, solo dígitos.
      *
      * Se acepta escrito como sea —con espacios, guiones, paréntesis, con o sin
-     * el 56— y siempre se guarda igual. Sin esto la misma persona queda con dos
-     * teléfonos distintos según cómo lo tipeó esa vez.
+     * el 56 o el +— y siempre se guarda igual. Sin esto la misma persona queda
+     * con dos teléfonos distintos según cómo lo tipeó esa vez. Sin "+" porque
+     * Excel lo lee como fórmula y porque así sirve directo para wa.me.
      */
     public static function telefono(?string $valor): ?string
     {
@@ -104,8 +105,41 @@ class Texto
         };
 
         return strlen($digitos) === 9 && Str::startsWith($digitos, '9')
-            ? '+56'.$digitos
+            ? '56'.$digitos
             : null;
+    }
+
+    /**
+     * Comuna en su forma oficial si coincide con la lista, sin importar tildes
+     * ni mayúsculas ("nunoa" → "Ñuñoa"). Lo que no está en la lista se acepta
+     * limpio y capitalizado: nunca se bloquea a la persona por una comuna.
+     */
+    public static function comuna(?string $valor): ?string
+    {
+        $limpio = self::limpiar($valor);
+
+        if ($limpio === null) {
+            return null;
+        }
+
+        $clave = Str::lower(Str::ascii($limpio));
+
+        foreach (self::comunas() as $comuna) {
+            if (Str::lower(Str::ascii($comuna)) === $clave) {
+                return $comuna;
+            }
+        }
+
+        return self::capitalizar($limpio);
+    }
+
+    /** @return array<int, string> */
+    public static function comunas(): array
+    {
+        $comunas = array_merge(...array_values(config('chile')));
+        sort($comunas);
+
+        return $comunas;
     }
 
     /** Correo en minúsculas y sin espacios: es una sola dirección, no dos. */

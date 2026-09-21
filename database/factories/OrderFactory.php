@@ -18,15 +18,14 @@ class OrderFactory extends Factory
 
     public function definition(): array
     {
-        $nombre = fake()->name();
-
         return [
             'event_id' => Event::factory(),
             'payer_entity_id' => PayerEntity::factory(),
             'status' => OrderStatus::Borrador,
             'payment_status' => PaymentStatus::Pendiente,
             'kind' => OrderKind::Institucional,
-            'responsible_name' => $nombre,
+            'responsible_name' => fake()->firstName(),
+            'responsible_lastname' => fake()->lastName(),
             'responsible_email' => fake()->unique()->safeEmail(),
             'responsible_position' => ChileProvider::fake()->cargoEducacional(),
             'responsible_phone' => ChileProvider::fake()->telefonoChileno(),

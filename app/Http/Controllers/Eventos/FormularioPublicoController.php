@@ -8,6 +8,8 @@ use App\Http\Requests\Eventos\ProgramaRequest;
 use App\Models\Event;
 use App\Models\EventAttachment;
 use App\Support\Forms\ProgramFormField;
+use App\Support\ReglasDeContacto;
+use App\Support\WebsAutorizadas;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
@@ -35,9 +37,12 @@ class FormularioPublicoController extends Controller
                 'id' => $event->id,
                 'name' => $event->name,
                 'admite_inscripciones' => $event->admiteInscripciones(),
-                // Cargado, no como placeholder: un valor por defecto se muestra
-                // puesto para quitarlo o cambiarlo, no se insinúa en gris.
-                'consent_text' => $event->consent_text ?: Event::CONSENTIMIENTO_POR_DEFECTO,
+                'consentimiento' => Event::CONSENTIMIENTO_POR_DEFECTO,
+                // An event without contact shows the default one loaded, to keep
+                // or change, instead of empty fields.
+                'contacto' => blank($event->contact_email) && blank($event->contact_phone)
+                    ? config('contacto_eventos')
+                    : $event->only(['contact_name', 'contact_role', 'contact_organization', 'contact_email', 'contact_phone', 'contact_whatsapp']),
                 'program_email_intro' => $event->program_email_intro,
                 'adjuntos' => $event->attachments->map(fn (EventAttachment $a): array => [
                     'id' => $a->id,
@@ -46,15 +51,17 @@ class FormularioPublicoController extends Controller
                 ])->values()->all(),
                 'max_adjuntos' => EventAttachment::MAXIMO,
                 'max_mb' => EventAttachment::MAX_MB,
+                'participant_positions' => $event->participant_positions ?? ProgramFormField::CARGOS_PARTICIPANTE,
             ],
             // Si el evento nunca tocó sus campos se muestran los base ya
             // cargados, para quitar o agregar, en vez de una lista vacía.
             'campos' => $event->program_form_fields ?: ProgramFormField::porDefectoComoArray(),
             'tipos' => ProgramFormField::TIPOS,
+            'cargosParticipante' => ProgramFormField::CARGOS_PARTICIPANTE,
             'embeber' => [
                 'enlace' => route('publico.programa', ['event' => $event->slug]),
                 'iframe' => route('publico.programa.embed', ['event' => $event->slug]),
-                'origenes' => config('embed.allowed_origins') ?: null,
+                'origenes' => implode(', ', WebsAutorizadas::lista()) ?: null,
             ],
         ]);
     }
@@ -93,8 +100,13 @@ class FormularioPublicoController extends Controller
 
         $event->update([
             'program_form_fields' => $campos,
-            'consent_text' => $request->validated('consent_text'),
+            ...ReglasDeContacto::normalizar(
+                ReglasDeContacto::limpiar($request->safe()->only(['contact_name', 'contact_role', 'contact_organization', 'contact_email', 'contact_phone', 'contact_whatsapp'])),
+                ['contact_name' => 'nombre', 'contact_role' => 'texto', 'contact_organization' => 'texto', 'contact_email' => 'correo', 'contact_phone' => 'telefono', 'contact_whatsapp' => 'telefono'],
+            ),
             'program_email_intro' => $request->validated('program_email_intro'),
+            // Todos marcados y nada marcado significan lo mismo: acepta todos.
+            'participant_positions' => array_values($request->validated('participant_positions') ?? []) ?: null,
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Formulario guardado. Los cambios ya se ven en la página pública.']);

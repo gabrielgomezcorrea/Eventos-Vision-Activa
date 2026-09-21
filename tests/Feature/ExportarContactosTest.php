@@ -34,10 +34,12 @@ class ExportarContactosTest extends TestCase
         // La misma persona pidió el programa y además quedó como responsable.
         ProgramRequest::factory()->for($evento)->create([
             'email' => 'ana@colegio.cl', 'first_name' => 'Ana', 'position' => 'Directivo',
-            'marketing_consented_at' => now(),
+            // Stored before the change, with "+": production data is not rewritten.
+            'phone' => '+56912345678', 'marketing_consented_at' => now(),
         ]);
         Order::factory()->for($evento)->create([
-            'responsible_email' => 'ANA@colegio.cl', 'responsible_name' => 'Ana María Peña', 'responsible_position' => 'Directivo',
+            'responsible_email' => 'ANA@colegio.cl', 'responsible_name' => 'Ana', 'responsible_lastname' => 'María Peña', 'responsible_position' => 'Directivo',
+            'responsible_phone' => null,
         ]);
         // Sin consentimiento: no sale en la lista para campañas.
         ProgramRequest::factory()->for($evento)->create(['email' => 'luis@colegio.cl', 'marketing_consented_at' => null]);
@@ -55,6 +57,10 @@ class ExportarContactosTest extends TestCase
         $this->assertStringContainsString('Seminario Ñuñoa', $csv);
         // Gana el dato del responsable sobre el de la solicitud.
         $this->assertStringContainsString('ana@colegio.cl;Ana;"María Peña"', $csv);
+        // The phone comes from the request even though the responsible row wins:
+        // it was the field the boss saw missing. Without "+", Excel keeps it as text.
+        $this->assertStringContainsString(';56912345678;', $csv);
+        $this->assertStringNotContainsString('+56', $csv);
 
         $this->assertDatabaseHas('audit_logs', ['action' => 'contactos.exportados', 'user_id' => $admin->id]);
 

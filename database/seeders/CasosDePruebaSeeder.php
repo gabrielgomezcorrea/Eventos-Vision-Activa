@@ -137,9 +137,7 @@ class CasosDePruebaSeeder extends Seeder
             'description' => 'Evento con inscripciones en todos los estados, para revisar el sistema a mano.',
             'location' => 'Centro de Eventos Vision Activa',
             'city' => 'Santiago',
-            'contact_name' => 'Flor Contabilidad',
-            'contact_email' => 'contacto@visionactiva.cl',
-            'contact_phone' => '+56912345678',
+            ...config('contacto_eventos'),
             'bank_holder_name' => 'Vision Activa SpA',
             'bank_holder_rut' => '76.543.210-K',
             'bank_name' => 'Banco de Chile',
@@ -196,9 +194,10 @@ class CasosDePruebaSeeder extends Seeder
         );
 
         $orden = $evento->orders()->create([
-            'responsible_name' => $responsable,
+            'responsible_name' => str($responsable)->beforeLast(' ')->toString(),
+            'responsible_lastname' => str($responsable)->afterLast(' ')->toString(),
             'responsible_email' => str(explode(' ', $responsable)[0])->lower()->ascii().'@colegio.cl',
-            'responsible_phone' => '+56912345678',
+            'responsible_phone' => '56912345678',
             // Cargos variados para probar el filtro de la exportación.
             'responsible_position' => ['Directivo', 'Sostenedor/a', 'Administrativo', 'Jefa de UTP'][crc32($responsable) % 4],
             'responsible_institution' => $establecimiento->name,
@@ -244,7 +243,7 @@ class CasosDePruebaSeeder extends Seeder
                 'email' => $correo,
                 'position' => $cargo,
                 'institution' => 'Liceo Bicentenario A-12',
-                'phone' => '+56987654321',
+                'phone' => '56987654321',
                 'marketing_consented_at' => $marketing ? now()->subDays(2) : null,
             ]);
         }

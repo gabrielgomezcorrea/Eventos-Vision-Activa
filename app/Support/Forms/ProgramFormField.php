@@ -36,6 +36,41 @@ class ProgramFormField
         self::CARGO_OTRO,
     ];
 
+    /**
+     * Positions of the people who attend. Only for the participants step and
+     * the panel forms that edit a participant: whoever fills the public form or
+     * buys is a different person and keeps CARGOS. Order set by the boss.
+     */
+    public const CARGOS_PARTICIPANTE = [
+        'Sostenedor/a',
+        'Director/a',
+        'Jefe de UTP',
+        'Inspector General',
+        'Coordinador de Convivencia Escolar',
+        'Coordinador PIE',
+        'Coordinador nivel o especialidad',
+        'Educadora de Párvulos',
+        'Docente Enseñanza Básica',
+        'Docente Enseñanza Media',
+        'Docente Diferencial',
+        'Asistente de aula',
+        'Asistente de la Educación Profesional',
+        'Asistente de la Educación Administrativo',
+        'Asistente de la Educación de Servicios',
+        'Profesional de la Educación',
+        self::CARGO_OTRO,
+    ];
+
+    /**
+     * Both lists, for filtering and exporting: a contact may come from either.
+     *
+     * @return array<int, string>
+     */
+    public static function todosLosCargos(): array
+    {
+        return array_values(array_unique([...self::CARGOS, ...self::CARGOS_PARTICIPANTE]));
+    }
+
     /** Elegir esta opción abre un campo de texto que pasa a ser obligatorio. */
     public const CARGO_OTRO = 'Otro';
 
@@ -179,7 +214,7 @@ class ProgramFormField
             new self('first_name', 'Nombre', 'text', required: true),
             new self('last_name', 'Apellidos', 'text', required: true),
             new self('email', 'Correo electrónico', 'email', required: true),
-            new self('phone', 'Teléfono', 'tel', required: true, placeholder: '+56912345678'),
+            new self('phone', 'Teléfono', 'tel', required: true, placeholder: '56912345678'),
             new self('position', 'Cargo', 'select', required: true, options: self::CARGOS),
             new self('institution', 'Establecimiento', 'text', required: true),
         ];

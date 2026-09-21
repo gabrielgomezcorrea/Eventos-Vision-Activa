@@ -33,5 +33,42 @@
         @endforeach
     @endif
 </div>
+
+{{--
+    Convierte el QR que ya está en la página a PNG y lo descarga. Sin servidor
+    de por medio: el SVG está dibujado, solo se pasa por un canvas.
+--}}
+<script>
+document.querySelectorAll('[data-descargar-qr]').forEach(function (boton) {
+    boton.addEventListener('click', function () {
+        var svg = boton.parentNode.querySelector('.qr-imagen svg');
+
+        if (! svg) {
+            return;
+        }
+
+        var lado = 600;
+        var lienzo = document.createElement('canvas');
+        lienzo.width = lado;
+        lienzo.height = lado;
+
+        var imagen = new Image();
+        imagen.onload = function () {
+            var pincel = lienzo.getContext('2d');
+            pincel.fillStyle = '#ffffff';
+            pincel.fillRect(0, 0, lado, lado);
+            pincel.drawImage(imagen, 0, 0, lado, lado);
+
+            var enlace = document.createElement('a');
+            enlace.href = lienzo.toDataURL('image/png');
+            enlace.download = 'credencial-' + boton.dataset.nombre + '.png';
+            enlace.click();
+        };
+        imagen.src = 'data:image/svg+xml;base64,' + window.btoa(
+            unescape(encodeURIComponent(new XMLSerializer().serializeToString(svg)))
+        );
+    });
+});
+</script>
 </body>
 </html>

@@ -7,7 +7,7 @@ import {
     usePage,
 } from '@inertiajs/react';
 import { ArrowRight, Copy, Flag, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import CuentaBancariaController from '@/actions/App/Http/Controllers/Configuracion/CuentaBancariaController';
@@ -74,11 +74,13 @@ type Evento = {
     reminder_hours_before: number | null;
     aviso: string;
     reserva: string;
-    replacement_deadline: string | null;
     fecha_limite_reemplazos: string | null;
     bank_account_id: number | null;
     cuenta: Cuenta | null;
     enlace_publico: string;
+    banner: string | null;
+    banner_max_mb: number;
+    banner_formatos: string;
     usa_lugar: boolean;
 };
 
@@ -290,6 +292,131 @@ function Lista({ items, vacio }: { items: string[]; vacio: string }) {
                 <li key={item}>{item}</li>
             ))}
         </ul>
+    );
+}
+
+/**
+ * Banner del evento: una sola imagen, opcional.
+ *
+ * No va con lápiz ni panel lateral: es un archivo que se sube o se quita, y
+ * verlo mientras se cambia es la mitad de la decisión.
+ */
+function Banner({
+    evento,
+    puedeEditar,
+}: {
+    evento: Evento;
+    puedeEditar: boolean;
+}) {
+    const entrada = useRef<HTMLInputElement>(null);
+    const [subiendo, setSubiendo] = useState(false);
+    const [errorLocal, setErrorLocal] = useState<string | null>(null);
+    const { errors } = usePage().props;
+
+    function subir(archivo: File | undefined) {
+        setErrorLocal(null);
+
+        if (!archivo) {
+            return;
+        }
+
+        // El límite se avisa antes de subir: enterarse después de esperar una
+        // subida lenta es la peor forma de descubrirlo.
+        if (archivo.size > evento.banner_max_mb * 1024 * 1024) {
+            setErrorLocal(
+                `La imagen pesa más de ${evento.banner_max_mb} MB. Elige una más liviana.`,
+            );
+
+            return;
+        }
+
+        router.post(
+            EventoController.subirBanner.url(evento.id),
+            { banner: archivo },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onStart: () => setSubiendo(true),
+                onFinish: () => {
+                    setSubiendo(false);
+
+                    if (entrada.current) {
+                        entrada.current.value = '';
+                    }
+                },
+            },
+        );
+    }
+
+    return (
+        <SeccionFicha
+            titulo="Banner"
+            accion={
+                puedeEditar &&
+                evento.banner && (
+                    <Confirmar
+                        titulo="Quitar el banner"
+                        descripcion="Los correos y las páginas del evento vuelven a verse sin imagen."
+                        textoAccion="Quitar banner"
+                        onConfirmar={() =>
+                            router.delete(
+                                EventoController.quitarBanner.url(evento.id),
+                                { preserveScroll: true },
+                            )
+                        }
+                    >
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                        >
+                            Quitar
+                        </Button>
+                    </Confirmar>
+                )
+            }
+        >
+            <div className="grid gap-3">
+                {evento.banner ? (
+                    <img
+                        src={evento.banner}
+                        alt={`Banner de ${evento.name}`}
+                        className="w-full max-w-xl rounded-lg border"
+                    />
+                ) : (
+                    <p className="text-muted-foreground text-sm">
+                        Sin banner. Los correos y las páginas del evento se ven
+                        solo con texto.
+                    </p>
+                )}
+
+                {puedeEditar && (
+                    <div className="grid gap-2">
+                        <Input
+                            ref={entrada}
+                            id="banner"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            disabled={subiendo}
+                            className="max-w-md"
+                            onChange={(e) => subir(e.target.files?.[0])}
+                        />
+                        <p className="text-muted-foreground text-xs">
+                            {evento.banner_formatos}, hasta{' '}
+                            {evento.banner_max_mb} MB. Se ve arriba en los
+                            correos, en el formulario público y en las páginas
+                            de inscripción.
+                        </p>
+                        {subiendo && (
+                            <p className="text-muted-foreground text-xs">
+                                Subiendo…
+                            </p>
+                        )}
+                        <InputError message={errorLocal ?? errors.banner} />
+                    </div>
+                )}
+            </div>
+        </SeccionFicha>
     );
 }
 
@@ -560,6 +687,8 @@ export default function EventoShow({
                     </Datos>
                 </SeccionFicha>
 
+                <Banner evento={evento} puedeEditar={puede.editar} />
+
                 {evento.usa_lugar && (
                     <SeccionFicha
                         titulo="Lugar"
@@ -729,8 +858,6 @@ export default function EventoShow({
                                                   evento.reminder_hours_before,
                                               )
                                             : '',
-                                    replacement_deadline:
-                                        evento.replacement_deadline ?? '',
                                 }}
                             >
                                 {(f) => (
@@ -828,28 +955,6 @@ export default function EventoShow({
                                                 </span>
                                             </div>
                                         </Campo>
-                                        <Campo
-                                            label="Hasta cuándo se aceptan reemplazos"
-                                            htmlFor="replacement_deadline"
-                                            error={
-                                                f.errors.replacement_deadline
-                                            }
-                                        >
-                                            <Input
-                                                id="replacement_deadline"
-                                                type="date"
-                                                className="w-auto"
-                                                value={
-                                                    f.data.replacement_deadline
-                                                }
-                                                onChange={(e) =>
-                                                    f.set(
-                                                        'replacement_deadline',
-                                                        e.target.value,
-                                                    )
-                                                }
-                                            />
-                                        </Campo>
                                     </>
                                 )}
                             </EditarSeccion>
@@ -865,7 +970,7 @@ export default function EventoShow({
                         </Dato>
                         <Dato etiqueta="Hasta cuándo se aceptan reemplazos">
                             {evento.fecha_limite_reemplazos ??
-                                'Sin fecha límite'}
+                                'Falta la fecha del evento'}
                         </Dato>
                     </Datos>
                 </SeccionFicha>

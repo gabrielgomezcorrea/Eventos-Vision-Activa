@@ -6,6 +6,8 @@ use App\Actions\CancelarOrden;
 use App\Actions\ReactivarReserva;
 use App\Actions\ReemplazarParticipante;
 use App\Actions\RegistrarComprobante;
+use App\Actions\RegistrarInvitado;
+use App\Enums\EventStatus;
 use App\Enums\InvoiceDocumentType;
 use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
@@ -22,6 +24,7 @@ use App\Http\Requests\Inscripciones\CargarComprobanteRequest;
 use App\Http\Requests\Inscripciones\CorregirParticipanteRequest;
 use App\Http\Requests\Inscripciones\ReemplazarParticipanteRequest;
 use App\Http\Requests\Inscripciones\RegistrarFacturaRequest;
+use App\Http\Requests\Inscripciones\RegistrarInvitadoRequest;
 use App\Mail\FacturaEmitida;
 use App\Models\Event;
 use App\Models\InvoiceRecord;
@@ -30,7 +33,6 @@ use App\Models\Participant;
 use App\Models\Payment;
 use App\Models\Ticket;
 use App\Support\Auditor;
-use App\Support\Forms\ProgramFormField;
 use App\Support\GeneradorQr;
 use App\Support\Presentar;
 use App\Support\Rut;
@@ -72,6 +74,7 @@ class InscripcionController extends Controller
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where(
                 fn (Builder $o) => $o->where('number', 'like', "%{$buscar}%")
                     ->orWhere('responsible_name', 'like', "%{$buscar}%")
+                    ->orWhere('responsible_lastname', 'like', "%{$buscar}%")
                     ->orWhere('responsible_email', 'like', "%{$buscar}%")
                     ->orWhereHas('payerEntity', fn (Builder $p) => $p->where('name', 'like', "%{$buscar}%")),
             ))
@@ -92,7 +95,7 @@ class InscripcionController extends Controller
             ->through(fn (Order $orden): array => [
                 'id' => $orden->id,
                 'numero' => $orden->number,
-                'responsable' => $orden->responsible_name,
+                'responsable' => $orden->responsableNombreCompleto(),
                 'correo' => $orden->responsible_email,
                 'total' => $orden->total,
                 'participantes' => (int) $orden->getAttribute('participantes'),
@@ -102,12 +105,28 @@ class InscripcionController extends Controller
                 'vencimiento' => self::vencimiento($orden),
             ]);
 
+        // Eventos que todavía admiten un invitado, con sus accesos y sus cargos.
+        $eventosAbiertos = Event::query()->where('status', '!=', EventStatus::Cerrado->value)
+            ->with(['accessTypes' => fn ($q) => $q->where('is_active', true)->orderBy('position')])
+            ->get();
+
         return Inertia::render('inscripciones/index', [
             'ordenes' => $ordenes,
             'filtros' => (object) array_filter($filtros),
             'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
             'estados' => collect(OrderStatus::cases())->mapWithKeys(fn (OrderStatus $s): array => [$s->value => $s->label()])->all(),
             'pagos' => collect(PaymentStatus::cases())->mapWithKeys(fn (PaymentStatus $s): array => [$s->value => $s->label()])->all(),
+            // Invitados sin costo: solo Administración, y solo para eventos con
+            // accesos activos, que es lo que define el cupo que van a ocupar.
+            'invitados' => $request->user()->can(Permiso::VerCredenciales->value)
+                ? [
+                    'cargos' => $eventosAbiertos->mapWithKeys(fn (Event $e): array => [$e->id => $e->cargosDeParticipante()])->all(),
+                    'accesos' => $eventosAbiertos
+                        ->mapWithKeys(fn (Event $e): array => [
+                            $e->id => $e->accessTypes->mapWithKeys(fn ($a): array => [$a->id => $a->name])->all(),
+                        ])->all(),
+                ]
+                : null,
         ]);
     }
 
@@ -136,6 +155,16 @@ class InscripcionController extends Controller
         ]);
     }
 
+    /** Invitado sin costo: queda inscrito, con cupo y credencial, en un paso. */
+    public function registrarInvitado(RegistrarInvitadoRequest $request, RegistrarInvitado $registrar): RedirectResponse
+    {
+        $orden = $registrar($request->evento(), $request->datosNormalizados(), $request->user());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Invitado registrado. Su credencial ya salió a {$orden->responsible_email}."]);
+
+        return to_route('inscripciones.show', $orden);
+    }
+
     public function show(Request $request, Order $order): Response
     {
         Gate::authorize('view', $order);
@@ -148,16 +177,17 @@ class InscripcionController extends Controller
             'tickets' => fn ($q) => $q->with(['participant', 'accreditation'])->latest('id'),
             'payments',
             'invoiceRecords',
+            'group.orders.establishments',
         ]);
 
         $usuario = $request->user();
         $puedeReemplazar = $usuario->can('update', $order);
         $puedeVerCredenciales = $usuario->can('verCredenciales', $order);
-        $limite = $order->event->replacement_deadline;
-        $plazoVencido = $limite !== null && $limite->endOfDay()->isPast();
+        $limite = $order->event->limiteDeReemplazos();
+        $plazoVencido = $limite !== null && $limite->isPast();
 
         return Inertia::render('inscripciones/show', [
-            'cargos' => ProgramFormField::CARGOS,
+            'cargos' => $order->event->cargosDeParticipante(),
             'orden' => [
                 'id' => $order->id,
                 'numero' => $order->number,
@@ -174,7 +204,7 @@ class InscripcionController extends Controller
                 'descuento_etiqueta' => $order->discount_label,
                 'internal_notes' => $order->internal_notes,
                 'responsable' => [
-                    'nombre' => $order->responsible_name,
+                    'nombre' => $order->responsableNombreCompleto(),
                     'cargo' => $order->responsible_position,
                     'correo' => $order->responsible_email,
                     'telefono' => $order->responsible_phone,
@@ -211,6 +241,21 @@ class InscripcionController extends Controller
                 },
             ])->all(),
             'establecimientos' => $order->establishments->pluck('name', 'id'),
+            // Hermanas del mismo conjunto, para saltar entre colegios sin
+            // buscarlos en el listado. Con un solo colegio no hay conjunto
+            // que mostrar.
+            'conjunto' => $order->group !== null && $order->group->orders->count() > 1
+                ? $order->group->orders
+                    ->reject(fn (Order $o) => $o->is($order))
+                    ->map(fn (Order $o): array => [
+                        'id' => $o->id,
+                        'colegio' => $o->establishments->first()?->name ?: '—',
+                        'numero' => $o->number,
+                        'total' => $o->total,
+                        'saldo' => $o->saldo(),
+                        'estado' => Presentar::estado($o->payment_status),
+                    ])->values()->all()
+                : null,
             'credenciales' => $order->tickets->map(fn (Ticket $t): array => [
                 'id' => $t->id,
                 'participante' => $t->participant?->nombre_completo,
@@ -226,6 +271,13 @@ class InscripcionController extends Controller
                 },
                 'acreditado_el' => $t->accreditation?->accredited_at?->format('d-m-Y H:i'),
             ])->all(),
+            // Pagado y saldo: los colegios abonan en partes y Contabilidad
+            // necesita ver de una cuánto falta, sin sumar a mano.
+            'cobranza' => [
+                'total' => $order->total,
+                'pagado' => $order->pagado(),
+                'saldo' => $order->saldo(),
+            ],
             'pagos' => $usuario->can(Permiso::VerComprobantes->value)
                 ? $order->payments->map(fn (Payment $pago): array => [
                     'id' => $pago->id,
@@ -233,6 +285,7 @@ class InscripcionController extends Controller
                     'monto' => $pago->amount,
                     'recibido' => $pago->created_at->format('d-m-Y H:i'),
                     'informado_por' => $pago->submitted_by_label,
+                    'observaciones_factura' => $pago->billing_notes,
                 ])->all()
                 : null,
             'facturacion' => $usuario->can(Permiso::GestionarFacturas->value)
@@ -267,6 +320,12 @@ class InscripcionController extends Controller
             'opciones' => [
                 'tiposDocumento' => collect(InvoiceDocumentType::cases())->mapWithKeys(fn (InvoiceDocumentType $t): array => [$t->value => $t->label()])->all(),
                 'correoFacturacion' => $order->payerEntity?->billing_email,
+                // Una factura por abono aprobado: el colegio rinde cada
+                // transferencia con su documento.
+                'abonos' => $order->payments()->where('status', PaymentStatus::Aprobado->value)->get()
+                    ->mapWithKeys(fn (Payment $pago): array => [
+                        $pago->id => $pago->created_at->format('d-m-Y').' · $'.number_format($pago->amount, 0, ',', '.'),
+                    ])->all(),
                 'hoy' => now()->format('Y-m-d'),
             ],
         ]);
@@ -288,7 +347,7 @@ class InscripcionController extends Controller
         try {
             $registrar(
                 orden: $order,
-                datos: Arr::except($request->validated(), 'proof'),
+                datos: [...Arr::except($request->validated(), 'proof'), 'payer_rut' => Rut::normalizar($request->validated('payer_rut'))],
                 archivo: $request->file('proof'),
                 usuario: $request->user(),
             );

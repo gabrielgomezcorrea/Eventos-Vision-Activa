@@ -4,9 +4,11 @@ namespace App\Models;
 
 use App\Enums\EventModality;
 use App\Enums\EventStatus;
+use App\Enums\ModoConteoDescuento;
 use App\Enums\ReservationDurationUnit;
 use App\Support\Forms\ProgramFormField;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\EventFactory;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -24,6 +27,7 @@ use Illuminate\Support\Str;
  * @property EventStatus $status
  * @property EventModality $modality
  * @property ReservationDurationUnit $reservation_duration_unit
+ * @property ModoConteoDescuento $discount_counting_mode
  * @property int $reservation_duration_value
  * @property int|null $reminder_hours_before
  * @property Carbon|null $starts_on
@@ -47,6 +51,7 @@ class Event extends Model
         'modality' => EventModality::Presencial->value,
         'reservation_duration_value' => 3,
         'reservation_duration_unit' => ReservationDurationUnit::DiasCorridos->value,
+        'discount_counting_mode' => ModoConteoDescuento::PorColegio->value,
     ];
 
     /**
@@ -64,17 +69,107 @@ class Event extends Model
             'modality' => EventModality::class,
             'reservation_duration_unit' => ReservationDurationUnit::class,
             'reservation_duration_value' => 'integer',
+            'discount_counting_mode' => ModoConteoDescuento::class,
             'reminder_hours_before' => 'integer',
             'starts_on' => 'date',
             'replacement_deadline' => 'date',
+            'banner_updated_at' => 'datetime',
             'program_form_fields' => 'array',
+            'participant_positions' => 'array',
         ];
+    }
+
+    /**
+     * Replacements close at the end of the day before the event: the event
+     * starts the next day, so the cutoff is the end of that day, not the
+     * afternoon. Fixed, not configurable: one decision less for whoever sets
+     * up the event.
+     */
+    public function limiteDeReemplazos(): ?CarbonInterface
+    {
+        return $this->starts_on?->copy()->subDay()->endOfDay();
+    }
+
+    /**
+     * Si hay a quién escribirle o llamar. Sin esto, el bloque de contacto sale
+     * como una caja con título y nada adentro.
+     */
+    public function tieneContacto(): bool
+    {
+        return filled($this->contact_email) || filled($this->contact_phone) || filled($this->contact_whatsapp);
     }
 
     /** @return HasMany<EventAttachment, $this> */
     public function attachments(): HasMany
     {
         return $this->hasMany(EventAttachment::class)->oldest('id');
+    }
+
+    /** Tamaño máximo del banner, en MB. */
+    public const BANNER_MAX_MB = 3;
+
+    /** Formatos del banner. Sin GIF ni video: se ve en correo y en papel. */
+    public const BANNER_FORMATOS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    /**
+     * Cargos que este evento acepta para quien asiste.
+     *
+     * Vacío o nulo significa todos: un evento que nunca eligió no se queda sin
+     * opciones, y un cargo nuevo de la lista base entra solo.
+     *
+     * @return array<int, string>
+     */
+    public function cargosDeParticipante(): array
+    {
+        $elegidos = array_values(array_intersect(
+            ProgramFormField::CARGOS_PARTICIPANTE,
+            $this->participant_positions ?? [],
+        ));
+
+        // "Otro" siempre queda: sin él, alguien con un cargo raro no se inscribe.
+        return $elegidos === []
+            ? ProgramFormField::CARGOS_PARTICIPANTE
+            : array_values(array_unique([...$elegidos, ProgramFormField::CARGO_OTRO]));
+    }
+
+    public function tieneBanner(): bool
+    {
+        return filled($this->banner_path) && Storage::disk($this->banner_disk)->exists($this->banner_path);
+    }
+
+    /**
+     * Datos de la cabecera del evento, para correos, formulario público y
+     * páginas de inscripción. Solo trae lo que el evento tiene cargado: si no
+     * hay lugar ni fecha, sale solo el nombre.
+     *
+     * @return array{nombre: string, lugar: ?string, ciudad: ?string, fecha: ?string}
+     */
+    public function datosCabecera(): array
+    {
+        return [
+            'nombre' => $this->name,
+            'lugar' => $this->location,
+            'ciudad' => $this->city,
+            'fecha' => $this->starts_on?->format('d-m-Y'),
+        ];
+    }
+
+    /**
+     * URL pública de la imagen. Va por ruta propia y no por el disco `public`:
+     * el correo la pide desde fuera, sin sesión, y el despliegue no arrastra
+     * `storage` ni su enlace simbólico.
+     */
+    public function bannerUrl(): ?string
+    {
+        if (blank($this->banner_path)) {
+            return null;
+        }
+
+        return route('publico.evento.banner', [
+            'event' => $this->slug,
+            // Sin esto el correo y el navegador siguen mostrando el banner viejo.
+            'v' => $this->banner_updated_at?->timestamp ?? 0,
+        ]);
     }
 
     /** @return HasMany<DiscountTier, $this> */
@@ -95,6 +190,12 @@ class Event extends Model
             ->where('min_participants', '<=', $participantes)
             ->sortByDesc('min_participants')
             ->first();
+    }
+
+    /** El descuento de un conjunto se calcula con la suma de sus colegios, no con cada uno por separado. */
+    public function cuentaDescuentoPorConjunto(): bool
+    {
+        return $this->discount_counting_mode === ModoConteoDescuento::PorConjunto;
     }
 
     /** @return BelongsTo<BankAccount, $this> */

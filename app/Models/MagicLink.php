@@ -51,6 +51,17 @@ class MagicLink extends Model
     }
 
     /**
+     * Conjunto al que da acceso, cuando el enlace es del conjunto y no de una
+     * sola orden. Un enlace apunta a uno u otro, nunca a los dos.
+     *
+     * @return BelongsTo<OrderGroup, $this>
+     */
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(OrderGroup::class, 'order_group_id');
+    }
+
+    /**
      * Emite un enlace nuevo y devuelve [modelo, token en claro].
      *
      * @return array{0: self, 1: string}
@@ -62,6 +73,29 @@ class MagicLink extends Model
         $link = self::create([
             'event_id' => $event->getKey(),
             'order_id' => $order?->getKey(),
+            'email' => mb_strtolower(trim($email)),
+            'token_hash' => self::hash($token),
+            'expires_at' => now()->addMinutes(config('magic_links.ttl_minutes')),
+            'uses' => 0,
+            'created_ip' => Request::ip(),
+        ]);
+
+        return [$link, $token];
+    }
+
+    /**
+     * Emite un enlace de conjunto: da acceso a todas las órdenes de ese
+     * responsable en el evento, no a una sola.
+     *
+     * @return array{0: self, 1: string}
+     */
+    public static function emitirParaGrupo(Event $event, string $email, OrderGroup $group): array
+    {
+        $token = Str::random(self::BYTES * 2);
+
+        $link = self::create([
+            'event_id' => $event->getKey(),
+            'order_group_id' => $group->getKey(),
             'email' => mb_strtolower(trim($email)),
             'token_hash' => self::hash($token),
             'expires_at' => now()->addMinutes(config('magic_links.ttl_minutes')),

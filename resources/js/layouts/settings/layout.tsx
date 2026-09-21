@@ -9,6 +9,7 @@ import { index as cuentasBancarias } from '@/routes/cuentas-bancarias';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import { index as usuarios } from '@/routes/usuarios';
+import { index as webs } from '@/routes/webs';
 import type { NavItem } from '@/types';
 
 /**
@@ -27,6 +28,12 @@ const settingsNavItems: NavItem[] = [
     {
         title: 'Usuarios',
         href: usuarios(),
+        icon: null,
+        permiso: 'gestionar_usuarios',
+    },
+    {
+        title: 'Websites',
+        href: webs(),
         icon: null,
         permiso: 'gestionar_usuarios',
     },

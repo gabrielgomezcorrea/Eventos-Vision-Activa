@@ -12,10 +12,6 @@ use Illuminate\Support\Facades\Cache;
  */
 class Setting extends Model
 {
-    public const CONTACTO_CORREO = 'contacto_email';
-
-    public const CONTACTO_TELEFONO = 'contacto_telefono';
-
     protected $primaryKey = 'key';
 
     protected $keyType = 'string';

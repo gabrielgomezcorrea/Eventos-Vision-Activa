@@ -11,12 +11,14 @@ use App\Enums\PaymentReviewAction;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
 use App\Exceptions\RevisionNoValida;
+use App\Mail\AbonoRecibido;
 use App\Mail\PagoAprobado;
 use App\Mail\PagoObservado;
 use App\Mail\PagoRechazado;
 use App\Models\AccessType;
 use App\Models\AuditLog;
 use App\Models\Event;
+use App\Models\MagicLink;
 use App\Models\Order;
 use App\Models\PayerEntity;
 use App\Models\Payment;
@@ -58,7 +60,8 @@ class ValidacionContableTest extends TestCase
 
         $orden = Order::create([
             'event_id' => $this->event->id,
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_email' => 'ana@colegio.cl',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,
         ]);
@@ -194,6 +197,85 @@ class ValidacionContableTest extends TestCase
         $this->revisar(PaymentReviewAction::Aprobar);
 
         $this->orden->fresh()->forceFill(['reserved_until' => now()->subDay()])->save();
+        $this->artisan('reservas:expirar')->assertSuccessful();
+
+        $this->assertSame(OrderStatus::Reservada, $this->orden->fresh()->status);
+    }
+
+    public function test_un_abono_parcial_no_libera_credenciales_y_deja_saldo(): void
+    {
+        // Schools pay in parts, weeks apart: half now, the rest later.
+        $this->pago->forceFill(['amount' => 40000])->save();
+
+        $this->revisar(PaymentReviewAction::Aprobar);
+        $orden = $this->orden->fresh();
+
+        $this->assertSame(40000, $orden->pagado());
+        $this->assertSame(50000, $orden->saldo());
+        $this->assertSame(PaymentStatus::Pendiente, $orden->payment_status, 'Con saldo el pago sigue pendiente.');
+        $this->assertSame(0, $orden->tickets()->count(), 'Las credenciales salen solo con el total.');
+
+        Mail::assertQueued(AbonoRecibido::class, fn (AbonoRecibido $m): bool => $m->abono->amount === 40000);
+        Mail::assertNotQueued(PagoAprobado::class);
+
+        // El segundo abono completa el total: ahí sí se liberan.
+        $segundo = app(RegistrarComprobante::class)(
+            $orden,
+            ['amount' => 50000, 'paid_on' => now()->toDateString()],
+            UploadedFile::fake()->create('t2.pdf', 100, 'application/pdf'),
+        );
+        app(RevisarPago::class)($segundo->fresh(), PaymentReviewAction::Aprobar, $this->contadora);
+
+        $orden = $orden->fresh();
+        $this->assertSame(90000, $orden->pagado());
+        $this->assertSame(0, $orden->saldo());
+        $this->assertSame(PaymentStatus::Aprobado, $orden->payment_status);
+        $this->assertSame(1, $orden->tickets()->count());
+        Mail::assertQueued(PagoAprobado::class);
+    }
+
+    public function test_un_abono_no_puede_superar_el_saldo(): void
+    {
+        $this->pago->forceFill(['amount' => 40000])->save();
+        $this->revisar(PaymentReviewAction::Aprobar);
+
+        [, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl', $this->orden);
+
+        $this->post(route('inscripcion.comprobante', ['token' => $token]), [
+            'amount' => 60000,
+            'paid_on' => now()->toDateString(),
+            'bank_name' => 'BancoEstado', 'payer_name' => 'Fundación', 'payer_rut' => '76.086.428-5',
+            'proof' => UploadedFile::fake()->create('t3.pdf', 50, 'application/pdf'),
+        ])->assertOk()->assertSee('no puede superar el saldo pendiente');
+
+        $this->assertSame(1, $this->orden->fresh()->payments()->count());
+    }
+
+    public function test_observar_un_abono_no_descuenta_lo_ya_pagado(): void
+    {
+        $this->pago->forceFill(['amount' => 40000])->save();
+        $this->revisar(PaymentReviewAction::Aprobar);
+
+        $segundo = app(RegistrarComprobante::class)(
+            $this->orden->fresh(),
+            ['amount' => 50000, 'paid_on' => now()->toDateString()],
+            UploadedFile::fake()->create('t4.pdf', 100, 'application/pdf'),
+        );
+        app(RevisarPago::class)($segundo->fresh(), PaymentReviewAction::Observar, $this->contadora, 'El monto no coincide.');
+
+        $orden = $this->orden->fresh();
+        $this->assertSame(40000, $orden->pagado());
+        $this->assertSame(PaymentStatus::Observado, $orden->payment_status);
+        $this->assertTrue($orden->admiteComprobante(), 'Puede subir otro comprobante.');
+    }
+
+    public function test_la_reserva_no_vence_con_un_abono_aprobado(): void
+    {
+        $this->pago->forceFill(['amount' => 40000])->save();
+        $this->revisar(PaymentReviewAction::Aprobar);
+
+        $this->orden->fresh()->forceFill(['reserved_until' => now()->subDay()])->save();
+
         $this->artisan('reservas:expirar')->assertSuccessful();
 
         $this->assertSame(OrderStatus::Reservada, $this->orden->fresh()->status);

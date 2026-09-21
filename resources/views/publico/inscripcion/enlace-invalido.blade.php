@@ -3,6 +3,7 @@
     $explicacion = $explicacion ?? 'Puede haber expirado o haber sido reemplazado por uno más reciente.';
     $accionUrl = $accionUrl ?? null;
     $accionTexto = $accionTexto ?? null;
+    $evento = $evento ?? null;
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -32,6 +33,10 @@
         <p>{{ $explicacion }}</p>
         @if ($accionUrl)
             <a class="boton" href="{{ $accionUrl }}">{{ $accionTexto }}</a>
+        @endif
+        @if ($evento && ($evento->contact_email || $evento->contact_phone))
+            <p style="margin:20px 0 0">¿Necesitas ayuda? Contáctanos:</p>
+            @include('publico._contacto', ['evento' => $evento])
         @endif
     </div>
 </body>

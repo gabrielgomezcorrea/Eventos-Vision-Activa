@@ -47,7 +47,14 @@
         </div>
 
         <div class="credencial-qr">
-            {!! $qr->svg($ticket->url(), 240) !!}
+            <div class="qr-imagen">{!! $qr->svg($ticket->url(), 240) !!}</div>
+            {{-- Descarga del QR como PNG, dibujado en el navegador: sirve para
+                 reenviarlo por WhatsApp o pegarlo en un documento, y no obliga
+                 a instalar una extensión de imágenes en el servidor. --}}
+            <button type="button" class="btn btn-qr" data-descargar-qr
+                    data-nombre="{{ \Illuminate\Support\Str::slug($participante->nombre_completo) ?: $ticket->code }}">
+                Descargar QR
+            </button>
             <p class="etiqueta" style="margin-top:8px">Código de respaldo</p>
             <p class="codigo">{{ $ticket->code }}</p>
         </div>

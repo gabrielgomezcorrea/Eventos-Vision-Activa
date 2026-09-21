@@ -52,7 +52,8 @@ class ComprobanteDePagoTest extends TestCase
     {
         $orden = Order::create([
             'event_id' => $this->event->id,
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_email' => 'ana'.Order::count().'@colegio.cl',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,
         ]);
@@ -133,6 +134,7 @@ class ComprobanteDePagoTest extends TestCase
         $borrador = Order::create([
             'event_id' => $this->event->id,
             'responsible_name' => 'Beto',
+            'responsible_lastname' => 'Soto',
             'responsible_email' => 'beto@colegio.cl',
         ]);
 
@@ -146,6 +148,9 @@ class ComprobanteDePagoTest extends TestCase
 
     public function test_no_acepta_comprobante_si_el_pago_ya_fue_aprobado(): void
     {
+        $this->orden->payments()->create([
+            'status' => PaymentStatus::Aprobado, 'amount' => $this->orden->total, 'paid_on' => now(),
+        ]);
         $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
 
         try {

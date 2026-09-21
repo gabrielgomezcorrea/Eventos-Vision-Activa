@@ -54,6 +54,7 @@
             margin: 0 auto;
             padding: {{ $embed ? '0' : '32px 16px' }};
         }
+        .banner { display: block; width: 100%; height: auto; border-radius: 10px; margin-bottom: 16px; }
         .tarjeta {
             background: var(--superficie);
             border: {{ $embed ? 'none' : '1px solid var(--borde)' }};
@@ -104,6 +105,8 @@
 </head>
 <body>
 <div class="envoltura">
+    @include('publico._banner', ['evento' => $event])
+
     <div class="tarjeta">
 
         @if ($enviado)
@@ -112,8 +115,9 @@
                 <h2>Revisa tu correo</h2>
                 <p>Enviamos el programa de <strong>{{ $event->name }}</strong> a la dirección que indicaste.</p>
                 <p>Si no lo ves en unos minutos, revisa la carpeta de correo no deseado.</p>
-                @if ($event->contact_email)
-                    <p>¿Dudas? Escríbenos a <a href="mailto:{{ $event->contact_email }}">{{ $event->contact_email }}</a>.</p>
+                @if ($event->contact_email || $event->contact_phone)
+                    <p>¿Dudas? Contáctanos:</p>
+                    @include('publico._contacto', ['evento' => $event])
                 @endif
             </div>
         @else
@@ -233,7 +237,7 @@
                     <label class="casilla">
                         <input type="checkbox" name="marketing" value="1"
                                @checked(old('marketing', $valores['marketing'] ?? false))>
-                        <span>{{ $event->consent_text ?: \App\Models\Event::CONSENTIMIENTO_POR_DEFECTO }}</span>
+                        <span>{{ \App\Models\Event::CONSENTIMIENTO_POR_DEFECTO }}</span>
                     </label>
                 </div>
 

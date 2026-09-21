@@ -1,4 +1,6 @@
 <x-mail::message>
+@include('mail._banner', ['evento' => $event])
+
 # Tu reserva vence pronto
 
 Hola {{ $orden->responsible_name }},
@@ -33,8 +35,10 @@ mientras Contabilidad lo revisa.
 Subir el comprobante
 </x-mail::button>
 
-@if ($event->contact_email)
-¿Necesitas más plazo? Escríbenos o contáctanos al correo o teléfono a continuación.
+@if ($event->contact_email || $event->contact_phone)
+¿Necesitas más plazo? Contáctanos:
+
+@include('mail._datos_contacto', ['evento' => $event])
 @endif
 
 @include('mail._contacto', ['evento' => $event])

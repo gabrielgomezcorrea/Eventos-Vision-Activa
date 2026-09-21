@@ -20,9 +20,7 @@
         <h1>Esta credencial ya no es válida</h1>
         <p>Fue anulada y reemplazada por otra.</p>
         <p>El responsable de la inscripción tiene la credencial vigente. Si necesitas ayuda, contáctanos.</p>
-        @if ($ticket->event->contact_email)
-            <p><a href="mailto:{{ $ticket->event->contact_email }}">{{ $ticket->event->contact_email }}</a></p>
-        @endif
+        @include('publico._contacto', ['evento' => $ticket->event])
     </div>
 </body>
 </html>

@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Storage;
 class EventAttachment extends Model
 {
     /** Tope por evento. Más de tres y el correo pesa más de lo que nadie lee. */
-    public const MAXIMO = 3;
+    public const MAXIMO = 5;
 
     /** Tamaño máximo por archivo, en MB. */
     public const MAX_MB = 10;

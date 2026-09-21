@@ -4,6 +4,7 @@ namespace App\Http\Requests\Eventos;
 
 use App\Models\Event;
 use App\Support\Forms\ProgramFormField;
+use App\Support\ReglasDeContacto;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -33,8 +34,16 @@ class FormularioPublicoRequest extends FormRequest
             'campos.*.placeholder' => ['nullable', 'string', 'max:255'],
             'campos.*.options' => ['nullable', 'array'],
             'campos.*.options.*' => ['string', 'max:255'],
-            'consent_text' => ['nullable', 'string', 'max:1000'],
+            'contact_name' => ReglasDeContacto::nombreCompleto(),
+            'contact_role' => ReglasDeContacto::texto('Administración'),
+            'contact_organization' => ReglasDeContacto::texto('Corporación Educacional', false),
+            'contact_email' => ReglasDeContacto::correo(),
+            'contact_phone' => ReglasDeContacto::telefono(),
+            'contact_whatsapp' => ReglasDeContacto::telefono(false),
             'program_email_intro' => ['nullable', 'string', 'max:5000'],
+            // Vacío significa todos: el evento que no elige acepta cualquiera.
+            'participant_positions' => ['nullable', 'array'],
+            'participant_positions.*' => [Rule::in(ProgramFormField::CARGOS_PARTICIPANTE)],
         ];
     }
 

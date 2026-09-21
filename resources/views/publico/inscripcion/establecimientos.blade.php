@@ -1,14 +1,14 @@
 @extends('publico.layout')
-@section('titulo', 'Establecimientos')
-@section('subtitulo', 'Establecimientos de los que provienen los participantes')
+@section('titulo', 'Establecimiento')
+@section('subtitulo', 'Establecimiento del que provienen los participantes')
 
 @section('contenido')
     <div class="tarjeta">
-        <h2>Establecimientos de la orden</h2>
-        <p class="sub">Puedes asociar uno o varios. Cada participante quedará vinculado a uno de ellos.</p>
+        <h2>Establecimientos de la inscripción</h2>
+        <p class="sub">Puedes agregar más de un colegio: cada uno queda como su propia inscripción, con el mismo enlace.</p>
 
         @if ($orden->establishments->isEmpty())
-            <div class="vacio">Todavía no has agregado establecimientos.</div>
+            <div class="vacio">Todavía no has agregado un establecimiento.</div>
         @else
             <table>
                 <thead>
@@ -39,42 +39,27 @@
         @endif
     </div>
 
-    <form method="POST" action="{{ route('inscripcion.establecimientos.agregar', ['token' => $token]) }}" novalidate>
-        <div class="tarjeta">
-            <h2>Agregar establecimiento</h2>
-            <p class="sub">El RBD se ingresa manualmente.</p>
-
-            <div class="rejilla">
-                <div>
-                    <label for="name">Nombre del establecimiento</label>
-                    <input type="text" id="name" name="name" value="{{ $valores['name'] ?? '' }}"
-                           @if ($errores->has('name')) aria-invalid="true" @endif>
-                    @if ($errores->has('name'))
-                        <div class="error-campo">{{ $errores->first('name') }}</div>
-                    @endif
-                </div>
-                <div>
-                    <label for="rbd">RBD <span class="opcional">(opcional)</span></label>
-                    <input type="text" id="rbd" name="rbd" value="{{ $valores['rbd'] ?? '' }}">
-                </div>
-                <div>
-                    <label for="address">Dirección <span class="opcional">(opcional)</span></label>
-                    <input type="text" id="address" name="address" value="{{ $valores['address'] ?? '' }}">
-                </div>
-                <div>
-                    <label for="commune">Comuna <span class="opcional">(opcional)</span></label>
-                    <input type="text" id="commune" name="commune" value="{{ $valores['commune'] ?? '' }}">
-                </div>
-            </div>
-
-            <div class="acciones">
-                <button type="submit" class="btn btn-secundario" data-enviando-texto="Agregando…">Agregar establecimiento</button>
-            </div>
+<form method="POST" action="{{ route('inscripcion.establecimientos.agregar', ['token' => $token]) }}" novalidate>
+    <div class="tarjeta">
+        <h2>{{ $orden->establishments->isEmpty() ? 'Agregar el establecimiento' : 'Agregar otro colegio' }}</h2>
+        <div class="rejilla">
+            @include('publico.inscripcion._campo', ['campo' => 'name', 'etiqueta' => 'Nombre del establecimiento'])
+            @include('publico.inscripcion._campo', ['campo' => 'rbd', 'etiqueta' => 'RBD', 'opcional' => true, 'placeholder' => '12345-6', 'autocomplete' => 'off'])
+            @include('publico.inscripcion._campo', ['campo' => 'address', 'etiqueta' => 'Dirección', 'autocomplete' => 'street-address'])
+            @include('publico.inscripcion._campo', ['campo' => 'commune', 'etiqueta' => 'Comuna', 'autocomplete' => 'off', 'atributos' => 'list="comunas"'])
         </div>
-    </form>
+        @include('publico.inscripcion._comunas')
+
+        <div class="acciones">
+            <button type="submit" class="btn btn-secundario" data-enviando-texto="Guardando…">Guardar</button>
+        </div>
+    </div>
+</form>
 
     <div class="acciones">
-        <a href="{{ route('inscripcion.pagador', ['token' => $token]) }}" class="btn btn-secundario">Volver</a>
-        <a href="{{ route('inscripcion.participantes', ['token' => $token]) }}" class="btn btn-primario">Continuar a participantes</a>
+        <a href="{{ route('inscripcion.responsable', ['token' => $token]) }}" class="btn btn-secundario">Volver</a>
+        @if ($orden->establishments->isNotEmpty())
+            <a href="{{ route('inscripcion.participantes', ['token' => $token]) }}" class="btn btn-primario">Continuar a participantes</a>
+        @endif
     </div>
 @endsection

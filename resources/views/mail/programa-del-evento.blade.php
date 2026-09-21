@@ -1,11 +1,12 @@
 {{--
-    Primer correo. No lleva el recorrido de pasos a propósito: quien acaba de
-    pedir el programa todavía no está en un trámite, y mostrarle cuatro etapas
-    con transferencias y credenciales lo confunde antes de empezar. Acá solo
-    importa que vea el evento y entre a inscribirse. Los pasos aparecen desde el
-    correo siguiente, cuando ya está dentro.
+    Primer correo. No lleva el recuadro de pasos: quien acaba de pedir el
+    programa todavía no está en un trámite. Sí lleva, por pedido de la reunión
+    del 17/09/2026, el proceso de inscripción y pago contado en pocas líneas,
+    para que sepa qué viene antes de entrar.
 --}}
 <x-mail::message>
+@include('mail._banner', ['evento' => $event])
+
 # {{ $event->name }}
 
 Hola {{ $solicitud->first_name }},
@@ -13,7 +14,7 @@ Hola {{ $solicitud->first_name }},
 @if ($event->program_email_intro)
 {{ $event->program_email_intro }}
 @else
-Gracias por tu interés.@if ($event->attachments->isNotEmpty()) Adjuntamos la información en este correo.@endif
+Gracias por tu interés en **{{ $event->name }}**.@if ($event->attachments->isNotEmpty()) Adjuntamos el programa del evento en este correo.@endif
 @endif
 
 <x-mail::panel>
@@ -30,6 +31,13 @@ Gracias por tu interés.@if ($event->attachments->isNotEmpty()) Adjuntamos la in
 **{{ $jornada->name }}:** @if ($jornada->starts_at){{ $jornada->starts_at->translatedFormat('d \d\e F, H:i') }}@else por confirmar @endif<br>
 @endforeach
 </x-mail::panel>
+
+**Así te inscribes en línea:**
+
+1. Entras con tu correo desde el botón de abajo, sin contraseña.
+2. Completas tus datos, los del establecimiento y los participantes.
+3. Transfieres el valor de la inscripción y subes el comprobante.
+4. Cuando validamos el pago, cada participante recibe su credencial con código QR.
 
 <x-mail::button :url="route('inscripcion.inicio', $event)">
 Inscribirme

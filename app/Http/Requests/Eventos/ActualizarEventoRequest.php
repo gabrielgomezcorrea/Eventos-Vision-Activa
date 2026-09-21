@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Eventos;
 
 use App\Enums\EventModality;
+use App\Enums\ModoConteoDescuento;
 use App\Enums\ReservationDurationUnit;
 use App\Models\Event;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -49,7 +50,7 @@ class ActualizarEventoRequest extends FormRequest
 
             'reservation_duration_value' => ['sometimes', 'required', 'integer', 'min:1', 'max:365'],
             'reservation_duration_unit' => ['sometimes', 'required', Rule::enum(ReservationDurationUnit::class)],
-            'replacement_deadline' => ['sometimes', 'nullable', 'date'],
+            'discount_counting_mode' => ['sometimes', 'required', Rule::enum(ModoConteoDescuento::class)],
 
             // Una cuenta desactivada deja de ofrecerse, pero el evento que ya
             // la tenía puede seguir guardándose sin que lo obliguen a cambiarla.
@@ -89,7 +90,6 @@ class ActualizarEventoRequest extends FormRequest
             'city' => 'ciudad',
             'reservation_duration_value' => 'tiempo para pagar',
             'reservation_duration_unit' => 'unidad del plazo',
-            'replacement_deadline' => 'fecha límite de reemplazos',
             'bank_account_id' => 'cuenta',
         ];
     }

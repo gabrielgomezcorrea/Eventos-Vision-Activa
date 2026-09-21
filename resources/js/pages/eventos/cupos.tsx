@@ -16,6 +16,7 @@ import JornadaController from '@/actions/App/Http/Controllers/Eventos/JornadaCon
 import { Campo } from '@/components/campo';
 import { NativeSelect } from '@/components/native-select';
 import { Confirmar } from '@/components/confirmar';
+import { EditarSeccion } from '@/components/editar-seccion';
 import InputError from '@/components/input-error';
 import { SeccionFicha } from '@/components/seccion-ficha';
 import { Button } from '@/components/ui/button';
@@ -81,12 +82,22 @@ type Descuento = {
     etiqueta: string;
 };
 
+type ModoConteoDescuento = { label: string; descripcion: string };
+
 type Props = {
-    evento: { id: number; name: string; usa_pulseras: boolean };
+    evento: {
+        id: number;
+        name: string;
+        usa_pulseras: boolean;
+        discount_counting_mode: string;
+    };
     jornadas: Jornada[];
     accesos: Acceso[];
     descuentos: Descuento[];
-    opciones: { tiposDescuento: Record<string, string> };
+    opciones: {
+        tiposDescuento: Record<string, string>;
+        modosConteoDescuento: Record<string, ModoConteoDescuento>;
+    };
 };
 
 const clp = (valor: number): string => `$${valor.toLocaleString('es-CL')}`;
@@ -1128,6 +1139,81 @@ export default function CuposYPrecios({
                         />
                     }
                 >
+                    <div className="border-b p-5">
+                        <div className="flex items-start justify-between gap-2">
+                            <div>
+                                <p className="text-sm font-medium">
+                                    Cómo se cuenta con varios colegios
+                                </p>
+                                <p className="text-muted-foreground text-sm">
+                                    {
+                                        opciones.modosConteoDescuento[
+                                            evento.discount_counting_mode
+                                        ]?.label
+                                    }
+                                    :{' '}
+                                    {
+                                        opciones.modosConteoDescuento[
+                                            evento.discount_counting_mode
+                                        ]?.descripcion
+                                    }
+                                </p>
+                            </div>
+                            <EditarSeccion
+                                titulo="Cómo se cuenta el descuento"
+                                url={EventoController.update.url(evento.id)}
+                                inicial={{
+                                    discount_counting_mode:
+                                        evento.discount_counting_mode,
+                                }}
+                            >
+                                {(f) => (
+                                    <Campo
+                                        label="Con una inscripción de varios colegios"
+                                        htmlFor="discount_counting_mode"
+                                        error={f.errors.discount_counting_mode}
+                                    >
+                                        <div className="flex flex-col gap-3">
+                                            {Object.entries(
+                                                opciones.modosConteoDescuento,
+                                            ).map(([valor, modo]) => (
+                                                <label
+                                                    key={valor}
+                                                    className="flex cursor-pointer items-start gap-2"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="discount_counting_mode"
+                                                        value={valor}
+                                                        checked={
+                                                            f.data
+                                                                .discount_counting_mode ===
+                                                            valor
+                                                        }
+                                                        onChange={() =>
+                                                            f.set(
+                                                                'discount_counting_mode',
+                                                                valor,
+                                                            )
+                                                        }
+                                                        className="mt-1"
+                                                    />
+                                                    <span>
+                                                        <span className="block text-sm font-medium">
+                                                            {modo.label}
+                                                        </span>
+                                                        <span className="text-muted-foreground block text-sm">
+                                                            {modo.descripcion}
+                                                        </span>
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </Campo>
+                                )}
+                            </EditarSeccion>
+                        </div>
+                    </div>
                     {descuentos.length === 0 ? (
                         <p className="text-muted-foreground px-5 pb-5 text-sm">
                             Sin descuentos. El total es la suma de los accesos.

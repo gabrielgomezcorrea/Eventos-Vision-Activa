@@ -10,6 +10,8 @@ use App\Models\EventSession;
 use App\Models\User;
 use Database\Seeders\RolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -249,5 +251,61 @@ class PanelEventosTest extends TestCase
             ->assertSessionHasErrors('campos');
 
         $this->assertNull($evento->fresh()->program_form_fields);
+    }
+
+    public function test_el_formulario_publico_guarda_el_contacto_del_evento_normalizado(): void
+    {
+        $evento = $this->evento();
+        $campos = [['key' => 'email', 'label' => 'Correo', 'type' => 'email', 'required' => true, 'options' => []]];
+
+        $this->actingAs($this->usuario(Rol::Administrador))
+            ->put(route('eventos.formulario.update', $evento), ['campos' => $campos])
+            ->assertSessionHasErrors(['contact_name', 'contact_role', 'contact_email', 'contact_phone']);
+
+        $this->put(route('eventos.formulario.update', $evento), [
+            'campos' => $campos,
+            'contact_name' => 'Flor Vidal Oliva', 'contact_role' => 'Administración y Atención Clientes', 'contact_organization' => 'Corporación Liderazgo y Calidad Educacional',
+            'contact_email' => ' Flor@VisionActiva.cl', 'contact_phone' => '9-51887769', 'contact_whatsapp' => '9 3333 4444',
+        ])->assertSessionHasNoErrors();
+
+        $evento->refresh();
+        $this->assertSame('flor@visionactiva.cl', $evento->contact_email);
+        $this->assertSame('56951887769', $evento->contact_phone);
+        $this->assertSame('56933334444', $evento->contact_whatsapp);
+    }
+
+    public function test_el_programa_solo_acepta_pdf_y_hasta_cinco_archivos(): void
+    {
+        Storage::fake(config('filesystems.private_disk'));
+        $evento = $this->evento();
+        $this->actingAs($this->usuario(Rol::Administrador));
+
+        $this->post(route('eventos.programa.store', $evento), [
+            'programa' => UploadedFile::fake()->create('programa.docx', 50, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+        ])->assertSessionHasErrors('programa');
+
+        foreach (range(1, 5) as $numero) {
+            $this->post(route('eventos.programa.store', $evento), [
+                'programa' => UploadedFile::fake()->create("programa-{$numero}.pdf", 50, 'application/pdf'),
+            ])->assertSessionHasNoErrors();
+        }
+
+        $this->post(route('eventos.programa.store', $evento), [
+            'programa' => UploadedFile::fake()->create('programa-6.pdf', 50, 'application/pdf'),
+        ])->assertSessionHasErrors('programa');
+
+        $this->assertSame(5, $evento->attachments()->count());
+    }
+
+    public function test_un_evento_nuevo_parte_con_el_contacto_por_defecto(): void
+    {
+        $this->actingAs($this->usuario(Rol::Administrador))
+            ->post(route('eventos.store'), ['name' => 'Seminario de Liderazgo', 'modality' => 'presencial', 'starts_on' => now()->addMonth()->toDateString()])
+            ->assertSessionHasNoErrors();
+
+        $evento = Event::where('name', 'Seminario de Liderazgo')->sole();
+        $this->assertSame('Flor Vidal Oliva', $evento->contact_name);
+        $this->assertSame('administracion@visionactiva.cl', $evento->contact_email);
+        $this->assertSame('56951887769', $evento->contact_phone);
     }
 }

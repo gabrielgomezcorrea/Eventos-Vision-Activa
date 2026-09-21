@@ -1,4 +1,6 @@
 <x-mail::message>
+@include('mail._banner', ['evento' => $event])
+
 # {{ Str::of($observacion)->before('.')->trim() }}
 
 Hola {{ $orden->responsible_name }},

@@ -114,7 +114,8 @@ class PrecioPorFechaTest extends TestCase
     private function borrador(): Order
     {
         $orden = $this->evento->orders()->create([
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_email' => 'ana@colegio.cl',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,
         ]);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Eventos;
 
+use App\Enums\ModoConteoDescuento;
 use App\Enums\TipoDescuento;
 use App\Http\Controllers\Controller;
 use App\Models\AccessType;
@@ -32,6 +33,7 @@ class CuposYPreciosController extends Controller
                 'id' => $event->id,
                 'name' => $event->name,
                 'usa_pulseras' => $event->usaPulseras(),
+                'discount_counting_mode' => $event->discount_counting_mode->value,
             ],
             'jornadas' => $event->sessions->map(fn (EventSession $jornada): array => [
                 'id' => $jornada->id,
@@ -64,7 +66,10 @@ class CuposYPreciosController extends Controller
                 'value' => $tramo->value,
                 'etiqueta' => $tramo->etiqueta(),
             ])->values()->all(),
-            'opciones' => ['tiposDescuento' => TipoDescuento::options()],
+            'opciones' => [
+                'tiposDescuento' => TipoDescuento::options(),
+                'modosConteoDescuento' => ModoConteoDescuento::options(),
+            ],
         ]);
     }
 }

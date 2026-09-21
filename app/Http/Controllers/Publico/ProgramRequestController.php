@@ -313,7 +313,7 @@ class ProgramRequestController extends Controller
             'access_type_id.in' => 'Elige una de las opciones de la lista.',
             'access_type_id.required' => 'Elige una de las opciones de la lista.',
             'position_otro.required_if' => 'Escribe cuál es tu cargo.',
-            'phone.regex' => 'Debes seguir el formato +56912345678.',
+            'phone.regex' => 'Escribe un celular con código de país, como 56912345678.',
         ];
 
         foreach ($campos as $campo) {

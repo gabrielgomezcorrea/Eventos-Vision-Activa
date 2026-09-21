@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Publico\BannerController;
 use App\Http\Controllers\Publico\InscripcionController;
 use App\Http\Controllers\Publico\ProgramRequestController;
 use App\Http\Controllers\Publico\TicketController;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 
 // Página de privacidad: la enlaza el pie de cada formulario público.
 Route::view('/privacidad', 'publico.privacidad')->name('publico.privacidad');
+
+// Banner del evento. Es la única imagen pública del sistema: el correo la pide
+// desde el cliente de la persona, sin sesión ni permiso posible.
+Route::get('/e/{event:slug}/banner', BannerController::class)->name('publico.evento.banner');
 
 Route::get('/f/{event:slug}', [ProgramRequestController::class, 'mostrar'])
     ->name('publico.programa');
@@ -68,8 +73,11 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
     Route::post('/confirmar', [InscripcionController::class, 'confirmar'])->name('confirmar');
 
     Route::get('/estado', [InscripcionController::class, 'estado'])->name('estado');
-    Route::get('/credenciales', [TicketController::class, 'deLaOrden'])->name('credenciales');
-    Route::post('/comprobante', [InscripcionController::class, 'guardarComprobante'])
+    Route::post('/otro-establecimiento', [InscripcionController::class, 'otroEstablecimiento'])->name('otro');
+    // {establishment} identifica el colegio dentro del mismo conjunto, nunca
+    // una orden por id: sin colegio, la acción es sobre la orden del token.
+    Route::get('/credenciales/{establishment?}', [TicketController::class, 'deLaOrden'])->name('credenciales');
+    Route::post('/comprobante/{establishment?}', [InscripcionController::class, 'guardarComprobante'])
         ->middleware('throttle:20,1')
         ->name('comprobante');
 });

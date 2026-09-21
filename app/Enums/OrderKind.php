@@ -11,11 +11,15 @@ enum OrderKind: string
     case Institucional = 'institutional';
     case Particular = 'individual';
 
+    /** Invitado del evento: no paga, ocupa cupo y se acredita como cualquiera. */
+    case Invitado = 'guest';
+
     public function label(): string
     {
         return match ($this) {
             self::Institucional => 'Institucional',
             self::Particular => 'Particular',
+            self::Invitado => 'Invitado especial',
         };
     }
 

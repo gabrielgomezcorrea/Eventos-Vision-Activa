@@ -130,10 +130,78 @@ class ReglasDeContacto
     }
 
     /**
+     * Chilean mobile, written any way. Stored as 56912345678.
+     *
+     * @return array<int, mixed>
+     */
+    public static function telefono(bool $obligatorio = true): array
+    {
+        return [
+            $obligatorio ? 'required' : 'nullable',
+            'string',
+            'max:50',
+            function (string $atributo, mixed $valor, Closure $falla): void {
+                if (Texto::telefono((string) $valor) === null) {
+                    $falla('Escribe un celular con código de país, como 56912345678.');
+                }
+            },
+        ];
+    }
+
+    /**
+     * Free text that must carry real words: address, business activity.
+     *
+     * @return array<int, mixed>
+     */
+    public static function texto(string $ejemplo, bool $obligatorio = true): array
+    {
+        return [
+            $obligatorio ? 'required' : 'nullable',
+            'string',
+            'max:255',
+            function (string $atributo, mixed $valor, Closure $falla) use ($ejemplo): void {
+                if (preg_match_all('/\pL/u', (string) $valor) < 3) {
+                    $falla("Escribe el dato completo, como {$ejemplo}.");
+                }
+            },
+        ];
+    }
+
+    /**
+     * Commune: suggested from the list, never blocked if missing from it.
+     *
+     * @return array<int, mixed>
+     */
+    public static function comuna(bool $obligatorio = true): array
+    {
+        return [
+            $obligatorio ? 'required' : 'nullable',
+            'string',
+            'max:120',
+            function (string $atributo, mixed $valor, Closure $falla): void {
+                if (! preg_match(self::LETRAS, (string) $valor) || preg_match_all('/\pL/u', (string) $valor) < 3) {
+                    $falla('Escribe la comuna con letras, como Ñuñoa.');
+                }
+            },
+        ];
+    }
+
+    /**
+     * Loose on purpose: some RBD are longer than expected, and a strict length
+     * already rejected real ones in another system.
+     *
+     * @return array<int, mixed>
+     */
+    public static function rbd(): array
+    {
+        return ['nullable', 'string', 'max:20', 'regex:/^\d{1,10}(-?[\dkK])?$/'];
+    }
+
+    /**
      * Leaves each value as it must be stored.
      *
      * @param  array<string, mixed>  $datos
-     * @param  array<string, 'nombre'|'correo'|'cargo'|'texto'>  $tipos
+     * @param  array<string, 'nombre'|'correo'|'cargo'|'texto'|'telefono'|'comuna'>  $tipos
      * @return array<string, mixed>
      */
     public static function normalizar(array $datos, array $tipos): array
@@ -152,6 +220,8 @@ class ReglasDeContacto
                     ? Texto::capitalizar(is_string($datos[$clave.'_otro'] ?? null) ? $datos[$clave.'_otro'] : null)
                     : $valor,
                 'texto' => Texto::limpiar($valor),
+                'telefono' => Texto::telefono($valor),
+                'comuna' => Texto::comuna($valor),
             };
 
             if ($tipo === 'cargo') {
@@ -166,11 +236,12 @@ class ReglasDeContacto
      * Splits a stored position back into list value and "Otro" text, to
      * prefill an edit form.
      *
+     * @param  array<int, string>  $opciones
      * @return array<string, string|null>
      */
-    public static function separarCargo(?string $guardado, string $campo = 'position'): array
+    public static function separarCargo(?string $guardado, string $campo = 'position', array $opciones = ProgramFormField::CARGOS): array
     {
-        if ($guardado === null || in_array($guardado, ProgramFormField::CARGOS, true)) {
+        if ($guardado === null || in_array($guardado, $opciones, true)) {
             return [$campo => $guardado];
         }
 

@@ -64,6 +64,7 @@ class RegistrarComprobante
                     'payer_rut' => $datos['payer_rut'] ?? null,
                     'reference' => $datos['reference'] ?? null,
                     'notes' => $datos['notes'] ?? null,
+                    'billing_notes' => $datos['billing_notes'] ?? null,
                     'submitted_by_user_id' => $usuario?->getKey(),
                     'submitted_by_label' => $actorLabel,
                 ]);

@@ -105,11 +105,11 @@ class ReemplazarParticipante
             );
         }
 
-        $limite = $saliente->order->event->replacement_deadline;
+        $limite = $saliente->order->event->limiteDeReemplazos();
 
-        if ($limite && $limite->endOfDay()->isPast()) {
+        if ($limite && $limite->isPast()) {
             throw ReemplazoNoPermitido::porque(
-                'El plazo para reemplazar participantes venció el '.$limite->format('d-m-Y').'.'
+                'El plazo para reemplazar participantes venció el '.$limite->format('d-m-Y').' a las 23:59.'
             );
         }
     }

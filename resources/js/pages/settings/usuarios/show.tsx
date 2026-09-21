@@ -279,7 +279,7 @@ export default function Usuario({
                             {(f) => (
                                 <>
                                     <Campo
-                                        label="Nombre"
+                                        label="Nombre completo"
                                         htmlFor="name"
                                         error={f.errors.name}
                                     >

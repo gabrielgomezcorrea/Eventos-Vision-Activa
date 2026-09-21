@@ -1,4 +1,6 @@
 <x-mail::message>
+@include('mail._banner', ['evento' => $event])
+
 # El comprobante no acreditó el pago
 
 Hola {{ $orden->responsible_name }},

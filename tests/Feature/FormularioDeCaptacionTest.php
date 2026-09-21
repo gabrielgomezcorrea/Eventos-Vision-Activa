@@ -47,7 +47,7 @@ class FormularioDeCaptacionTest extends TestCase
             'email' => 'ana@colegio.cl',
             'position' => 'Directivo',
             'institution' => 'Colegio San José',
-            'phone' => '+56912345678',
+            'phone' => '56912345678',
         ], $extra);
     }
 

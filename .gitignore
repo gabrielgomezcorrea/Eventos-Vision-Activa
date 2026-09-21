@@ -31,6 +31,11 @@ yarn-error.log
 # Base de datos local
 /database/*.sqlite
 
+# Reportes de Playwright (Fase 6, solo para jugar en local)
+/test-results
+/playwright-report
+/playwright/.cache
+
 # Ningún .md viaja al repositorio salvo los que tiene cualquier proyecto.
 # Instrucciones de IA, roadmaps, specs, actas y notas son método propio y no se
 # publican. Regla general para no tener que ir agregando archivos uno por uno.

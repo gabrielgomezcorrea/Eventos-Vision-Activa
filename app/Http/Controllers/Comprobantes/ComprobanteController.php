@@ -60,7 +60,8 @@ class ComprobanteController extends Controller
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->whereHas(
                 'order',
                 fn (Builder $o) => $o->where('number', 'like', "%{$buscar}%")
-                    ->orWhere('responsible_name', 'like', "%{$buscar}%"),
+                    ->orWhere('responsible_name', 'like', "%{$buscar}%")
+                    ->orWhere('responsible_lastname', 'like', "%{$buscar}%"),
             ))
             ->latest()
             ->paginate(15)
@@ -68,7 +69,7 @@ class ComprobanteController extends Controller
             ->through(fn (Payment $pago): array => [
                 'id' => $pago->id,
                 'numero' => $pago->order->number,
-                'responsable' => $pago->order->responsible_name,
+                'responsable' => $pago->order->responsableNombreCompleto(),
                 'evento' => $pago->order->event?->name,
                 'monto' => $pago->amount,
                 'diferencia' => $pago->tieneDiferenciaDeMonto() ? $pago->diferencia() : null,
@@ -127,7 +128,7 @@ class ComprobanteController extends Controller
             'orden' => [
                 'id' => $orden->id,
                 'numero' => $orden->number,
-                'responsable' => $orden->responsible_name,
+                'responsable' => $orden->responsableNombreCompleto(),
                 'correo' => $orden->responsible_email,
                 'evento' => $orden->event?->name,
                 'entidad' => $orden->payerEntity?->name,

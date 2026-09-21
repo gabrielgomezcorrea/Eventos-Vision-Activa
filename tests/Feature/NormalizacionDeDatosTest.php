@@ -49,7 +49,7 @@ class NormalizacionDeDatosTest extends TestCase
     public function test_el_telefono_queda_en_un_solo_formato(): void
     {
         foreach (['+56 9 1234 5678', '56912345678', '912345678', '9 1234-5678', '09 1234 5678'] as $escrito) {
-            $this->assertSame('+56912345678', Texto::telefono($escrito), "falló con: {$escrito}");
+            $this->assertSame('56912345678', Texto::telefono($escrito), "falló con: {$escrito}");
         }
 
         $this->assertNull(Texto::telefono('222345678'), 'un fijo no es un móvil');
@@ -72,7 +72,7 @@ class NormalizacionDeDatosTest extends TestCase
         $this->assertSame('Juan Carlos', $solicitud->first_name);
         $this->assertSame('De la Cruz', $solicitud->last_name);
         $this->assertSame('juan@colegio.cl', $solicitud->email);
-        $this->assertSame('+56912345678', $solicitud->phone);
+        $this->assertSame('56912345678', $solicitud->phone);
         $this->assertSame('Liceo Bicentenario A-12', $solicitud->institution);
     }
 
@@ -82,7 +82,7 @@ class NormalizacionDeDatosTest extends TestCase
             'first_name' => 'Ana',
             'last_name' => 'Pérez',
             'email' => 'ana@colegio.cl',
-            'phone' => '+56912345678',
+            'phone' => '56912345678',
             'position' => 'Docente',
             'institution' => 'Liceo A-12',
         ];

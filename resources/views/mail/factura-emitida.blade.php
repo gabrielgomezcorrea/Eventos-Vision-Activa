@@ -1,4 +1,6 @@
 <x-mail::message>
+@include('mail._banner', ['evento' => $event])
+
 # {{ $factura->descripcion() }}
 
 Hola {{ $orden->responsible_name }},

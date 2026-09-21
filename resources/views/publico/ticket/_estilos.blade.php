@@ -53,10 +53,13 @@
 
     /* La credencial se imprime en blanco y negro y debe seguir siendo legible:
        el QR mantiene contraste total y los bordes de color pasan a negro. */
+    .btn-qr{display:inline-block;margin-top:10px;padding:7px 14px;font-size:.82rem;
+            background:#fff;color:#1F2937;border:1px solid #D0D5DD;border-radius:8px;cursor:pointer}
+
     @media print{
         body{background:#fff}
         .envoltura{padding:0;max-width:none}
-        .encabezado,.acciones{display:none}
+        .encabezado,.acciones,.btn-qr{display:none}
         .credencial{border-color:#000;margin-bottom:10mm}
         .credencial-cabecera{background:#fff;color:#000;border-bottom:1px solid #000;
                              -webkit-print-color-adjust:exact;print-color-adjust:exact}

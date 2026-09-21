@@ -1,9 +1,11 @@
-import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
-import { Search } from 'lucide-react';
+import { Head, Link, router, setLayoutProps, useForm } from '@inertiajs/react';
+import { Search, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
+import { Campo } from '@/components/campo';
 import { EstadoBadge } from '@/components/estado-badge';
+import { Panel } from '@/pages/inscripciones/show';
 import { NativeSelect } from '@/components/native-select';
 import { Paginacion } from '@/components/paginacion';
 import { Button } from '@/components/ui/button';
@@ -48,6 +50,10 @@ type Props = {
     eventos: Record<string, string>;
     estados: Record<string, string>;
     pagos: Record<string, string>;
+    invitados: {
+        cargos: Record<string, string[]>;
+        accesos: Record<string, Record<string, string>>;
+    } | null;
 };
 
 const clp = (valor: number): string => `$${valor.toLocaleString('es-CL')}`;
@@ -58,12 +64,225 @@ export const tonoVencimiento: Record<string, string> = {
     danger: 'text-red-700 dark:text-red-400',
 };
 
+/** Invitado sin costo: ocupa cupo y recibe su credencial al guardar. */
+function NuevoInvitado({
+    opciones,
+    nombresDeEvento,
+}: {
+    opciones: NonNullable<Props['invitados']>;
+    nombresDeEvento: Record<string, string>;
+}) {
+    const [abierto, setAbierto] = useState(false);
+    const eventos = Object.keys(opciones.accesos);
+    const form = useForm({
+        event_id: eventos[0] ?? '',
+        first_name: '',
+        last_name: '',
+        rut: '',
+        email: '',
+        phone: '',
+        position: '',
+        position_otro: '',
+        establecimiento: '',
+        access_type_id: '',
+    });
+    const accesos = opciones.accesos[form.data.event_id] ?? {};
+    // Cada evento decide qué cargos acepta para quien asiste.
+    const cargos = opciones.cargos[form.data.event_id] ?? [];
+
+    function guardar(e: FormEvent) {
+        e.preventDefault();
+        form.post(InscripcionController.registrarInvitado.url(), {
+            onSuccess: () => setAbierto(false),
+        });
+    }
+
+    return (
+        <Panel
+            titulo="Invitado especial"
+            descripcion="Entra sin pagar, ocupa un cupo y recibe su credencial por correo."
+            trigger={
+                <Button variant="outline">
+                    <UserPlus />
+                    Invitado especial
+                </Button>
+            }
+            abierto={abierto}
+            onOpenChange={(valor) => {
+                setAbierto(valor);
+
+                if (valor) {
+                    form.reset();
+                    form.clearErrors();
+                }
+            }}
+            onSubmit={guardar}
+            procesando={form.processing}
+            textoEnviar="Registrar invitado"
+        >
+            <Campo
+                label="Evento"
+                htmlFor="i-event"
+                error={form.errors.event_id}
+            >
+                <NativeSelect
+                    id="i-event"
+                    value={form.data.event_id}
+                    onChange={(e) => {
+                        form.setData('event_id', e.target.value);
+                        form.setData('access_type_id', '');
+                    }}
+                >
+                    {eventos.map((id) => (
+                        <option key={id} value={id}>
+                            {nombresDeEvento[id] ?? id}
+                        </option>
+                    ))}
+                </NativeSelect>
+            </Campo>
+            <div className="grid gap-5 sm:grid-cols-2">
+                <Campo
+                    label="Nombre"
+                    htmlFor="i-first"
+                    error={form.errors.first_name}
+                >
+                    <Input
+                        id="i-first"
+                        required
+                        value={form.data.first_name}
+                        onChange={(e) =>
+                            form.setData('first_name', e.target.value)
+                        }
+                    />
+                </Campo>
+                <Campo
+                    label="Apellidos"
+                    htmlFor="i-last"
+                    error={form.errors.last_name}
+                >
+                    <Input
+                        id="i-last"
+                        required
+                        value={form.data.last_name}
+                        onChange={(e) =>
+                            form.setData('last_name', e.target.value)
+                        }
+                    />
+                </Campo>
+                <Campo label="RUT" htmlFor="i-rut" error={form.errors.rut}>
+                    <Input
+                        id="i-rut"
+                        required
+                        placeholder="12.345.678-9"
+                        value={form.data.rut}
+                        onChange={(e) => form.setData('rut', e.target.value)}
+                    />
+                </Campo>
+                <Campo
+                    label="Correo"
+                    htmlFor="i-email"
+                    error={form.errors.email}
+                >
+                    <Input
+                        id="i-email"
+                        type="email"
+                        required
+                        value={form.data.email}
+                        onChange={(e) => form.setData('email', e.target.value)}
+                    />
+                </Campo>
+                <Campo
+                    label="Teléfono (opcional)"
+                    htmlFor="i-phone"
+                    error={form.errors.phone}
+                >
+                    <Input
+                        id="i-phone"
+                        placeholder="56912345678"
+                        value={form.data.phone}
+                        onChange={(e) => form.setData('phone', e.target.value)}
+                    />
+                </Campo>
+                <Campo
+                    label="Cargo"
+                    htmlFor="i-position"
+                    error={form.errors.position}
+                >
+                    <NativeSelect
+                        id="i-position"
+                        value={form.data.position}
+                        onChange={(e) =>
+                            form.setData('position', e.target.value)
+                        }
+                    >
+                        <option value="">Selecciona</option>
+                        {cargos.map((cargo) => (
+                            <option key={cargo} value={cargo}>
+                                {cargo}
+                            </option>
+                        ))}
+                    </NativeSelect>
+                </Campo>
+                {form.data.position === 'Otro' && (
+                    <Campo
+                        label="¿Cuál es su cargo?"
+                        htmlFor="i-position-otro"
+                        error={form.errors.position_otro}
+                    >
+                        <Input
+                            id="i-position-otro"
+                            value={form.data.position_otro}
+                            onChange={(e) =>
+                                form.setData('position_otro', e.target.value)
+                            }
+                        />
+                    </Campo>
+                )}
+                <Campo
+                    label="Establecimiento o institución (opcional)"
+                    htmlFor="i-establecimiento"
+                    error={form.errors.establecimiento}
+                >
+                    <Input
+                        id="i-establecimiento"
+                        value={form.data.establecimiento}
+                        onChange={(e) =>
+                            form.setData('establecimiento', e.target.value)
+                        }
+                    />
+                </Campo>
+                <Campo
+                    label="Tipo de acceso"
+                    htmlFor="i-acceso"
+                    error={form.errors.access_type_id}
+                >
+                    <NativeSelect
+                        id="i-acceso"
+                        value={form.data.access_type_id}
+                        onChange={(e) =>
+                            form.setData('access_type_id', e.target.value)
+                        }
+                    >
+                        <option value="">Selecciona</option>
+                        {Object.entries(accesos).map(([id, nombre]) => (
+                            <option key={id} value={id}>
+                                {nombre}
+                            </option>
+                        ))}
+                    </NativeSelect>
+                </Campo>
+            </div>
+        </Panel>
+    );
+}
+
 export default function InscripcionesIndex({
     ordenes,
     filtros,
     eventos,
     estados,
     pagos,
+    invitados,
 }: Props) {
     const [buscar, setBuscar] = useState(filtros.buscar ?? '');
 
@@ -98,9 +317,17 @@ export default function InscripcionesIndex({
         <>
             <Head title="Inscripciones" />
             <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-                <h1 className="text-xl font-semibold tracking-tight">
-                    Inscripciones
-                </h1>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h1 className="text-xl font-semibold tracking-tight">
+                        Inscripciones
+                    </h1>
+                    {invitados && (
+                        <NuevoInvitado
+                            opciones={invitados}
+                            nombresDeEvento={eventos}
+                        />
+                    )}
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                     <form

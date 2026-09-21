@@ -1,27 +1,16 @@
 {{--
     Pie de ayuda, igual en todos los correos.
 
-    La persona que recibe esto no sabe a quién escribirle si algo se atasca, y
-    dejarla sin salida termina en una llamada a la oficina o en un abandono.
-
-    El contacto es uno solo para todo el sistema y lo define Administración en
-    Mi perfil; un evento puede tener el suyo propio y entonces manda ese, porque
-    hay seminarios que los atiende otra persona.
+    Los correos salen de una casilla que nadie lee: por eso dicen que no se
+    respondan y siempre traen a quién escribir. El contacto es de cada evento y
+    se configura en su formulario público.
 --}}
-@php
-    $correoContacto = $evento->contact_email ?: \App\Models\Setting::valor(\App\Models\Setting::CONTACTO_CORREO);
-    $telefonoContacto = $evento->contact_phone ?: \App\Models\Setting::valor(\App\Models\Setting::CONTACTO_TELEFONO);
-@endphp
-@if ($correoContacto || $telefonoContacto)
 ---
 
-**¿Tienes dudas?** Contáctanos a:
-@if ($correoContacto)
-- Correo: {{ $correoContacto }}
-@endif
-@if ($telefonoContacto)
-- Teléfono: {{ $telefonoContacto }}
-@endif
+@if ($evento->contact_email || $evento->contact_phone || $evento->contact_whatsapp)
+**¿Tienes dudas?** Contáctanos:
 
-Te respondemos a la brevedad.
+@include('mail._datos_contacto', ['evento' => $evento])
+
 @endif
+<small>Este correo se envía automáticamente: por favor no lo respondas. Escríbenos a los datos de contacto.</small>

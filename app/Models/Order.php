@@ -73,6 +73,18 @@ class Order extends Model
         return $this->belongsTo(Event::class);
     }
 
+    /**
+     * Conjunto al que pertenece, si el responsable inscribió más de un
+     * colegio en el mismo recorrido. Nulo en toda orden creada antes de esta
+     * fase: no se migran.
+     *
+     * @return BelongsTo<OrderGroup, $this>
+     */
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(OrderGroup::class, 'group_id');
+    }
+
     /** @return BelongsTo<PayerEntity, $this> */
     public function payerEntity(): BelongsTo
     {
@@ -141,17 +153,35 @@ class Order extends Model
         return $this->payments()->first();
     }
 
-    /** El cliente puede declarar un pago solo mientras la reserva está viva. */
+    /**
+     * Abonos aprobados. Los colegios pagan en partes, con semanas de por medio,
+     * así que lo pagado es la suma y no el último comprobante.
+     */
+    public function pagado(): int
+    {
+        return (int) $this->payments()->where('status', PaymentStatus::Aprobado)->sum('amount');
+    }
+
+    public function saldo(): int
+    {
+        return max(0, $this->total - $this->pagado());
+    }
+
+    public function tieneAbonoEnRevision(): bool
+    {
+        return $this->payments()->where('status', PaymentStatus::EnValidacion)->exists();
+    }
+
+    /**
+     * El cliente declara un abono mientras la reserva esté viva, quede saldo y
+     * no haya otro esperando revisión: dos comprobantes sin revisar dejan a
+     * Contabilidad adivinando cuál corresponde a qué.
+     */
     public function admiteComprobante(): bool
     {
-        if ($this->status !== OrderStatus::Reservada) {
-            return false;
-        }
-
-        return ! in_array($this->payment_status, [
-            PaymentStatus::EnValidacion,
-            PaymentStatus::Aprobado,
-        ], true);
+        return $this->status === OrderStatus::Reservada
+            && $this->saldo() > 0
+            && ! $this->tieneAbonoEnRevision();
     }
 
     public function esBorrador(): bool
@@ -208,6 +238,23 @@ class Order extends Model
     }
 
     /**
+     * Participantes que cuentan para el tramo de descuento al confirmar: los
+     * propios, o los de todo el conjunto si el evento cuenta el descuento por
+     * compra grande. El tramo elegido se aplica igual al subtotal de esta
+     * orden: ninguna orden guarda un descuento calculado sobre plata ajena.
+     */
+    public function participantesParaDescuento(): int
+    {
+        if (! $this->event->cuentaDescuentoPorConjunto() || $this->group_id === null) {
+            return $this->participantesVigentes->count();
+        }
+
+        return (int) $this->group->orders->sum(
+            fn (self $orden): int => $orden->is($this) ? $this->participantesVigentes->count() : $orden->participantesVigentes->count()
+        );
+    }
+
+    /**
      * Cupos que la orden consume por jornada: [event_session_id => cantidad].
      *
      * @return array<int, int>
@@ -232,10 +279,21 @@ class Order extends Model
             return false;
         }
 
-        if ($this->payment_status->congelaElVencimiento()) {
+        // Un abono aprobado o en revisión mantiene viva la reserva: el cliente
+        // ya puso plata o ya cumplió su parte.
+        if ($this->payment_status->congelaElVencimiento() || $this->pagado() > 0 || $this->tieneAbonoEnRevision()) {
             return false;
         }
 
         return $this->reserved_until->isPast();
+    }
+
+    /**
+     * Nombre y apellidos del responsable, para mostrar. Las órdenes creadas
+     * antes de separar el campo no tienen apellidos: se ve solo el nombre.
+     */
+    public function responsableNombreCompleto(): string
+    {
+        return trim($this->responsible_name.' '.($this->responsible_lastname ?? ''));
     }
 }

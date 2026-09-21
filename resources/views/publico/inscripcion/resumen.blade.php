@@ -12,7 +12,7 @@
         <p class="sub">Contacto operativo de la inscripción.</p>
         <table>
             <tbody>
-                <tr><td style="width:38%;color:var(--texto-suave)">Nombre</td><td>{{ $orden->responsible_name ?: '—' }}</td></tr>
+                <tr><td style="width:38%;color:var(--texto-suave)">Nombre completo</td><td>{{ $orden->responsableNombreCompleto() ?: '—' }}</td></tr>
                 <tr><td style="color:var(--texto-suave)">Cargo</td><td>{{ $orden->responsible_position ?: '—' }}</td></tr>
                 <tr><td style="color:var(--texto-suave)">Correo</td><td>{{ $orden->responsible_email }}</td></tr>
                 <tr><td style="color:var(--texto-suave)">Teléfono</td><td>{{ $orden->responsible_phone ?: '—' }}</td></tr>
@@ -41,16 +41,28 @@
     @if ($orden->establishments->isNotEmpty())
         <div class="tarjeta">
             <h2>Establecimientos</h2>
+            @if ($orden->establishments->count() > 1)
+                <p class="sub">Cada colegio queda como su propia inscripción, con su propio pago y su propia factura.</p>
+            @endif
             <table>
-                <thead><tr><th>Establecimiento</th><th>RBD</th><th style="text-align:right">Participantes</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Establecimiento</th><th>RBD</th>
+                        <th style="text-align:right">Participantes</th>
+                        <th style="text-align:right">Subtotal</th>
+                    </tr>
+                </thead>
                 <tbody>
                     @foreach ($orden->establishments as $establecimiento)
+                        @php
+                            $participantesDelColegio = $orden->participants->where('establishment_id', $establecimiento->id);
+                            $subtotalDelColegio = $participantesDelColegio->sum(fn ($p) => $p->accessType?->precioVigente() ?? 0);
+                        @endphp
                         <tr>
                             <td>{{ $establecimiento->name }}</td>
                             <td>{{ $establecimiento->rbd ?: '—' }}</td>
-                            <td style="text-align:right">
-                                {{ $orden->participants->where('establishment_id', $establecimiento->id)->count() }}
-                            </td>
+                            <td style="text-align:right">{{ $participantesDelColegio->count() }}</td>
+                            <td style="text-align:right">${{ number_format($subtotalDelColegio, 0, ',', '.') }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -116,12 +128,15 @@
     </div>
 
     @if ($errorDeConfirmacion ?? null)
-        <div class="aviso aviso-error">{{ $errorDeConfirmacion }}</div>
+        <div class="aviso aviso-error">
+            {{ $errorDeConfirmacion }}
+            @include('publico._contacto', ['evento' => $event])
+        </div>
     @endif
 
     <form method="POST" action="{{ route('inscripcion.confirmar', ['token' => $token]) }}">
         <div class="acciones">
-            <a href="{{ route('inscripcion.participantes', ['token' => $token]) }}" class="btn btn-secundario">Volver a participantes</a>
+            <a href="{{ route('inscripcion.pagador', ['token' => $token]) }}" class="btn btn-secundario">Volver a facturación</a>
             <button type="submit" class="btn btn-primario"
                 data-enviando-texto="Confirmando…">Confirmar inscripción y recibir instrucciones de pago</button>
         </div>

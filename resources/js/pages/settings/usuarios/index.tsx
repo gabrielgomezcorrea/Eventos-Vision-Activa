@@ -99,7 +99,7 @@ function NuevoUsuario({
                     </DialogHeader>
                     <div className="grid gap-5 sm:grid-cols-2">
                         <Campo
-                            label="Nombre"
+                            label="Nombre completo"
                             htmlFor="u-name"
                             error={form.errors.name}
                         >

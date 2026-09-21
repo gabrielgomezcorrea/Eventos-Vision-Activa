@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Actions\ConfirmarOrden;
 use App\Enums\EventStatus;
+use App\Enums\ModoConteoDescuento;
 use App\Models\AccessType;
 use App\Models\Event;
 use App\Models\Order;
+use App\Models\OrderGroup;
 use App\Models\PayerEntity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -116,10 +118,73 @@ class DescuentoPorCantidadTest extends TestCase
         $this->assertSame(200000, $orden->discount_amount);
     }
 
+    public function test_por_colegio_cada_orden_del_conjunto_cuenta_sus_propios_participantes(): void
+    {
+        // Modo por defecto: no hace falta configurarlo.
+        [$sanJose, $losRobles] = $this->confirmarConjunto(5, 5);
+
+        // Cada una ve solo sus 5: bajo el tramo de 10, alcanza el de 5.
+        $this->assertSame('10% por 5 o más participantes', $sanJose->discount_label);
+        $this->assertSame('10% por 5 o más participantes', $losRobles->discount_label);
+    }
+
+    public function test_por_conjunto_las_ordenes_suman_los_participantes_de_todo_el_grupo(): void
+    {
+        $this->evento->forceFill(['discount_counting_mode' => ModoConteoDescuento::PorConjunto])->save();
+
+        [$sanJose, $losRobles] = $this->confirmarConjunto(5, 5);
+
+        // Juntas suman 10: las dos alcanzan el tramo de 10, aunque cada una
+        // tenga solo 5 participantes y su descuento se aplique a su propio subtotal.
+        $this->assertSame('$200.000 por 10 o más participantes', $sanJose->discount_label);
+        $this->assertSame('$200.000 por 10 o más participantes', $losRobles->discount_label);
+        $this->assertSame(500000, $sanJose->subtotal, 'El descuento se aplica al subtotal propio, no al del conjunto.');
+        $this->assertSame(500000, $losRobles->subtotal);
+    }
+
+    /** @return array{0: Order, 1: Order} */
+    private function confirmarConjunto(int $participantesColegio1, int $participantesColegio2): array
+    {
+        $grupo = OrderGroup::create([
+            'event_id' => $this->evento->id,
+            'responsible_email' => 'ana@colegio.cl',
+        ]);
+
+        $sanJose = $this->crearBorrador($grupo, $participantesColegio1);
+        $losRobles = $this->crearBorrador($grupo, $participantesColegio2);
+
+        return [
+            app(ConfirmarOrden::class)($sanJose->fresh()),
+            app(ConfirmarOrden::class)($losRobles->fresh()),
+        ];
+    }
+
+    private function crearBorrador(OrderGroup $grupo, int $participantes): Order
+    {
+        $orden = $this->evento->orders()->create([
+            'group_id' => $grupo->id,
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
+            'responsible_email' => 'ana@colegio.cl',
+            'payer_entity_id' => PayerEntity::create(['name' => 'Sostenedor Los Andes'])->id,
+        ]);
+
+        for ($i = 1; $i <= $participantes; $i++) {
+            $orden->participants()->create([
+                'first_name' => 'Participante',
+                'last_name' => (string) $i,
+                'access_type_id' => $this->acceso->id,
+            ]);
+        }
+
+        return $orden;
+    }
+
     private function confirmar(int $participantes): Order
     {
         $orden = $this->evento->orders()->create([
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_email' => 'ana@colegio.cl',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,
         ]);

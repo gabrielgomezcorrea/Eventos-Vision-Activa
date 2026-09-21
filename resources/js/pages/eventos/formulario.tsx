@@ -61,19 +61,28 @@ type Props = {
         id: number;
         name: string;
         admite_inscripciones: boolean;
-        consent_text: string | null;
+        consentimiento: string;
+        contacto: Contacto;
         program_email_intro: string | null;
         adjuntos: { id: number; nombre: string; peso: string }[];
         max_adjuntos: number;
         max_mb: number;
+        participant_positions: string[];
     };
     campos: Pregunta[];
     tipos: Record<string, string>;
+    cargosParticipante: string[];
     embeber: { enlace: string; iframe: string; origenes: string | null };
 };
 
-const CONSENTIMIENTO_POR_DEFECTO =
-    'Autorizo el envío del programa y comunicaciones vinculadas a esta solicitud.';
+type Contacto = {
+    contact_name: string | null;
+    contact_role: string | null;
+    contact_organization: string | null;
+    contact_email: string | null;
+    contact_phone: string | null;
+    contact_whatsapp: string | null;
+};
 
 function copiar(texto: string) {
     void navigator.clipboard.writeText(texto);
@@ -191,7 +200,7 @@ function VistaPrevia({
             ))}
             <label className="flex items-start gap-2 text-sm">
                 <Checkbox disabled className="mt-0.5" />
-                {consentimiento || CONSENTIMIENTO_POR_DEFECTO}
+                {consentimiento}
             </label>
             <Button disabled className="w-full">
                 Enviar
@@ -341,7 +350,7 @@ function PonerEnLaWeb({ embeber }: { embeber: Props['embeber'] }) {
                         <p className="rounded-md bg-amber-50 p-3 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
                             Todavía no hay sitios autorizados a incrustar: por
                             ahora solo funciona el enlace directo. Se configuran
-                            en <code>EMBED_ALLOWED_ORIGINS</code> del servidor.
+                            en Configuración → Websites.
                         </p>
                     )}
                 </div>
@@ -386,6 +395,12 @@ function Adjuntos({
             return;
         }
 
+        if (!archivo.name.toLowerCase().endsWith('.pdf')) {
+            setErrorLocal('El programa debe ser un PDF.');
+
+            return;
+        }
+
         if (archivo.size > maxMb * 1024 * 1024) {
             setErrorLocal(`«${archivo.name}» pesa más de ${maxMb} MB.`);
 
@@ -413,10 +428,6 @@ function Adjuntos({
     return (
         <div className="grid gap-2">
             <Label htmlFor="programa">Adjuntos</Label>
-            <p className="text-muted-foreground -mt-1 text-xs">
-                Viajan en el correo con el programa. Hasta {maximo} archivos,
-                PDF o Word, de {maxMb} MB cada uno.
-            </p>
 
             {adjuntos.length > 0 && (
                 <ul className="divide-y rounded-lg border">
@@ -462,15 +473,15 @@ function Adjuntos({
 
             {lleno ? (
                 <p className="text-muted-foreground text-xs">
-                    Llegaste al máximo de {maximo} archivos. Quita uno para
-                    poder subir otro.
+                    No se pueden subir más archivos. Quita uno para poder subir
+                    otro.
                 </p>
             ) : (
                 <Input
                     ref={entrada}
                     id="programa"
                     type="file"
-                    accept=".pdf,.doc,.docx"
+                    accept=".pdf,application/pdf"
                     disabled={subiendo}
                     onChange={(e) => subir(e.target.files?.[0])}
                 />
@@ -488,6 +499,7 @@ export default function FormularioPublico({
     evento,
     campos,
     tipos,
+    cargosParticipante,
     embeber,
 }: Props) {
     setLayoutProps({
@@ -500,8 +512,14 @@ export default function FormularioPublico({
 
     const form = useForm({
         campos,
-        consent_text: evento.consent_text ?? '',
+        contact_name: evento.contacto.contact_name ?? '',
+        contact_role: evento.contacto.contact_role ?? '',
+        contact_organization: evento.contacto.contact_organization ?? '',
+        contact_email: evento.contacto.contact_email ?? '',
+        contact_phone: evento.contacto.contact_phone ?? '',
+        contact_whatsapp: evento.contacto.contact_whatsapp ?? '',
         program_email_intro: evento.program_email_intro ?? '',
+        participant_positions: evento.participant_positions,
     });
     const errores = form.errors as Record<string, string | undefined>;
     const preguntas = form.data.campos;
@@ -816,25 +834,172 @@ export default function FormularioPublico({
                             Agregar una pregunta
                         </Button>
 
-                        <SeccionFicha titulo="Qué pasa cuando envían el formulario">
-                            <div className="space-y-5">
+                        <SeccionFicha titulo="Contacto para consultas">
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <Campo
-                                    label="Texto de la casilla de autorización"
-                                    htmlFor="consent_text"
-                                    error={form.errors.consent_text}
+                                    label="Nombre completo"
+                                    htmlFor="contact_name"
+                                    error={form.errors.contact_name}
                                 >
-                                    <Textarea
-                                        id="consent_text"
-                                        rows={2}
-                                        value={form.data.consent_text}
+                                    <Input
+                                        id="contact_name"
+                                        type="text"
+                                        placeholder="Nombre y apellidos"
+                                        value={form.data.contact_name}
                                         onChange={(e) =>
                                             form.setData(
-                                                'consent_text',
+                                                'contact_name',
                                                 e.target.value,
                                             )
                                         }
                                     />
                                 </Campo>
+                                <Campo
+                                    label="Cargo"
+                                    htmlFor="contact_role"
+                                    error={form.errors.contact_role}
+                                >
+                                    <Input
+                                        id="contact_role"
+                                        type="text"
+                                        placeholder="Cargo"
+                                        value={form.data.contact_role}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'contact_role',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </Campo>
+                                <Campo
+                                    label="Empresa o institución (opcional)"
+                                    htmlFor="contact_organization"
+                                    error={form.errors.contact_organization}
+                                >
+                                    <Input
+                                        id="contact_organization"
+                                        type="text"
+                                        placeholder="Empresa o institución"
+                                        value={form.data.contact_organization}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'contact_organization',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </Campo>
+                                <Campo
+                                    label="Correo"
+                                    htmlFor="contact_email"
+                                    error={form.errors.contact_email}
+                                >
+                                    <Input
+                                        id="contact_email"
+                                        type="email"
+                                        placeholder="contacto@visionactiva.cl"
+                                        value={form.data.contact_email}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'contact_email',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </Campo>
+                                <Campo
+                                    label="Teléfono"
+                                    htmlFor="contact_phone"
+                                    error={form.errors.contact_phone}
+                                >
+                                    <Input
+                                        id="contact_phone"
+                                        type="tel"
+                                        placeholder="56912345678"
+                                        value={form.data.contact_phone}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'contact_phone',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </Campo>
+                                <Campo
+                                    label="WhatsApp (opcional)"
+                                    htmlFor="contact_whatsapp"
+                                    error={form.errors.contact_whatsapp}
+                                >
+                                    <Input
+                                        id="contact_whatsapp"
+                                        type="tel"
+                                        placeholder="56912345678"
+                                        value={form.data.contact_whatsapp}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'contact_whatsapp',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </Campo>
+                            </div>
+                        </SeccionFicha>
+
+                        <SeccionFicha titulo="Cargos de quien asiste">
+                            <p className="text-muted-foreground mb-3 text-sm">
+                                Es la lista que ve quien inscribe a sus
+                                participantes. Vienen todos marcados: desmarca
+                                los que este evento no recibe.
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                {cargosParticipante
+                                    .filter((cargo) => cargo !== 'Otro')
+                                    .map((cargo) => {
+                                        const marcado =
+                                            form.data.participant_positions.includes(
+                                                cargo,
+                                            );
+
+                                        return (
+                                            <label
+                                                key={cargo}
+                                                className="flex items-center gap-2 text-sm"
+                                            >
+                                                <Checkbox
+                                                    checked={marcado}
+                                                    onCheckedChange={(valor) =>
+                                                        form.setData(
+                                                            'participant_positions',
+                                                            valor
+                                                                ? [
+                                                                      ...form
+                                                                          .data
+                                                                          .participant_positions,
+                                                                      cargo,
+                                                                  ]
+                                                                : form.data.participant_positions.filter(
+                                                                      (c) =>
+                                                                          c !==
+                                                                          cargo,
+                                                                  ),
+                                                        )
+                                                    }
+                                                />
+                                                {cargo}
+                                            </label>
+                                        );
+                                    })}
+                            </div>
+                            <p className="text-muted-foreground mt-3 text-xs">
+                                «Otro» siempre queda disponible: sin él, alguien
+                                con un cargo distinto no puede inscribirse.
+                            </p>
+                        </SeccionFicha>
+
+                        <SeccionFicha titulo="Programa">
+                            <div className="space-y-5">
                                 <Adjuntos
                                     eventoId={evento.id}
                                     adjuntos={evento.adjuntos}
@@ -879,7 +1044,7 @@ export default function FormularioPublico({
                     <div className="lg:sticky lg:top-4">
                         <VistaPrevia
                             campos={preguntas}
-                            consentimiento={form.data.consent_text}
+                            consentimiento={evento.consentimiento}
                         />
                     </div>
                 </div>

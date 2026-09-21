@@ -98,9 +98,9 @@ class ChileProvider extends Base
         return static::randomElement(self::CARGOS);
     }
 
-    /** Celular chileno en formato +569XXXXXXXX. */
+    /** Celular chileno en formato 569XXXXXXXX. */
     public function telefonoChileno(): string
     {
-        return '+569'.$this->generator->numerify('########');
+        return '569'.$this->generator->numerify('########');
     }
 }

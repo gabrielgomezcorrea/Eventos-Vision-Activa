@@ -31,7 +31,7 @@ class ConfirmarOrden
      * @throws OrdenNoConfirmable
      * @throws CuposInsuficientes
      */
-    public function __invoke(Order $orden, ?string $actorLabel = null): Order
+    public function __invoke(Order $orden, ?string $actorLabel = null, bool $enviarCorreo = true): Order
     {
         $this->verificar($orden);
 
@@ -77,8 +77,13 @@ class ConfirmarOrden
             );
 
             // El descuento se congela junto con el precio: si después
-            // reemplazan a alguien, el monto no se mueve.
-            $tramo = $fresca->event->tramoDeDescuento($fresca->participantesVigentes->count());
+            // reemplazan a alguien, el monto no se mueve. El conteo depende
+            // de cómo el evento decidió contar un conjunto de varios colegios.
+            if ($fresca->event->cuentaDescuentoPorConjunto() && $fresca->group_id !== null) {
+                $fresca->load('group.orders.participantesVigentes');
+            }
+
+            $tramo = $fresca->event->tramoDeDescuento($fresca->participantesParaDescuento());
             $descuento = $tramo?->calcular($subtotal) ?? 0;
 
             $fresca->forceFill([
@@ -111,7 +116,11 @@ class ConfirmarOrden
             actorLabel: $actorLabel,
         );
 
-        Mail::to($orden->responsible_email)->queue(new OrdenConfirmada($orden));
+        // Un conjunto de varios colegios manda un solo correo con todos
+        // adentro (App\Actions\ConfirmarConjunto), no uno por colegio.
+        if ($enviarCorreo) {
+            Mail::to($orden->responsible_email)->queue(new OrdenConfirmada($orden));
+        }
 
         return $orden;
     }
@@ -127,7 +136,7 @@ class ConfirmarOrden
             throw OrdenNoConfirmable::porque('Este evento ya no admite inscripciones.');
         }
 
-        if (blank($orden->responsible_name)) {
+        if (blank($orden->responsible_name) || blank($orden->responsible_lastname)) {
             throw OrdenNoConfirmable::porque('Falta registrar al responsable de la inscripción.');
         }
 

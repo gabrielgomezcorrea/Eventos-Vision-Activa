@@ -27,39 +27,19 @@
                     </div>
                 </div>
 
-                <div>
-                    <label for="responsible_name">Nombre completo</label>
-                    <input type="text" id="responsible_name" name="responsible_name" autocomplete="name"
-                           value="{{ $valores['responsible_name'] ?? '' }}"
-                           @if ($errores->has('responsible_name')) aria-invalid="true" @endif>
-                    @if ($errores->has('responsible_name'))
-                        <div class="error-campo">{{ $errores->first('responsible_name') }}</div>
-                    @endif
-                </div>
+                @include('publico.inscripcion._campo', ['campo' => 'responsible_name', 'etiqueta' => 'Nombre', 'autocomplete' => 'given-name'])
+                @include('publico.inscripcion._campo', ['campo' => 'responsible_lastname', 'etiqueta' => 'Apellidos', 'autocomplete' => 'family-name'])
 
-                @include('publico.inscripcion._cargo', ['campo' => 'responsible_position', 'opcional' => true])
+                @include('publico.inscripcion._cargo', ['campo' => 'responsible_position'])
 
                 <div>
-                    <label for="responsible_email">Correo electrónico</label>
+                    <label for="responsible_email">Correo del responsable de compra</label>
                     <input type="email" id="responsible_email" value="{{ $orden->responsible_email }}" disabled>
                     <div class="ayuda">Es el correo con el que accedes a esta inscripción.</div>
                 </div>
 
-                <div>
-                    <label for="responsible_phone">Teléfono <span class="opcional">(opcional)</span></label>
-                    <input type="tel" id="responsible_phone" name="responsible_phone" autocomplete="tel"
-                           value="{{ $valores['responsible_phone'] ?? '' }}">
-                </div>
-
-                <div class="ancho">
-                    <label for="responsible_institution">Institución a la que perteneces <span class="opcional">(opcional)</span></label>
-                    <input type="text" id="responsible_institution" name="responsible_institution" autocomplete="organization"
-                           value="{{ $valores['responsible_institution'] ?? '' }}"
-                           @if ($errores->has('responsible_institution')) aria-invalid="true" @endif>
-                    @if ($errores->has('responsible_institution'))
-                        <div class="error-campo">{{ $errores->first('responsible_institution') }}</div>
-                    @endif
-                </div>
+                @include('publico.inscripcion._campo', ['campo' => 'responsible_phone', 'etiqueta' => 'Teléfono', 'tipoCampo' => 'tel', 'placeholder' => '56912345678', 'autocomplete' => 'tel'])
+                @include('publico.inscripcion._campo', ['campo' => 'responsible_institution', 'etiqueta' => 'Institución a la que perteneces', 'autocomplete' => 'organization', 'ancho' => true, 'opcional' => ($valores['kind'] ?? '') === \App\Enums\OrderKind::Particular->value])
             </div>
 
             <div class="acciones">

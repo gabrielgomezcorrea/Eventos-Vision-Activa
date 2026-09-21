@@ -172,15 +172,24 @@ class ReemplazoDeParticipanteTest extends TestCase
         $this->reemplazar();
     }
 
-    public function test_respeta_la_fecha_limite_de_reemplazos(): void
+    public function test_el_plazo_cierra_a_las_23_59_del_dia_anterior_al_evento(): void
     {
-        $this->event->update(['replacement_deadline' => now()->subDay()]);
+        $this->event->update(['starts_on' => now()->addDays(2)->toDateString()]);
+        $this->assertSame(
+            now()->addDay()->endOfDay()->format('Y-m-d H:i'),
+            $this->event->fresh()->limiteDeReemplazos()->format('Y-m-d H:i'),
+        );
+
+        // The day before, right after the deadline, it is closed.
+        $this->event->update(['starts_on' => now()->addDay()->toDateString()]);
+        $this->travelTo(now()->endOfDay()->addSecond());
 
         try {
             $this->reemplazar();
             $this->fail('Debio negarse.');
         } catch (ReemplazoNoPermitido $e) {
             $this->assertStringContainsString('plazo para reemplazar', $e->getMessage());
+            $this->assertStringContainsString('23:59', $e->getMessage());
         }
     }
 

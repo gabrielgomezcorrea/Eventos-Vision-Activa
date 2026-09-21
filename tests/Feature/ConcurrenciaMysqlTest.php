@@ -73,6 +73,7 @@ class ConcurrenciaMysqlTest extends TestCase
             $orden = Order::create([
                 'event_id' => $event->id,
                 'responsible_name' => 'Cliente '.$i,
+                'responsible_lastname' => 'Apellido '.$i,
                 'responsible_email' => "cliente{$i}@colegio.cl",
                 'payer_entity_id' => PayerEntity::create(['name' => 'Entidad '.$i])->id,
             ]);

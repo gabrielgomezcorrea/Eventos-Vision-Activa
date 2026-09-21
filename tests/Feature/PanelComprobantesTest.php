@@ -45,7 +45,8 @@ class PanelComprobantesTest extends TestCase
 
         $orden = Order::create([
             'event_id' => $evento->id,
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_email' => 'ana@colegio.cl',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,
         ]);

@@ -1,4 +1,6 @@
 <x-mail::message>
+@include('mail._banner', ['evento' => $event])
+
 # Reserva vencida
 
 Hola {{ $orden->responsible_name }},
@@ -14,8 +16,11 @@ cupos quedaron liberados.
 **Participantes que quedaron sin cupo:** {{ $orden->participantesVigentes->count() }}
 </x-mail::panel>
 
-Si aún deseas participar, escríbenos y revisamos la disponibilidad. También puedes iniciar una
-inscripción nueva desde [la página del evento]({{ route('inscripcion.inicio', $event) }}).
+Si aún deseas participar, contáctanos y revisamos la disponibilidad:
+
+@include('mail._datos_contacto', ['evento' => $event])
+
+También puedes iniciar una inscripción nueva desde [la página del evento]({{ route('inscripcion.inicio', $event) }}).
 
 <x-mail::button :url="$urlEstado">
 Ver mi inscripción

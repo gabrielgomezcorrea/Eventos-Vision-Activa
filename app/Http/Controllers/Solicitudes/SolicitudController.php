@@ -55,6 +55,7 @@ class SolicitudController extends Controller
                 'persona' => $solicitud->nombre_completo,
                 'cargo' => $solicitud->position,
                 'correo' => $solicitud->email,
+                'telefono' => $solicitud->phone,
                 'institucion' => $solicitud->institution,
                 'evento' => $solicitud->event?->name,
                 'estado' => self::estado($solicitud),
@@ -70,7 +71,7 @@ class SolicitudController extends Controller
             ],
             'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
             'exportacion' => $request->user()->can(Permiso::ExportarContactos->value) ? [
-                'cargos' => ProgramFormField::CARGOS,
+                'cargos' => ProgramFormField::todosLosCargos(),
                 'tipos' => ExportarContactos::TIPOS,
                 'pagos' => collect(PaymentStatus::cases())->mapWithKeys(fn (PaymentStatus $e): array => [$e->value => $e->label()]),
             ] : null,

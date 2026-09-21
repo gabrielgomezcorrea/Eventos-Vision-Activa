@@ -132,44 +132,50 @@ class FlujoDeInscripcionTest extends TestCase
 
         // 1. Responsable
         $this->post(route('inscripcion.responsable.guardar', ['token' => $token]), [
-            'responsible_name' => 'Ana Pérez',
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
             'responsible_position' => 'Otro',
             'responsible_position_otro' => 'Directora',
-            'responsible_phone' => '+56912345678',
+            'responsible_phone' => '56912345678',
+            'responsible_institution' => 'Fundación Educar',
             'kind' => OrderKind::Institucional->value,
-        ])->assertRedirect(route('inscripcion.pagador', ['token' => $token]));
-
-        // 2. Entidad pagadora
-        $this->post(route('inscripcion.pagador.guardar', ['token' => $token]), [
-            'name' => 'Fundación Educar',
-            'rut' => '76.086.428-5',
-            'billing_email' => 'pagos@fundacion.cl',
         ])->assertRedirect(route('inscripcion.establecimientos', ['token' => $token]));
 
-        // 3. Establecimiento
+        // 2. Establecimiento
+
         $this->post(route('inscripcion.establecimientos.agregar', ['token' => $token]), [
-            'name' => 'Colegio San José', 'rbd' => '12345',
+            'name' => 'Colegio San José', 'rbd' => '12345', 'address' => 'Calle 1', 'commune' => 'Ñuñoa',
         ])->assertRedirect(route('inscripcion.establecimientos', ['token' => $token]));
 
         $orden = Order::sole();
         $establecimiento = $orden->establishments()->sole();
 
-        // 4. Participantes
+        // 3. Participantes
         $this->post(route('inscripcion.participantes.agregar', ['token' => $token]), [
-            'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Docente', 'email' => 'carlos@colegio.cl',
+            'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Docente Enseñanza Media', 'email' => 'carlos@colegio.cl', 'rut' => '11.111.111-1',
             'access_type_id' => $this->ambas->id,
             'establishment_id' => $establecimiento->id,
         ])->assertRedirect(route('inscripcion.participantes', ['token' => $token]));
 
         $this->post(route('inscripcion.participantes.agregar', ['token' => $token]), [
-            'first_name' => 'Luisa', 'last_name' => 'Soto', 'position' => 'Directivo', 'email' => 'luisa@colegio.cl',
+            'first_name' => 'Luisa', 'last_name' => 'Soto', 'position' => 'Director/a', 'email' => 'luisa@colegio.cl', 'rut' => '22.222.222-2',
             'access_type_id' => $this->jornada1->id,
             'establishment_id' => $establecimiento->id,
         ])->assertRedirect(route('inscripcion.participantes', ['token' => $token]));
 
+        // 4. Facturación, penúltimo paso
+        $this->post(route('inscripcion.pagador.guardar', ['token' => $token]), [
+            'name' => 'Fundación Educar',
+            'rut' => '76.086.428-5',
+            'address' => 'Av. Grecia 1234',
+            'commune' => 'Ñuñoa',
+            'billing_email' => 'pagos@fundacion.cl',
+            'phone' => '56912345678',
+        ])->assertRedirect(route('inscripcion.resumen', ['token' => $token]));
+
         $orden->refresh()->load('participants.accessType');
 
-        $this->assertSame('Ana Pérez', $orden->responsible_name);
+        $this->assertSame('Ana Pérez', $orden->responsableNombreCompleto());
         $this->assertSame('76086428-5', $orden->payerEntity->rut, 'El RUT se normaliza al guardar.');
         $this->assertSame(2, $orden->participants->count());
         $this->assertSame(240000, $orden->calcularTotal());

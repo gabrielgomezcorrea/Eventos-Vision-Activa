@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Mail\RecordatorioDeReserva;
+use App\Mail\RecordatorioDeReservaConjunto;
 use App\Models\Order;
 use App\Support\Auditor;
 use Illuminate\Console\Command;
@@ -48,7 +49,7 @@ class RecordarReservas extends Command
                 PaymentStatus::EnValidacion->value,
                 PaymentStatus::Aprobado->value,
             ])
-            ->with('event', 'participants')
+            ->with('event', 'participants', 'establishments')
             ->get()
             ->filter(function (Order $orden) use ($forzadas): bool {
                 $horas = $forzadas
@@ -80,17 +81,29 @@ class RecordarReservas extends Command
             return self::SUCCESS;
         }
 
-        foreach ($ordenes as $orden) {
-            Mail::to($orden->responsible_email)->queue(new RecordatorioDeReserva($orden));
+        // Las de un mismo conjunto que vencen hoy van en un solo correo; las
+        // que vencen otro día no entran a este lote y se avisan aparte.
+        $lotes = $ordenes->groupBy(fn (Order $orden) => $orden->group_id ?? 'sola-'.$orden->id);
 
-            $orden->forceFill(['reminder_sent_at' => now()])->save();
+        foreach ($lotes as $lote) {
+            if ($lote->count() > 1) {
+                Mail::to($lote->first()->responsible_email)->queue(
+                    new RecordatorioDeReservaConjunto($lote->first()->group, $lote)
+                );
+            } else {
+                Mail::to($lote->first()->responsible_email)->queue(new RecordatorioDeReserva($lote->first()));
+            }
 
-            Auditor::registrar(
-                sobre: $orden,
-                accion: 'reserva.recordatorio_enviado',
-                propiedades: ['vence' => $orden->reserved_until->toDateTimeString()],
-                actorLabel: 'Sistema',
-            );
+            foreach ($lote as $orden) {
+                $orden->forceFill(['reminder_sent_at' => now()])->save();
+
+                Auditor::registrar(
+                    sobre: $orden,
+                    accion: 'reserva.recordatorio_enviado',
+                    propiedades: ['vence' => $orden->reserved_until->toDateTimeString()],
+                    actorLabel: 'Sistema',
+                );
+            }
         }
 
         $this->info($ordenes->count().' recordatorio(s) enviados.');

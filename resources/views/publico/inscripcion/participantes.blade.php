@@ -4,10 +4,11 @@
 
 @php
     $accesos = $event->accessTypes->where('is_active', true);
-    $requiereEstablecimiento = $orden->kind->requiereEstablecimiento() && $orden->establishments->isNotEmpty();
     $yaEstaElResponsable = $orden->participants->contains(
         fn ($p) => $p->email && $orden->responsible_email && mb_strtolower($p->email) === mb_strtolower($orden->responsible_email)
     );
+    // Con un solo colegio no se pregunta algo que ya se sabe.
+    $variosColegios = $orden->establishments->count() > 1;
 @endphp
 
 @section('contenido')
@@ -77,7 +78,8 @@
 
     @if ($accesos->isEmpty())
         <div class="aviso aviso-error">
-            Este evento todavía no tiene tipos de acceso disponibles. Contáctanos para poder continuar.
+            Este evento todavía no tiene tipos de acceso disponibles. Contáctanos para poder continuar:
+            @include('publico._contacto', ['evento' => $event])
         </div>
     @else
         <form method="POST" action="{{ route('inscripcion.participantes.agregar', ['token' => $token]) }}" novalidate>
@@ -105,7 +107,7 @@
                     </div>
 
                     <div>
-                        <label for="rut">RUT <span class="opcional">(opcional)</span></label>
+                        <label for="rut">RUT</label>
                         <input type="text" id="rut" name="rut" value="{{ $valores['rut'] ?? '' }}"
                                data-rut maxlength="12" autocomplete="off" placeholder="12.345.678-9"
                                @if ($errores->has('rut')) aria-invalid="true" @endif>
@@ -114,25 +116,11 @@
                         @endif
                     </div>
 
-                    @include('publico.inscripcion._cargo', ['campo' => 'position'])
+                    @include('publico.inscripcion._cargo', ['campo' => 'position', 'opciones' => $event->cargosDeParticipante()])
 
-                    <div>
-                        <label for="email">Correo</label>
-                        <input type="email" id="email" name="email" value="{{ $valores['email'] ?? '' }}"
-                               @if ($errores->has('email')) aria-invalid="true" @endif>
-                        @if ($errores->has('email'))
-                            <div class="error-campo">{{ $errores->first('email') }}</div>
-                        @else
-                            <div class="ayuda">Le enviaremos su credencial a este correo.</div>
-                        @endif
-                    </div>
-
-                    @if ($orden->establishments->isNotEmpty())
+                    @if ($variosColegios)
                         <div>
-                            <label for="establishment_id">
-                                Establecimiento
-                                @unless ($requiereEstablecimiento)<span class="opcional">(opcional)</span>@endunless
-                            </label>
+                            <label for="establishment_id">Establecimiento</label>
                             <select id="establishment_id" name="establishment_id"
                                     @if ($errores->has('establishment_id')) aria-invalid="true" @endif>
                                 <option value="">Selecciona</option>
@@ -149,7 +137,18 @@
                         </div>
                     @endif
 
-                    <div class="{{ $orden->establishments->isEmpty() ? '' : 'ancho' }}">
+                    <div>
+                        <label for="email">Correo</label>
+                        <input type="email" id="email" name="email" value="{{ $valores['email'] ?? '' }}"
+                               @if ($errores->has('email')) aria-invalid="true" @endif>
+                        @if ($errores->has('email'))
+                            <div class="error-campo">{{ $errores->first('email') }}</div>
+                        @else
+                            <div class="ayuda">Le enviaremos su credencial a este correo.</div>
+                        @endif
+                    </div>
+
+                    <div class="ancho">
                         <label for="access_type_id">Tipo de acceso</label>
                         <select id="access_type_id" name="access_type_id"
                                 @if ($errores->has('access_type_id')) aria-invalid="true" @endif>
@@ -178,11 +177,15 @@
                 <div class="tarjeta">
                     <h2>¿El responsable también participará?</h2>
                     <p class="sub">
-                        Agregamos a {{ $orden->responsible_name }} como participante reutilizando sus datos.
-                        Solo debes elegir su acceso.
+                        Agregamos a {{ $orden->responsableNombreCompleto() }} como participante reutilizando sus datos.
+                        Solo debes indicar su RUT y elegir su acceso.
                     </p>
                     <div class="rejilla">
-                        @if ($orden->establishments->isNotEmpty())
+                        <div>
+                            <label for="r_rut">RUT</label>
+                            <input type="text" id="r_rut" name="rut" data-rut maxlength="12" autocomplete="off" placeholder="12.345.678-9">
+                        </div>
+                        @if ($variosColegios)
                             <div>
                                 <label for="r_establishment_id">Establecimiento</label>
                                 <select id="r_establishment_id" name="establishment_id">
@@ -214,7 +217,7 @@
     <div class="acciones">
         <a href="{{ route('inscripcion.establecimientos', ['token' => $token]) }}" class="btn btn-secundario">Volver</a>
         @if ($orden->participants->isNotEmpty())
-            <a href="{{ route('inscripcion.resumen', ['token' => $token]) }}" class="btn btn-primario">Revisar inscripción</a>
+            <a href="{{ route('inscripcion.pagador', ['token' => $token]) }}" class="btn btn-primario">Continuar a facturación</a>
         @endif
     </div>
 @endsection

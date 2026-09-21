@@ -4,6 +4,7 @@ use App\Http\Controllers\Acreditacion\AcreditacionController;
 use App\Http\Controllers\Comprobantes\ComprobanteController;
 use App\Http\Controllers\Configuracion\CuentaBancariaController;
 use App\Http\Controllers\Configuracion\UsuarioController;
+use App\Http\Controllers\Configuracion\WebController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DescargarComprobanteController;
 use App\Http\Controllers\Eventos\AccesoController;
@@ -45,6 +46,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('eventos/{event}/estado', [EventoController::class, 'cambiarEstado'])->name('eventos.estado');
     Route::delete('eventos/{event}', [EventoController::class, 'destroy'])->name('eventos.destroy');
 
+    Route::post('eventos/{event}/banner', [EventoController::class, 'subirBanner'])->name('eventos.banner.store');
+    Route::delete('eventos/{event}/banner', [EventoController::class, 'quitarBanner'])->name('eventos.banner.destroy');
+
     Route::get('eventos/{event}/cupos', CuposYPreciosController::class)->name('eventos.cupos');
     Route::get('eventos/{event}/formulario', [FormularioPublicoController::class, 'edit'])->name('eventos.formulario');
     Route::put('eventos/{event}/formulario', [FormularioPublicoController::class, 'update'])->name('eventos.formulario.update');
@@ -75,6 +79,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('comprobantes/{payment}/revisar', [ComprobanteController::class, 'revisar'])->name('comprobantes.revisar');
 
     Route::get('inscripciones', [InscripcionController::class, 'index'])->name('inscripciones.index');
+    Route::post('inscripciones/invitado', [InscripcionController::class, 'registrarInvitado'])->name('inscripciones.invitado');
     Route::get('inscripciones/{order}', [InscripcionController::class, 'show'])->name('inscripciones.show');
     Route::get('inscripciones/{order}/credenciales', [InscripcionController::class, 'credenciales'])->name('inscripciones.credenciales');
     Route::patch('inscripciones/{order}/notas', [InscripcionController::class, 'actualizarNotas'])->name('inscripciones.notas');
@@ -103,6 +108,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'show'])->name('cuentas-bancarias.show');
     Route::patch('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'update'])->name('cuentas-bancarias.update');
     Route::delete('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'destroy'])->name('cuentas-bancarias.destroy');
+
+    Route::get('settings/webs', [WebController::class, 'index'])->name('webs.index');
+    Route::post('settings/webs', [WebController::class, 'store'])->name('webs.store');
+    Route::delete('settings/webs', [WebController::class, 'destroy'])->name('webs.destroy');
 
     Route::get('settings/usuarios', [UsuarioController::class, 'index'])->name('usuarios.index');
     Route::post('settings/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');

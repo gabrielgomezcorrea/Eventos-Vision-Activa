@@ -1,7 +1,8 @@
 {{--
     Cargo como lista cerrada, igual que en el formulario público: es el filtro
     principal de la exportación. "Otro" abre un campo para escribirlo.
-    Variables: $campo (nombre del input), $valores, $errores, $opcional.
+    Variables: $campo (nombre del input), $valores, $errores, $opcional; $opciones
+    (lista de cargos, por defecto la del responsable).
 --}}
 @php
     $otro = \App\Support\Forms\ProgramFormField::CARGO_OTRO;
@@ -14,7 +15,7 @@
             @if ($errores->has($campo)) aria-invalid="true" @endif
             onchange="document.getElementById('{{ $claveOtro }}_envoltura').hidden = this.value !== '{{ $otro }}'">
         <option value="">Selecciona una opción</option>
-        @foreach (\App\Support\Forms\ProgramFormField::CARGOS as $opcion)
+        @foreach ($opciones ?? \App\Support\Forms\ProgramFormField::CARGOS as $opcion)
             <option value="{{ $opcion }}" @selected($valorCargo === $opcion)>{{ $opcion === $otro ? 'Otro (especificar)' : $opcion }}</option>
         @endforeach
     </select>

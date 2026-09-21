@@ -21,6 +21,7 @@ class EnlaceNoUtilizable extends Exception
         public readonly string $explicacion,
         public readonly ?string $accionUrl = null,
         public readonly ?string $accionTexto = null,
+        public readonly ?Event $evento = null,
     ) {
         parent::__construct($titulo);
     }
@@ -33,6 +34,7 @@ class EnlaceNoUtilizable extends Exception
             'Puede haber expirado o haber sido reemplazado por uno más reciente. Pide uno nuevo con tu correo: no perderás nada de lo que ya registraste.',
             $event ? route('inscripcion.inicio', ['event' => $event->slug]) : null,
             'Pedir un enlace nuevo',
+            $event,
         );
     }
 
@@ -54,6 +56,7 @@ class EnlaceNoUtilizable extends Exception
             'explicacion' => $this->explicacion,
             'accionUrl' => $this->accionUrl,
             'accionTexto' => $this->accionTexto,
+            'evento' => $this->evento,
         ], 403);
     }
 }

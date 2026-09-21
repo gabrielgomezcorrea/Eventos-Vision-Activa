@@ -50,8 +50,8 @@ class ReemplazarParticipanteRequest extends FormRequest
         return [
             'first_name' => ReglasDeContacto::nombres(),
             'last_name' => ReglasDeContacto::apellidos(),
-            'rut' => ['nullable', 'string', 'max:20', new RutValido],
-            'position' => ReglasDeContacto::cargo(),
+            'rut' => ['required', 'string', 'max:20', new RutValido],
+            'position' => ReglasDeContacto::cargo(true, $this->orden()->event->cargosDeParticipante()),
             'position_otro' => ReglasDeContacto::cargoOtro('position'),
             'email' => ReglasDeContacto::correo(),
             'establishment_id' => ['nullable', Rule::in($this->orden()->establishments()->pluck('establishments.id')->all())],

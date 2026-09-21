@@ -48,9 +48,23 @@ class ExportarContactos
             $filas = [...$filas, ...$this->solicitudes($filtros)];
         }
 
+        // One row per email. The first row wins, but its empty fields are filled
+        // from the others: a participant has no phone, while the same person's
+        // program request does, and the phone is what sales follows up with.
         $filas = collect($filas)
             ->filter(fn (array $fila): bool => filled($fila['correo']))
-            ->unique('correo');
+            ->groupBy('correo')
+            ->map(function ($mismas): array {
+                $unida = $mismas->shift();
+
+                foreach ($mismas as $fila) {
+                    foreach ($unida as $clave => $valor) {
+                        $unida[$clave] = filled($valor) ? $valor : $fila[$clave];
+                    }
+                }
+
+                return $unida;
+            });
 
         if ($filtros['marketing'] ?? false) {
             // El consentimiento se da en el formulario público. Vale para la
@@ -100,15 +114,10 @@ class ExportarContactos
             ->tap(fn (Builder $q) => $this->filtrarCargo($q, 'responsible_position', $filtros['cargo'] ?? null))
             ->latest()
             ->get()
-            ->map(function (Order $o): array {
-                // El responsable escribe su nombre en un solo campo.
-                $partes = preg_split('/\s+/', trim($o->responsible_name), 2) ?: [];
-
-                return $this->fila(
-                    $o->responsible_email, $partes[0] ?? null, $partes[1] ?? null, $o->responsible_phone,
-                    $o->responsible_position, $o->responsible_institution, $o->event->name, 'responsable',
-                );
-            })
+            ->map(fn (Order $o): array => $this->fila(
+                $o->responsible_email, $o->responsible_name, $o->responsible_lastname, $o->responsible_phone,
+                $o->responsible_position, $o->responsible_institution, $o->event->name, 'responsable',
+            ))
             ->all();
     }
 
@@ -154,7 +163,7 @@ class ExportarContactos
         }
 
         if ($cargo === ProgramFormField::CARGO_OTRO) {
-            $consulta->whereNotNull($columna)->whereNotIn($columna, ProgramFormField::CARGOS);
+            $consulta->whereNotNull($columna)->whereNotIn($columna, ProgramFormField::todosLosCargos());
 
             return;
         }
@@ -169,7 +178,8 @@ class ExportarContactos
             'correo' => $correo === null ? null : mb_strtolower(trim($correo)),
             'nombre' => $nombre,
             'apellidos' => $apellidos,
-            'telefono' => Texto::telefono($telefono) ?? $telefono,
+            // Stored phones may still carry "+" from before; Excel reads it as a formula.
+            'telefono' => Texto::telefono($telefono) ?? ($telefono === null ? null : ltrim($telefono, '+')),
             'cargo' => $cargo,
             'establecimiento' => $establecimiento,
             'evento' => $evento,

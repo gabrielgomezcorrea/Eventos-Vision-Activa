@@ -65,7 +65,7 @@ class ExportarContactosController extends Controller
 
         $filtros = $request->validate([
             'evento' => ['nullable', 'integer', 'exists:events,id'],
-            'cargo' => ['nullable', 'string', Rule::in(ProgramFormField::CARGOS)],
+            'cargo' => ['nullable', 'string', Rule::in(ProgramFormField::todosLosCargos())],
             'tipos' => ['nullable', 'array'],
             'tipos.*' => ['string', Rule::in(array_keys(ExportarContactos::TIPOS))],
             'pago' => ['nullable', Rule::enum(PaymentStatus::class)],

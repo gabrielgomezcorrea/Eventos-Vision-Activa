@@ -37,6 +37,11 @@ class ExpirarReservas extends Command
                 PaymentStatus::EnValidacion->value,
                 PaymentStatus::Aprobado->value,
             ])
+            // Con un abono aprobado o esperando revisión la reserva se mantiene.
+            ->whereDoesntHave('payments', fn ($q) => $q->whereIn('status', [
+                PaymentStatus::Aprobado->value,
+                PaymentStatus::EnValidacion->value,
+            ]))
             ->with('participants.accessType.sessions', 'event')
             ->get();
 

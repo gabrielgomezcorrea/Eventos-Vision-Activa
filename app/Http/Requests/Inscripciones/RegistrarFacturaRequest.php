@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Inscripciones;
 
 use App\Enums\InvoiceDocumentType;
+use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Models\Order;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -17,11 +18,9 @@ class RegistrarFacturaRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        /** @var Order $orden */
-        $orden = $this->route('order');
-
+        // Con abonos se factura cada transferencia aprobada, sin esperar al total.
         return ($this->user()?->can(Permiso::GestionarFacturas->value) ?? false)
-            && $orden->payment_status->liberaCredenciales();
+            && $this->orden()->pagado() > 0;
     }
 
     /**
@@ -34,6 +33,7 @@ class RegistrarFacturaRequest extends FormRequest
             'number' => ['required', 'string', 'max:50'],
             'issued_on' => ['required', 'date', 'before_or_equal:today'],
             'amount' => ['required', 'integer', 'min:0'],
+            'payment_id' => ['nullable', Rule::in($this->orden()->payments()->where('status', PaymentStatus::Aprobado->value)->pluck('id')->all())],
             'archivo' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
             // A quién se envía lo decide el sistema: al responsable y a la
             // entidad pagadora, con copia a administración. Escribir el
@@ -54,9 +54,16 @@ class RegistrarFacturaRequest extends FormRequest
             'number' => 'número del documento',
             'issued_on' => 'fecha de emisión',
             'amount' => 'monto',
+            'payment_id' => 'abono',
             'archivo' => 'PDF del documento',
             'sent_to' => 'enviada a',
             'notes' => 'observaciones',
         ];
+    }
+
+    private function orden(): Order
+    {
+        /** @var Order */
+        return $this->route('order');
     }
 }
