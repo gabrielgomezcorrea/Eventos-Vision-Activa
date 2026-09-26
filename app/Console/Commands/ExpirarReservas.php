@@ -73,6 +73,7 @@ class ExpirarReservas extends Command
                 }
 
                 $cupos->devolver($orden->consumoDeCupos());
+                $fresca->discountCode?->devolverUsos($fresca->participantesVigentes->count());
 
                 $fresca->forceFill(['status' => OrderStatus::Vencida])->save();
 

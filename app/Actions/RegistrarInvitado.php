@@ -30,7 +30,7 @@ class RegistrarInvitado
     /**
      * @param  array<string, mixed>  $datos  ya validados por su Form Request
      */
-    public function __invoke(Event $evento, array $datos, User $usuario): Order
+    public function __invoke(Event $evento, array $datos, ?User $usuario = null): Order
     {
         $orden = DB::transaction(function () use ($evento, $datos, $usuario): Order {
             $establecimiento = filled($datos['establecimiento'] ?? null)
@@ -83,7 +83,7 @@ class RegistrarInvitado
                 accion: 'invitado.registrado',
                 estadoNuevo: OrderStatus::Reservada->value,
                 propiedades: ['numero' => $orden->number, 'invitado' => $orden->responsableNombreCompleto()],
-                actorLabel: $usuario->name,
+                actorLabel: $usuario?->name ?? 'Invitación por correo',
             );
 
             return $orden;

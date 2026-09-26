@@ -42,6 +42,7 @@ class CancelarOrden
 
             $fresca->load('participantesVigentes.accessType.sessions');
             $this->cupos->devolver($fresca->consumoDeCupos());
+            $fresca->discountCode?->devolverUsos($fresca->participantesVigentes->count());
 
             $fresca->forceFill(['status' => OrderStatus::Cancelada, 'cancelled_at' => now()])->save();
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
+use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\Order;
 use App\Models\PayerEntity;
@@ -99,6 +100,36 @@ class ConcurrenciaMysqlTest extends TestCase
         $folios = Order::whereNotNull('number')->pluck('number');
         $this->assertCount(self::CAPACIDAD, $folios);
         $this->assertSame($folios->count(), $folios->unique()->count(), 'Hay folios repetidos.');
+    }
+
+    public function test_confirmaciones_en_paralelo_no_pasan_el_tope_de_un_codigo(): void
+    {
+        $event = Event::create(['name' => 'Seminario', 'slug' => 'seminario', 'status' => EventStatus::Publicado]);
+        $jornada = $event->sessions()->create(['name' => 'J1', 'position' => 1, 'capacity' => 100]);
+        $acceso = $event->accessTypes()->create(['name' => 'J1', 'position' => 1, 'price' => 1000]);
+        $acceso->sessions()->sync([$jornada->id => ['seats' => 1]]);
+        $codigo = DiscountCode::factory()->create(['event_id' => $event->id, 'max_people' => self::CAPACIDAD]);
+
+        $ids = [];
+        for ($i = 0; $i < self::INTENTOS; $i++) {
+            $orden = Order::create([
+                'event_id' => $event->id,
+                'responsible_name' => 'Cliente '.$i,
+                'responsible_lastname' => 'Apellido '.$i,
+                'responsible_email' => "cliente{$i}@colegio.cl",
+                'payer_entity_id' => PayerEntity::create(['name' => 'Entidad '.$i])->id,
+                'discount_code_id' => $codigo->id,
+            ]);
+            $orden->participants()->create(['first_name' => 'P'.$i, 'access_type_id' => $acceso->id]);
+            $ids[] = $orden->id;
+        }
+
+        $resultados = $this->confirmarEnParalelo($ids);
+
+        $this->assertSame(self::CAPACIDAD, count(array_filter($resultados, fn (string $r): bool => $r === 'ok')), implode(' | ', $resultados));
+        $this->assertSame(self::INTENTOS - self::CAPACIDAD, count(array_filter($resultados, fn (string $r): bool => $r === 'sin_codigo')));
+        $this->assertSame(self::CAPACIDAD, $codigo->fresh()->used_people, 'El código se usó más que su tope.');
+        $this->assertSame(self::CAPACIDAD, (int) $jornada->fresh()->reserved_seats, 'Una orden rechazada dejó cupos tomados.');
     }
 
     /**

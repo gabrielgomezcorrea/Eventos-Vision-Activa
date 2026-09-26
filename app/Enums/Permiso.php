@@ -30,6 +30,9 @@ enum Permiso: string
     case VerAcreditacion = 'ver_acreditacion';
     case AcreditarParticipantes = 'acreditar_participantes';
 
+    // Códigos de descuento e invitaciones sin costo: regalan cupos, solo Administración.
+    case GestionarDescuentos = 'gestionar_descuentos';
+
     case GestionarCuentasBancarias = 'gestionar_cuentas_bancarias';
 
     case GestionarUsuarios = 'gestionar_usuarios';

@@ -74,6 +74,7 @@ class Event extends Model
             'starts_on' => 'date',
             'replacement_deadline' => 'date',
             'banner_updated_at' => 'datetime',
+            'banner_placements' => 'array',
             'program_form_fields' => 'array',
             'participant_positions' => 'array',
         ];
@@ -132,26 +133,31 @@ class Event extends Model
             : array_values(array_unique([...$elegidos, ProgramFormField::CARGO_OTRO]));
     }
 
+    /**
+     * Dónde puede verse el banner y cómo se llama cada lugar en el panel. Las
+     * claves se guardan en `banner_placements`; nulo significa todas.
+     */
+    public const UBICACIONES_BANNER = [
+        'mail' => 'Correos del evento',
+        'form' => 'Formulario del evento',
+        'external' => 'Formularios externos (Webs, Redes sociales u otros)',
+    ];
+
+    /** @return list<string> */
+    public function ubicacionesDelBanner(): array
+    {
+        return $this->banner_placements ?? array_keys(self::UBICACIONES_BANNER);
+    }
+
+    /** Hay imagen y quien configura el evento la quiere en ese lugar. */
+    public function muestraBannerEn(string $ubicacion): bool
+    {
+        return $this->tieneBanner() && in_array($ubicacion, $this->ubicacionesDelBanner(), true);
+    }
+
     public function tieneBanner(): bool
     {
         return filled($this->banner_path) && Storage::disk($this->banner_disk)->exists($this->banner_path);
-    }
-
-    /**
-     * Datos de la cabecera del evento, para correos, formulario público y
-     * páginas de inscripción. Solo trae lo que el evento tiene cargado: si no
-     * hay lugar ni fecha, sale solo el nombre.
-     *
-     * @return array{nombre: string, lugar: ?string, ciudad: ?string, fecha: ?string}
-     */
-    public function datosCabecera(): array
-    {
-        return [
-            'nombre' => $this->name,
-            'lugar' => $this->location,
-            'ciudad' => $this->city,
-            'fecha' => $this->starts_on?->format('d-m-Y'),
-        ];
     }
 
     /**
@@ -170,6 +176,18 @@ class Event extends Model
             // Sin esto el correo y el navegador siguen mostrando el banner viejo.
             'v' => $this->banner_updated_at?->timestamp ?? 0,
         ]);
+    }
+
+    /** @return HasMany<Invitation, $this> */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(Invitation::class);
+    }
+
+    /** @return HasMany<DiscountCode, $this> */
+    public function discountCodes(): HasMany
+    {
+        return $this->hasMany(DiscountCode::class);
     }
 
     /** @return HasMany<DiscountTier, $this> */

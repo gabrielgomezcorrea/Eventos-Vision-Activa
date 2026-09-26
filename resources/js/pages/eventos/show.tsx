@@ -11,6 +11,8 @@ import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import CuentaBancariaController from '@/actions/App/Http/Controllers/Configuracion/CuentaBancariaController';
+import CodigoDescuentoController from '@/actions/App/Http/Controllers/Eventos/CodigoDescuentoController';
+import InvitacionController from '@/actions/App/Http/Controllers/Eventos/InvitacionController';
 import CuposYPreciosController from '@/actions/App/Http/Controllers/Eventos/CuposYPreciosController';
 import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoController';
 import FormularioPublicoController from '@/actions/App/Http/Controllers/Eventos/FormularioPublicoController';
@@ -22,7 +24,9 @@ import InputError from '@/components/input-error';
 import { NativeSelect } from '@/components/native-select';
 import { Dato, Datos, SeccionFicha } from '@/components/seccion-ficha';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Sheet,
     SheetContent,
@@ -79,6 +83,7 @@ type Evento = {
     cuenta: Cuenta | null;
     enlace_publico: string;
     banner: string | null;
+    banner_ubicaciones: { clave: string; etiqueta: string; activa: boolean }[];
     banner_max_mb: number;
     banner_formatos: string;
     usa_lugar: boolean;
@@ -111,7 +116,9 @@ type Props = {
         cuentas: { id: number; label: string }[];
         estados: OpcionEstado[];
     };
-    puede: { editar: boolean; eliminar: boolean };
+    codigos: string[];
+    invitaciones: string[];
+    puede: { editar: boolean; eliminar: boolean; descuentos: boolean };
 };
 
 function enumerar(items: string[]): string {
@@ -354,39 +361,81 @@ function Banner({
             accion={
                 puedeEditar &&
                 evento.banner && (
-                    <Confirmar
-                        titulo="Quitar el banner"
-                        descripcion="Los correos y las páginas del evento vuelven a verse sin imagen."
-                        textoAccion="Quitar banner"
-                        onConfirmar={() =>
-                            router.delete(
-                                EventoController.quitarBanner.url(evento.id),
-                                { preserveScroll: true },
-                            )
-                        }
+                    <EditarSeccion
+                        titulo="Dónde se ve el banner"
+                        url={EventoController.ubicarBanner.url(evento.id)}
+                        inicial={Object.fromEntries(
+                            evento.banner_ubicaciones.map((u) => [
+                                u.clave,
+                                u.activa ? '1' : '0',
+                            ]),
+                        )}
                     >
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 hover:text-red-700"
-                        >
-                            Quitar
-                        </Button>
-                    </Confirmar>
+                        {(f) => (
+                            <div className="space-y-3">
+                                {evento.banner_ubicaciones.map((u) => (
+                                    <div
+                                        key={u.clave}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <Checkbox
+                                            id={`ubicacion-${u.clave}`}
+                                            checked={f.data[u.clave] === '1'}
+                                            onCheckedChange={(valor) =>
+                                                f.set(
+                                                    u.clave,
+                                                    valor === true ? '1' : '0',
+                                                )
+                                            }
+                                        />
+                                        <Label htmlFor={`ubicacion-${u.clave}`}>
+                                            {u.etiqueta}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </EditarSeccion>
                 )
             }
         >
             <div className="grid gap-3">
                 {evento.banner ? (
-                    <img
-                        src={evento.banner}
-                        alt={`Banner de ${evento.name}`}
-                        className="w-full max-w-xl rounded-lg border"
-                    />
+                    <div className="relative w-fit max-w-full">
+                        <img
+                            src={evento.banner}
+                            alt={`Banner de ${evento.name}`}
+                            className="max-h-40 max-w-full rounded-lg border object-contain"
+                        />
+                        {puedeEditar && (
+                            <Confirmar
+                                titulo="Quitar el banner"
+                                descripcion="Los correos y las páginas del evento vuelven a verse sin imagen."
+                                textoAccion="Quitar banner"
+                                onConfirmar={() =>
+                                    router.delete(
+                                        EventoController.quitarBanner.url(
+                                            evento.id,
+                                        ),
+                                        { preserveScroll: true },
+                                    )
+                                }
+                            >
+                                <Button
+                                    variant="secondary"
+                                    size="icon"
+                                    aria-label="Quitar banner"
+                                    className="absolute top-2 right-2 size-8 bg-white/90 text-red-600 shadow-sm hover:bg-white hover:text-red-700"
+                                >
+                                    <Trash2 />
+                                </Button>
+                            </Confirmar>
+                        )}
+                    </div>
                 ) : (
                     <p className="text-muted-foreground text-sm">
                         Sin banner. Los correos y las páginas del evento se ven
-                        solo con texto.
+                        sin imagen arriba.
                     </p>
                 )}
 
@@ -403,9 +452,8 @@ function Banner({
                         />
                         <p className="text-muted-foreground text-xs">
                             {evento.banner_formatos}, hasta{' '}
-                            {evento.banner_max_mb} MB. Se ve arriba en los
-                            correos, en el formulario público y en las páginas
-                            de inscripción.
+                            {evento.banner_max_mb} MB. Se muestra tal cual, sin
+                            texto encima.
                         </p>
                         {subiendo && (
                             <p className="text-muted-foreground text-xs">
@@ -428,6 +476,8 @@ export default function EventoShow({
     formulario,
     faltaParaPublicar,
     opciones,
+    codigos,
+    invitaciones,
     puede,
 }: Props) {
     setLayoutProps({
@@ -665,9 +715,14 @@ export default function EventoShow({
                             ancho
                         >
                             <span className="flex items-center gap-2">
-                                <span className="truncate">
+                                <a
+                                    href={evento.enlace_publico}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="truncate underline-offset-4 hover:underline"
+                                >
                                     {evento.enlace_publico}
-                                </span>
+                                </a>
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -688,6 +743,42 @@ export default function EventoShow({
                 </SeccionFicha>
 
                 <Banner evento={evento} puedeEditar={puede.editar} />
+
+                {puede.descuentos && (
+                    <SeccionFicha
+                        titulo="Códigos de descuento"
+                        accion={
+                            <IrA
+                                href={CodigoDescuentoController.index.url(
+                                    evento.id,
+                                )}
+                                texto="Ir a códigos de descuento"
+                            />
+                        }
+                    >
+                        <Lista
+                            items={codigos}
+                            vacio="Todavía no hay códigos."
+                        />
+                    </SeccionFicha>
+                )}
+
+                {puede.descuentos && (
+                    <SeccionFicha
+                        titulo="Invitaciones"
+                        accion={
+                            <IrA
+                                href={InvitacionController.index.url(evento.id)}
+                                texto="Ir a invitaciones"
+                            />
+                        }
+                    >
+                        <Lista
+                            items={invitaciones}
+                            vacio="Todavía no hay invitaciones."
+                        />
+                    </SeccionFicha>
+                )}
 
                 {evento.usa_lugar && (
                     <SeccionFicha

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Publico\BannerController;
 use App\Http\Controllers\Publico\InscripcionController;
+use App\Http\Controllers\Publico\InvitacionController;
 use App\Http\Controllers\Publico\ProgramRequestController;
 use App\Http\Controllers\Publico\TicketController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,15 @@ Route::get('/f/{event:slug}/embed', [ProgramRequestController::class, 'mostrarEm
 Route::post('/f/{event:slug}/embed', [ProgramRequestController::class, 'guardarEmbebido'])
     ->middleware('throttle:10,1')
     ->name('publico.programa.embed.guardar');
+
+// Invitación personal: el token identifica la invitación y de ella salen el
+// evento, el correo y el acceso. Un solo uso; nunca se lee nada de la URL.
+Route::get('/invitacion/{token}', [InvitacionController::class, 'mostrar'])
+    ->middleware('throttle:20,1')
+    ->name('publico.invitacion');
+Route::post('/invitacion/{token}', [InvitacionController::class, 'guardar'])
+    ->middleware('throttle:20,1')
+    ->name('publico.invitacion.guardar');
 
 /*
 | Flujo de inscripción.
@@ -71,6 +81,11 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
 
     Route::get('/resumen', [InscripcionController::class, 'resumen'])->name('resumen');
     Route::post('/confirmar', [InscripcionController::class, 'confirmar'])->name('confirmar');
+
+    Route::post('/codigo', [InscripcionController::class, 'aplicarCodigo'])
+        ->middleware('throttle:10,1')
+        ->name('codigo.aplicar');
+    Route::post('/codigo/quitar', [InscripcionController::class, 'quitarCodigo'])->name('codigo.quitar');
 
     Route::get('/estado', [InscripcionController::class, 'estado'])->name('estado');
     Route::post('/otro-establecimiento', [InscripcionController::class, 'otroEstablecimiento'])->name('otro');

@@ -24,7 +24,13 @@
     <meta property="og:title" content="{{ $event->name }}">
     <meta property="og:description" content="{{ $resumen }}">
     <meta property="og:url" content="{{ url()->current() }}">
-    <meta name="twitter:card" content="summary">
+    @if (! $embed && $event->muestraBannerEn('external'))
+        <meta property="og:image" content="{{ $event->bannerUrl() }}">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:image" content="{{ $event->bannerUrl() }}">
+    @else
+        <meta name="twitter:card" content="summary">
+    @endif
     <meta name="twitter:title" content="{{ $event->name }}">
     <meta name="twitter:description" content="{{ $resumen }}">
     <style>
@@ -55,6 +61,11 @@
             padding: {{ $embed ? '0' : '32px 16px' }};
         }
         .banner { display: block; width: 100%; height: auto; border-radius: 10px; margin-bottom: 16px; }
+        .banner-tarjeta { display: block; width: 100%; height: 180px; object-fit: cover;
+                          border: {{ $embed ? 'none' : '1px solid var(--borde)' }}; border-bottom: none;
+                          border-radius: {{ $embed ? '10px 10px 0 0' : '12px 12px 0 0' }}; margin-bottom: -1px; }
+        .banner-tarjeta + .tarjeta { border-top-left-radius: 0; border-top-right-radius: 0; }
+        @media (max-width: 480px) { .banner-tarjeta { height: 120px; } }
         .tarjeta {
             background: var(--superficie);
             border: {{ $embed ? 'none' : '1px solid var(--borde)' }};
@@ -105,7 +116,12 @@
 </head>
 <body>
 <div class="envoltura">
-    @include('publico._banner', ['evento' => $event])
+    @if ($event->muestraBannerEn($embed ? 'external' : 'form'))
+        {{-- La imagen es la cabecera de la tarjeta: todo el ancho, alto
+             contenido y pegada al formulario. `cover` no deforma. Igual en la
+             página propia y embebida; cada una con su casilla. --}}
+        <img class="banner-tarjeta" src="{{ $event->bannerUrl() }}" alt="{{ $event->name }}">
+    @endif
 
     <div class="tarjeta">
 

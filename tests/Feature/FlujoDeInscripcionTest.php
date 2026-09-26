@@ -125,6 +125,28 @@ class FlujoDeInscripcionTest extends TestCase
         $this->assertNotSame($ordenDeAna->id, MagicLink::where('email', 'beto@colegio.cl')->sole()->order_id);
     }
 
+    public function test_el_cliente_no_puede_inscribirse_como_invitado(): void
+    {
+        [, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
+        $this->get(route('inscripcion.acceso', ['token' => $token]));
+
+        $this->get(route('inscripcion.responsable', ['token' => $token]))
+            ->assertOk()
+            ->assertDontSee('Invitado especial');
+
+        $this->post(route('inscripcion.responsable.guardar', ['token' => $token]), [
+            'responsible_name' => 'Ana',
+            'responsible_lastname' => 'Pérez',
+            'responsible_position' => 'Otro',
+            'responsible_position_otro' => 'Directora',
+            'responsible_phone' => '56912345678',
+            'responsible_institution' => 'Fundación Educar',
+            'kind' => OrderKind::Invitado->value,
+        ])->assertOk();
+
+        $this->assertNotSame(OrderKind::Invitado, Order::sole()->kind);
+    }
+
     public function test_flujo_completo_hasta_el_resumen(): void
     {
         [, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');

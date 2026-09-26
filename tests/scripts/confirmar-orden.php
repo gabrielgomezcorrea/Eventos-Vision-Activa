@@ -4,11 +4,12 @@
  * Confirma una orden desde un proceso independiente.
  *
  * Lo usa ConcurrenciaMysqlTest para provocar una carrera real por la última
- * vacante. Imprime "ok", "sin_cupo" o el error.
+ * vacante. Imprime "ok", "sin_cupo", "sin_codigo" o el error.
  */
 
 use App\Actions\ConfirmarOrden;
 use App\Exceptions\CuposInsuficientes;
+use App\Exceptions\OrdenNoConfirmable;
 use App\Models\Order;
 use Illuminate\Contracts\Console\Kernel;
 
@@ -34,6 +35,8 @@ try {
     echo 'ok';
 } catch (CuposInsuficientes $e) {
     echo 'sin_cupo';
+} catch (OrdenNoConfirmable $e) {
+    echo 'sin_codigo';
 } catch (Throwable $e) {
     echo get_class($e).': '.$e->getMessage();
 }

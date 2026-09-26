@@ -3,9 +3,11 @@
 namespace App\Actions;
 
 use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\OrdenNoConfirmable;
 use App\Mail\OrdenConfirmada;
+use App\Models\DiscountCode;
 use App\Models\Order;
 use App\Models\Participant;
 use App\Support\Auditor;
@@ -25,6 +27,7 @@ class ConfirmarOrden
     public function __construct(
         private readonly ReservarCupos $cupos,
         private readonly GenerarNumeroDeOrden $numero,
+        private readonly EmitirTickets $tickets,
     ) {}
 
     /**
@@ -83,16 +86,35 @@ class ConfirmarOrden
                 $fresca->load('group.orders.participantesVigentes');
             }
 
-            $tramo = $fresca->event->tramoDeDescuento($fresca->participantesParaDescuento());
-            $descuento = $tramo?->calcular($subtotal) ?? 0;
+            // Con código, el descuento por cantidad no aplica: nunca dos
+            // descuentos sobre la misma inscripción. Los usos se toman aquí,
+            // no al aplicarlo, y si no alcanzan se revierte todo.
+            $codigo = $fresca->discount_code_id !== null ? DiscountCode::find($fresca->discount_code_id) : null;
+            $personas = $fresca->participantesVigentes->count();
+
+            if ($codigo !== null && ($previos = $fresca->participantesConCodigoPrevio())->isNotEmpty()) {
+                throw OrdenNoConfirmable::porque(DiscountCode::mensajePorCodigoPrevio($previos));
+            }
+
+            if ($codigo !== null && ! $codigo->tomarUsos($personas)) {
+                throw OrdenNoConfirmable::porque($codigo->refresh()->impedimento($personas) ?? 'Este código ya no está disponible.');
+            }
+
+            $tramo = $codigo === null ? $fresca->event->tramoDeDescuento($fresca->participantesParaDescuento()) : null;
+            $descuento = $codigo?->calcular($subtotal) ?? $tramo?->calcular($subtotal) ?? 0;
+            $sinCosto = $codigo !== null && $subtotal - $descuento === 0;
 
             $fresca->forceFill([
                 'number' => ($this->numero)($fresca->event),
                 'status' => OrderStatus::Reservada,
                 'subtotal' => $subtotal,
                 'discount_amount' => $descuento,
-                'discount_label' => $tramo?->etiqueta(),
+                'discount_label' => $codigo !== null
+                    ? 'Código '.$codigo->formateado().' ('.$codigo->etiqueta().')'
+                    : $tramo?->etiqueta(),
                 'total' => $subtotal - $descuento,
+                // Sin nada que pagar no hay comprobante ni revisión: queda aprobada.
+                'payment_status' => $sinCosto ? PaymentStatus::Aprobado : $fresca->payment_status,
                 'applied_tariff' => $anticipado ? 'anticipado' : 'normal',
                 'applied_tariff_until' => $anticipado ? $rigeHasta : null,
                 'confirmed_at' => now(),
@@ -112,9 +134,18 @@ class ConfirmarOrden
                 'subtotal' => $orden->subtotal,
                 'descuento' => $orden->discount_amount,
                 'total' => $orden->total,
+                'codigo' => $orden->discount_code_id !== null ? $orden->discount_label : null,
             ],
             actorLabel: $actorLabel,
         );
+
+        // Con un código que la deja en $0 las credenciales salen al instante:
+        // no hay instrucciones de pago que mandar.
+        if ($orden->discount_code_id !== null && (int) $orden->total === 0) {
+            ($this->tickets)($orden);
+
+            return $orden;
+        }
 
         // Un conjunto de varios colegios manda un solo correo con todos
         // adentro (App\Actions\ConfirmarConjunto), no uno por colegio.

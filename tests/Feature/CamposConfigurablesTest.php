@@ -123,4 +123,22 @@ class CamposConfigurablesTest extends TestCase
 
         $this->assertNotContains('comuna', ProgramFormField::CAMPOS_BASE);
     }
+
+    public function test_todo_campo_de_telefono_exige_celular_y_lo_guarda_sin_mas(): void
+    {
+        $evento = $this->evento([
+            ['key' => 'first_name', 'label' => 'Nombre', 'type' => 'text', 'required' => true, 'enabled' => true],
+            ['key' => 'email', 'label' => 'Correo', 'type' => 'email', 'required' => true, 'enabled' => true],
+            ['key' => 'whatsapp', 'label' => 'WhatsApp', 'type' => 'tel', 'required' => true, 'enabled' => true],
+        ]);
+
+        $this->post("/f/{$evento->slug}", ['first_name' => 'Ana', 'email' => 'ana@colegio.cl', 'whatsapp' => 'llamar tarde'])
+            ->assertOk()
+            ->assertSee('56912345678');
+        $this->assertSame(0, ProgramRequest::count());
+
+        $this->post("/f/{$evento->slug}", ['first_name' => 'Ana', 'email' => 'ana@colegio.cl', 'whatsapp' => '+56 9 1234 5678'])->assertOk();
+
+        $this->assertSame('56912345678', ProgramRequest::sole()->extra['whatsapp']);
+    }
 }

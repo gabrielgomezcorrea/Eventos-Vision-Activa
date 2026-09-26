@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Enums\EventStatus;
 use App\Models\Event;
 use Exception;
 use Illuminate\Http\Request;
@@ -22,6 +23,7 @@ class EnlaceNoUtilizable extends Exception
         public readonly ?string $accionUrl = null,
         public readonly ?string $accionTexto = null,
         public readonly ?Event $evento = null,
+        public readonly int $estado = 403,
     ) {
         parent::__construct($titulo);
     }
@@ -35,6 +37,28 @@ class EnlaceNoUtilizable extends Exception
             $event ? route('inscripcion.inicio', ['event' => $event->slug]) : null,
             'Pedir un enlace nuevo',
             $event,
+        );
+    }
+
+    /** La invitación no existe, ya se usó, venció o fue anulada: no se dice cuál, no se revela quién fue invitado. */
+    public static function invitacionNoDisponible(?Event $event = null): self
+    {
+        return new self(
+            'Esta invitación ya no es válida',
+            'Puede que ya se haya usado, que haya vencido o que se haya anulado. Pide otra a quien te invitó.',
+            evento: $event,
+        );
+    }
+
+    /** El formulario existe pero el evento aún no se publica o ya cerró. */
+    public static function eventoNoDisponible(Event $event): self
+    {
+        $borrador = $event->status === EventStatus::Borrador;
+
+        return new self(
+            $borrador ? 'Evento sin publicar' : 'Inscripciones cerradas',
+            $borrador ? 'Este formulario todavía no está disponible.' : 'Este evento ya no recibe inscripciones.',
+            estado: 404,
         );
     }
 
@@ -57,6 +81,6 @@ class EnlaceNoUtilizable extends Exception
             'accionUrl' => $this->accionUrl,
             'accionTexto' => $this->accionTexto,
             'evento' => $this->evento,
-        ], 403);
+        ], $this->estado);
     }
 }

@@ -99,7 +99,7 @@
                 <td style="text-align:right">${{ number_format($orden->calcularSubtotal(), 0, ',', '.') }}</td>
             </tr>
             <tr>
-                <td style="color:var(--exito)">{{ $orden->tramoDeDescuento()?->etiqueta() }}</td>
+                <td style="color:var(--exito)">{{ $orden->etiquetaDeDescuento() }}</td>
                 <td style="text-align:right;color:var(--exito)">
                     -${{ number_format($orden->calcularDescuento(), 0, ',', '.') }}
                 </td>
@@ -107,6 +107,30 @@
         </tbody>
     </table>
 @endif
+
+        <div id="codigo" style="margin:16px 0 4px">
+            @if ($orden->discountCode)
+                <div class="aviso aviso-info" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                    <span>Código aplicado: <strong>{{ $orden->discountCode->formateado() }}</strong></span>
+                    <form method="POST" action="{{ route('inscripcion.codigo.quitar', ['token' => $token]) }}" style="margin:0">
+                        <button type="submit" class="btn btn-secundario">Quitar código</button>
+                    </form>
+                </div>
+            @else
+                <form method="POST" action="{{ route('inscripcion.codigo.aplicar', ['token' => $token]) }}">
+                    <label for="codigo-descuento">¿Tienes un código de descuento?</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <input type="text" id="codigo-descuento" name="codigo" maxlength="24"
+                               value="{{ $codigoEscrito ?? '' }}" autocomplete="off" autocapitalize="characters"
+                               style="flex:1;min-width:180px;text-transform:uppercase">
+                        <button type="submit" class="btn btn-secundario">Aplicar</button>
+                    </div>
+                </form>
+                @if ($errorDeCodigo ?? null)
+                    <div class="aviso aviso-error" style="margin-top:10px">{{ $errorDeCodigo }}</div>
+                @endif
+            @endif
+        </div>
 
         <div class="total">
             <span>Total a pagar</span>

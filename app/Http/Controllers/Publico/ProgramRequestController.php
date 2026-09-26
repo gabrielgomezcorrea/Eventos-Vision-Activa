@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Publico;
 
+use App\Exceptions\EnlaceNoUtilizable;
 use App\Http\Controllers\Controller;
 use App\Mail\ProgramaDelEvento;
 use App\Models\Event;
@@ -33,7 +34,7 @@ class ProgramRequestController extends Controller
 {
     public function mostrar(Event $event, bool $embed = false): View
     {
-        abort_unless($event->admiteInscripciones(), 404);
+        throw_unless($event->admiteInscripciones(), EnlaceNoUtilizable::eventoNoDisponible($event));
 
         return view('publico.programa', [
             'event' => $event,
@@ -257,7 +258,7 @@ class ProgramRequestController extends Controller
 
         return match (true) {
             $campo->type === 'email' => Texto::correo($valor),
-            $campo->type === 'tel' => Texto::telefono($valor) ?? Texto::limpiar($valor),
+            $campo->type === 'tel' => Texto::telefono($valor),
             in_array($campo->key, ['first_name', 'last_name', 'institution', 'position'], true) => Texto::capitalizar($valor),
             default => Texto::limpiar($valor),
         };
@@ -313,7 +314,6 @@ class ProgramRequestController extends Controller
             'access_type_id.in' => 'Elige una de las opciones de la lista.',
             'access_type_id.required' => 'Elige una de las opciones de la lista.',
             'position_otro.required_if' => 'Escribe cuál es tu cargo.',
-            'phone.regex' => 'Escribe un celular con código de país, como 56912345678.',
         ];
 
         foreach ($campos as $campo) {

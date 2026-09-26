@@ -8,6 +8,7 @@ use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
 use Database\Factories\OrderFactory;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -228,7 +229,70 @@ class Order extends Model
             return (int) $this->discount_amount;
         }
 
+        if ($this->discountCode !== null) {
+            return $this->descuentoDelCodigo();
+        }
+
         return $this->tramoDeDescuento()?->calcular($this->calcularSubtotal()) ?? 0;
+    }
+
+    /**
+     * Participantes de esta inscripción que ya están en otra inscripción vigente
+     * del mismo evento que usó un código. Cada persona (por RUT) usa un solo
+     * código por evento: sin esto, junta descuentos con códigos distintos.
+     * Una inscripción vencida o cancelada ya devolvió su código y no cuenta.
+     *
+     * @return Collection<int, Participant>
+     */
+    public function participantesConCodigoPrevio(): Collection
+    {
+        $ruts = $this->participantesVigentes()->whereNotNull('rut')->pluck('rut');
+
+        if ($ruts->isEmpty()) {
+            return new Collection;
+        }
+
+        return $this->participantesVigentes()->whereNotNull('rut')
+            ->whereIn('rut', Participant::query()
+                ->whereIn('rut', $ruts)
+                ->where('status', '!=', ParticipantStatus::Reemplazado->value)
+                ->whereHas('order', fn ($orden) => $orden
+                    ->where('event_id', $this->event_id)
+                    ->where('id', '!=', $this->getKey())
+                    ->whereNotNull('discount_code_id')
+                    ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada]))
+                ->select('rut'))
+            ->get();
+    }
+
+    /** @return BelongsTo<DiscountCode, $this> */
+    public function discountCode(): BelongsTo
+    {
+        return $this->belongsTo(DiscountCode::class);
+    }
+
+    /**
+     * Descuento del código sobre un borrador. Se calcula por colegio, igual que
+     * al confirmar (cada colegio nace como su propia orden): un monto fijo se
+     * aplica a cada uno y nunca deja un subtotal negativo.
+     */
+    private function descuentoDelCodigo(): int
+    {
+        return (int) $this->participantesVigentes
+            ->groupBy('establishment_id')
+            ->sum(fn ($grupo): int => $this->discountCode->calcular(
+                (int) $grupo->sum(fn (Participant $p) => $p->accessType?->precioVigente() ?? 0)
+            ));
+    }
+
+    /** Cómo se le explica el descuento al cliente: el código usado o el tramo por cantidad. */
+    public function etiquetaDeDescuento(): ?string
+    {
+        if ($this->discountCode !== null) {
+            return 'Código '.$this->discountCode->formateado().' ('.$this->discountCode->etiqueta().')';
+        }
+
+        return $this->esBorrador() ? $this->tramoDeDescuento()?->etiqueta() : $this->discount_label;
     }
 
     /** Tramo de descuento aplicable a esta orden, o null. */

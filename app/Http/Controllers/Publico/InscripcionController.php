@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Publico;
 
+use App\Actions\AplicarCodigoDeDescuento;
 use App\Actions\ConfirmarConjunto;
 use App\Actions\ConfirmarOrden;
 use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\RegistrarComprobante;
 use App\Enums\OrderKind;
+use App\Exceptions\CodigoNoAplicable;
 use App\Exceptions\ComprobanteNoAceptado;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\EnlaceNoUtilizable;
@@ -42,7 +44,7 @@ class InscripcionController extends Controller
 
     public function inicio(Event $event): Renderable
     {
-        abort_unless($event->admiteInscripciones(), 404);
+        throw_unless($event->admiteInscripciones(), EnlaceNoUtilizable::eventoNoDisponible($event));
 
         return view('publico.inscripcion.inicio', [
             'event' => $event,
@@ -147,7 +149,7 @@ class InscripcionController extends Controller
             'responsible_position_otro' => ReglasDeContacto::cargoOtro('responsible_position'),
             'responsible_phone' => ReglasDeContacto::telefono(),
             'responsible_institution' => ReglasDeContacto::establecimiento(! $particular),
-            'kind' => ['required', Rule::enum(OrderKind::class)],
+            'kind' => ['required', Rule::in(array_map(fn (OrderKind $tipo) => $tipo->value, OrderKind::elegiblesPorElCliente()))],
         ], [], [
             'responsible_name' => 'nombre',
             'responsible_lastname' => 'apellidos',
@@ -393,6 +395,34 @@ class InscripcionController extends Controller
         [$orden] = $this->resolver($token);
 
         return $this->vistaPaso('resumen', $token, $orden, ['valores' => []]);
+    }
+
+    public function aplicarCodigo(AplicarCodigoDeDescuento $aplicar, Request $request, string $token): RedirectResponse|Renderable
+    {
+        [$orden] = $this->resolver($token);
+
+        try {
+            $aplicar($orden, (string) $request->input('codigo'));
+        } catch (CodigoNoAplicable $e) {
+            return $this->vistaPaso('resumen', $token, $orden->load([
+                'event', 'establishments', 'participants.accessType', 'participants.establishment', 'payerEntity',
+            ]), [
+                'valores' => [],
+                'errorDeCodigo' => $e->getMessage(),
+                'codigoEscrito' => (string) $request->input('codigo'),
+            ]);
+        }
+
+        return redirect()->to(route('inscripcion.resumen', ['token' => $token]).'#codigo');
+    }
+
+    public function quitarCodigo(string $token): RedirectResponse
+    {
+        [$orden] = $this->resolver($token);
+
+        $orden->forceFill(['discount_code_id' => null])->save();
+
+        return redirect()->to(route('inscripcion.resumen', ['token' => $token]).'#codigo');
     }
 
     public function confirmar(ConfirmarOrden $confirmar, ConfirmarConjunto $confirmarConjunto, string $token): RedirectResponse|Renderable

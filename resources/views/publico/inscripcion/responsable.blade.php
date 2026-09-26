@@ -15,7 +15,7 @@
                 <div class="ancho">
                     <label for="kind">Tipo de inscripción</label>
                     <select id="kind" name="kind">
-                        @foreach (\App\Enums\OrderKind::cases() as $tipo)
+                        @foreach (\App\Enums\OrderKind::elegiblesPorElCliente() as $tipo)
                             <option value="{{ $tipo->value }}" @selected(($valores['kind'] ?? '') === $tipo->value)>
                                 {{ $tipo->label() }}
                             </option>

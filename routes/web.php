@@ -8,9 +8,11 @@ use App\Http\Controllers\Configuracion\WebController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DescargarComprobanteController;
 use App\Http\Controllers\Eventos\AccesoController;
+use App\Http\Controllers\Eventos\CodigoDescuentoController;
 use App\Http\Controllers\Eventos\CuposYPreciosController;
 use App\Http\Controllers\Eventos\EventoController;
 use App\Http\Controllers\Eventos\FormularioPublicoController;
+use App\Http\Controllers\Eventos\InvitacionController;
 use App\Http\Controllers\Eventos\JornadaController;
 use App\Http\Controllers\Eventos\TramoDescuentoController;
 use App\Http\Controllers\Inscripciones\InscripcionController;
@@ -47,6 +49,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('eventos/{event}', [EventoController::class, 'destroy'])->name('eventos.destroy');
 
     Route::post('eventos/{event}/banner', [EventoController::class, 'subirBanner'])->name('eventos.banner.store');
+    Route::patch('eventos/{event}/banner', [EventoController::class, 'ubicarBanner'])->name('eventos.banner.update');
     Route::delete('eventos/{event}/banner', [EventoController::class, 'quitarBanner'])->name('eventos.banner.destroy');
 
     Route::get('eventos/{event}/cupos', CuposYPreciosController::class)->name('eventos.cupos');
@@ -72,6 +75,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('eventos/{event}/descuentos', [TramoDescuentoController::class, 'store'])->name('eventos.descuentos.store');
         Route::patch('eventos/{event}/descuentos/{tier}', [TramoDescuentoController::class, 'update'])->name('eventos.descuentos.update');
         Route::delete('eventos/{event}/descuentos/{tier}', [TramoDescuentoController::class, 'destroy'])->name('eventos.descuentos.destroy');
+
+        Route::get('eventos/{event}/invitaciones', [InvitacionController::class, 'index'])->name('eventos.invitaciones.index');
+        Route::post('eventos/{event}/invitaciones', [InvitacionController::class, 'store'])->name('eventos.invitaciones.store');
+        Route::patch('eventos/{event}/invitaciones/{invitation}/anular', [InvitacionController::class, 'anular'])->name('eventos.invitaciones.anular');
+
+        Route::get('eventos/{event}/codigos', [CodigoDescuentoController::class, 'index'])->name('eventos.codigos.index');
+        Route::post('eventos/{event}/codigos', [CodigoDescuentoController::class, 'store'])->name('eventos.codigos.store');
+        Route::patch('eventos/{event}/codigos/{discountCode}', [CodigoDescuentoController::class, 'update'])->name('eventos.codigos.update');
     });
 
     Route::get('comprobantes', [ComprobanteController::class, 'index'])->name('comprobantes.index');

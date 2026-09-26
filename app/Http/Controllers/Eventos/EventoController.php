@@ -14,10 +14,13 @@ use App\Http\Requests\Eventos\ActualizarEventoRequest;
 use App\Http\Requests\Eventos\BannerRequest;
 use App\Http\Requests\Eventos\CambiarEstadoEventoRequest;
 use App\Http\Requests\Eventos\CrearEventoRequest;
+use App\Http\Requests\Eventos\UbicacionesBannerRequest;
 use App\Models\AccessType;
 use App\Models\BankAccount;
+use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\EventSession;
+use App\Models\Invitation;
 use App\Models\Payment;
 use App\Support\Forms\ProgramFormField;
 use Illuminate\Database\Eloquent\Builder;
@@ -126,6 +129,12 @@ class EventoController extends Controller
                 ],
                 'enlace_publico' => route('publico.programa', ['event' => $event->slug]),
                 'banner' => $event->tieneBanner() ? $event->bannerUrl() : null,
+                'banner_ubicaciones' => collect(Event::UBICACIONES_BANNER)
+                    ->map(fn (string $etiqueta, string $clave): array => [
+                        'clave' => $clave,
+                        'etiqueta' => $etiqueta,
+                        'activa' => in_array($clave, $event->ubicacionesDelBanner(), true),
+                    ])->values()->all(),
                 'banner_max_mb' => Event::BANNER_MAX_MB,
                 'banner_formatos' => implode(', ', array_map('mb_strtoupper', Event::BANNER_FORMATOS)),
                 'usa_lugar' => $event->modality !== EventModality::Online,
@@ -153,9 +162,25 @@ class EventoController extends Controller
                     ['value' => EventStatus::Cerrado->value, 'label' => EventStatus::Cerrado->label(), 'descripcion' => 'Deja de aceptar inscripciones nuevas. Las que ya existen no se tocan.'],
                 ],
             ],
+            'codigos' => $usuario->can('viewAny', DiscountCode::class)
+                ? $event->discountCodes()->latest('id')->get()->map(
+                    fn (DiscountCode $codigo): string => implode(' · ', [
+                        $codigo->formateado(),
+                        $codigo->etiqueta(),
+                        $codigo->used_people.' de '.$codigo->max_people.' personas',
+                        CodigoDescuentoController::estado($codigo)['label'],
+                    ])
+                )->values()->all()
+                : [],
+            'invitaciones' => $usuario->can('viewAny', Invitation::class)
+                ? $event->invitations()->latest('id')->get()->map(
+                    fn (Invitation $i): string => $i->email.' · '.$i->estadoEtiqueta()
+                )->values()->all()
+                : [],
             'puede' => [
                 'editar' => $usuario->can('update', $event),
                 'eliminar' => $usuario->can('delete', $event),
+                'descuentos' => $usuario->can('viewAny', DiscountCode::class),
             ],
         ]);
     }
@@ -187,6 +212,22 @@ class EventoController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Banner cargado. Ya se ve en los correos y en las páginas del evento.']);
+
+        return back();
+    }
+
+    public function ubicarBanner(UbicacionesBannerRequest $request, Event $event): RedirectResponse
+    {
+        abort_unless($event->tieneBanner(), 404);
+
+        $elegidas = $request->elegidas();
+
+        // Todas marcadas se guarda como nulo, así una ubicación futura nace incluida.
+        $event->update([
+            'banner_placements' => count($elegidas) === count(Event::UBICACIONES_BANNER) ? null : $elegidas,
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Ubicaciones del banner guardadas.']);
 
         return back();
     }

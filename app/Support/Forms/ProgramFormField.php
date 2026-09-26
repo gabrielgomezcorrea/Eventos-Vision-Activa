@@ -131,9 +131,6 @@ class ProgramFormField
         return in_array($this->key, self::CAMPOS_BASE, true);
     }
 
-    /** Móvil chileno, con o sin +56, escrito como sea. */
-    public const REGLA_TELEFONO = 'regex:/^(\+?56)?\s*0?9[\s.-]*(\d[\s.-]*){8}$/';
-
     /**
      * Reglas de validación de este campo.
      *
@@ -151,7 +148,7 @@ class ProgramFormField
             'position' => ReglasDeContacto::cargo($this->required, $this->options ?: self::CARGOS),
             'email' => ReglasDeContacto::correo($this->required),
             'institution' => ReglasDeContacto::establecimiento($this->required),
-            default => null,
+            default => $this->type === 'tel' ? ReglasDeContacto::telefono($this->required) : null,
         };
 
         if ($compartidas !== null) {
@@ -183,10 +180,7 @@ class ProgramFormField
     /** @return array<int, string> */
     private function reglasPropias(): array
     {
-        return match ($this->key) {
-            'phone' => [self::REGLA_TELEFONO],
-            default => $this->type === 'text' ? ['min:2'] : [],
-        };
+        return $this->type === 'text' ? ['min:2'] : [];
     }
 
     /**

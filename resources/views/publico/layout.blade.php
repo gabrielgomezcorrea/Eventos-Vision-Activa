@@ -100,7 +100,7 @@
 </head>
 <body>
 <div class="envoltura @yield('envoltura')">
-    @include('publico._banner', ['evento' => $event])
+    @include('publico._banner', ['evento' => $event, 'ubicacion' => 'form'])
 
     <div class="cabecera">
         <h1>{{ $event->name }}</h1>

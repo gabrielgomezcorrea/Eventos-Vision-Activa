@@ -14,6 +14,17 @@ enum OrderKind: string
     /** Invitado del evento: no paga, ocupa cupo y se acredita como cualquiera. */
     case Invitado = 'guest';
 
+    /**
+     * Tipos que puede elegir un cliente en el formulario público. El invitado
+     * lo crea solo Administración: dejarlo aquí permitía inscribirse gratis.
+     *
+     * @return list<self>
+     */
+    public static function elegiblesPorElCliente(): array
+    {
+        return [self::Institucional, self::Particular];
+    }
+
     public function label(): string
     {
         return match ($this) {
