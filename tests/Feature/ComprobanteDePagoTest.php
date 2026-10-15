@@ -8,7 +8,6 @@ use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Exceptions\ComprobanteNoAceptado;
-use App\Mail\ComprobanteRecibido;
 use App\Models\AccessType;
 use App\Models\AuditLog;
 use App\Models\Event;
@@ -88,7 +87,8 @@ class ComprobanteDePagoTest extends TestCase
         // El ciclo de vida de la orden no cambia por informar un pago.
         $this->assertSame(OrderStatus::Reservada, $this->orden->fresh()->status);
 
-        Mail::assertQueued(ComprobanteRecibido::class);
+        // El estado del comprobante se ve en la pestaña Pago: no hay correo.
+        Mail::assertQueuedCount(1); // solo el de la orden confirmada
     }
 
     public function test_el_archivo_va_al_disco_privado_y_la_base_solo_guarda_metadata(): void

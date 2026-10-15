@@ -37,7 +37,7 @@ class PagoRechazado extends Mailable implements ShouldQueue
                 'orden' => $this->orden,
                 'event' => $this->orden->event,
                 'observacion' => $this->observacion,
-                'urlEstado' => route('inscripcion.estado', ['token' => $token]),
+                'urlEstado' => route('inscripcion.portal.pago', ['token' => $token]),
             ],
         );
     }

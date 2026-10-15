@@ -6,7 +6,6 @@ use App\Actions\ConfirmarOrden;
 use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\EmitirTickets;
 use App\Enums\PaymentStatus;
-use App\Mail\ComprobanteRecibido;
 use App\Mail\CredencialParticipante;
 use App\Mail\EnlaceDeAcceso;
 use App\Mail\OrdenConfirmada;
@@ -72,7 +71,6 @@ class CorreosDelMvpTest extends TestCase
 
         return [
             'orden confirmada' => (new OrdenConfirmada($this->orden))->render(),
-            'comprobante recibido' => (new ComprobanteRecibido($this->orden))->render(),
             'pago observado' => (new PagoObservado($this->orden, 'Falta el detalle.'))->render(),
             'pago rechazado' => (new PagoRechazado($this->orden, 'No corresponde.'))->render(),
             'pago aprobado' => (new PagoAprobado($this->orden))->render(),
@@ -81,10 +79,10 @@ class CorreosDelMvpTest extends TestCase
         ];
     }
 
-    public function test_estan_los_siete_correos_del_mvp(): void
+    public function test_estan_los_correos_que_piden_una_accion(): void
     {
         foreach ([
-            EnlaceDeAcceso::class, OrdenConfirmada::class, ComprobanteRecibido::class,
+            EnlaceDeAcceso::class, OrdenConfirmada::class,
             PagoObservado::class, PagoAprobado::class, RecordatorioDeReserva::class,
             ReservaVencida::class,
         ] as $clase) {

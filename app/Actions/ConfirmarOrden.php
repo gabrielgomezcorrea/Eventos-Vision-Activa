@@ -10,6 +10,7 @@ use App\Mail\OrdenConfirmada;
 use App\Models\DiscountCode;
 use App\Models\Order;
 use App\Models\Participant;
+use App\Models\ProgramRequest;
 use App\Support\Auditor;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -124,6 +125,14 @@ class ConfirmarOrden
             return $fresca;
         });
 
+        // Quien pidió el programa con este correo ya se inscribió: queda marcado
+        // solo, sin que Coordinación tenga que hacerlo a mano.
+        ProgramRequest::query()
+            ->where('event_id', $orden->event_id)
+            ->where('email', mb_strtolower($orden->responsible_email))
+            ->whereNull('converted_at')
+            ->update(['converted_at' => now()]);
+
         Auditor::registrar(
             sobre: $orden,
             accion: 'orden.confirmada',
@@ -167,16 +176,36 @@ class ConfirmarOrden
             throw OrdenNoConfirmable::porque('Este evento ya no admite inscripciones.');
         }
 
+        $faltantes = $this->faltantes($orden);
+
+        if ($faltantes !== []) {
+            throw OrdenNoConfirmable::porque($faltantes[0]['mensaje']);
+        }
+    }
+
+    /**
+     * Lo que le falta a un borrador para poder confirmarse, en el orden en que
+     * conviene completarlo. Lo usa la pantalla para decirlo antes de que el
+     * cliente apriete, y `verificar` para rechazarlo igual en el servidor.
+     *
+     * @return array<int, array{bloque: string, mensaje: string}>
+     */
+    public function faltantes(Order $orden): array
+    {
+        $faltantes = [];
+
         if (blank($orden->responsible_name) || blank($orden->responsible_lastname)) {
-            throw OrdenNoConfirmable::porque('Falta registrar al responsable de la inscripción.');
+            $faltantes[] = ['bloque' => 'responsable', 'mensaje' => 'Falta registrar al responsable de la inscripción.'];
         }
 
         if ($orden->payer_entity_id === null) {
-            throw OrdenNoConfirmable::porque('Falta registrar la entidad pagadora.');
+            $faltantes[] = ['bloque' => 'pagador', 'mensaje' => 'Falta registrar la entidad pagadora.'];
         }
 
         if ($orden->participantesVigentes()->count() === 0) {
-            throw OrdenNoConfirmable::porque('Agrega al menos un participante antes de confirmar.');
+            $faltantes[] = ['bloque' => 'participantes', 'mensaje' => 'Agrega al menos un participante antes de confirmar.'];
         }
+
+        return $faltantes;
     }
 }

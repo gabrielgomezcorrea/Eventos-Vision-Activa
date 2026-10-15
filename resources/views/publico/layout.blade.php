@@ -40,8 +40,82 @@
         /* En el celular el menú va arriba, no al costado: el contenido manda. */
         @media(max-width:820px){
             .columnas{grid-template-columns:1fr;gap:16px}
-            .lado{position:static}
+            .lado{position:static;order:2}
         }
+        /* Pestañas del portal: mismas píldoras que los pasos del recorrido
+           (.pasos), pero enlaces. En el celular hacen scroll horizontal. */
+        .pestanas{display:flex;gap:6px;margin:0 0 18px;padding:0 0 4px;overflow-x:auto;font-size:.82rem}
+        .pestana{flex:0 0 auto;padding:5px 11px;border-radius:999px;background:#fff;border:1px solid var(--borde);
+                 color:var(--texto-suave);text-decoration:none;white-space:nowrap}
+        .pestana{font:inherit;font-size:inherit;cursor:pointer}
+        .pestana:hover{border-color:var(--primario);color:var(--primario)}
+        .pestana.activa{background:var(--primario);border-color:var(--primario);color:#fff;font-weight:600}
+        html{scroll-behavior:smooth}
+        [id]{scroll-margin-top:16px}
+        /* Lo que falta para poder enviar: en rojo, al lado del botón bloqueado. */
+        .falta{color:var(--error);font-size:.9rem}
+        .falta a,.falta .enlace{color:var(--error);text-decoration:underline;font-weight:600}
+        .btn-bloqueado{opacity:.62;cursor:not-allowed}
+        /* Al llegar con el ancla, la alerta se marca para que se note. */
+        #aviso-pago:target{outline:2px solid var(--error);outline-offset:2px}
+        .enlace-aviso{color:inherit;text-decoration:underline;font-weight:600}
+        .enlace{background:none;border:0;padding:0;font:inherit;cursor:pointer}
+        .enlace-simple{color:var(--primario);font-weight:600;text-decoration:none;padding:0 6px}
+        .enlace-simple:hover{text-decoration:underline}
+        /* Banner: centrado y de tamaño contenido, como pieza y no como fondo. */
+        .portal-banner img{margin-left:auto;margin-right:auto;max-width:480px}
+        .id-credencial{display:inline-flex;align-items:center;justify-content:center;width:96px;height:96px;flex-shrink:0;
+                       border-radius:12px;background:var(--primario);color:#fff;font-weight:700;font-size:1.6rem;letter-spacing:.05em}
+        /* Credencial digital (foto 5 de docs/design-references): cuadro ID,
+           datos y un degradé suave hacia la derecha. */
+        .credencial-digital{display:flex;gap:24px;align-items:center;flex-wrap:wrap;padding:32px 24px;
+                            background:linear-gradient(100deg,#fff 45%,#E6F6F1 100%)}
+        .credencial-digital .id-credencial{width:110px;height:110px;font-size:1.9rem}
+        .credencial-digital-datos{flex:1;min-width:200px}
+        .credencial-digital-datos h2{font-size:1.2rem;margin:2px 0 4px}
+        .credencial-digital-evento{margin:0 0 14px;color:var(--texto);font-size:.92rem}
+        .credencial-digital-pie{display:flex;align-items:center;gap:10px;font-size:.88rem;color:var(--texto)}
+        /* Botón que todavía no se puede usar: gris y sin cursor de acción. */
+        .btn-apagado,.btn-apagado:disabled{background:#E9EAEE;color:#6B7280;cursor:not-allowed;opacity:1;border-radius:999px}
+        /* Encabezado de bloque: título y su estado en la misma línea. */
+        .titulo-bloque{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+        .titulo-bloque h2{margin:0}
+        .etiqueta-seccion{margin:0 0 4px;font-size:.78rem;text-transform:uppercase;
+                          letter-spacing:.03em;color:var(--texto-suave);font-weight:600}
+        /* Doble clase: .chip se declara más abajo y, con la misma fuerza, pintaba
+           de azul todas las insignias. */
+        .chip.chip-exito{background:var(--exito-suave);color:var(--exito)}
+        .chip.chip-aviso{background:var(--aviso-suave);color:#8A4704}
+        .chip.chip-error{background:var(--error-suave);color:var(--error)}
+        .fila-persona{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #EDF0F3}
+        .fila-persona:last-of-type{border-bottom:0}
+        .fila-persona-datos{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+        /* Lo que se agrega va plegado tras un botón: la pantalla muestra lo que
+           ya hay, y el formulario aparece cuando se pide. */
+        .desplegable{margin-top:16px;border-top:1px solid var(--borde);padding-top:16px}
+        .desplegable > summary{display:inline-block;cursor:pointer;font-weight:600;font-size:.9rem;color:var(--primario);list-style:none}
+        .desplegable > summary:not(.btn)::before{content:"+ "}
+        .desplegable > summary.btn{color:var(--primario)}
+        .desplegable[open] > summary.btn{display:none}
+        .desplegable[open] > summary{margin-bottom:14px}
+        .desplegable-chico > summary{cursor:pointer;color:var(--primario);font-size:.85rem;margin-top:4px}
+        .estado-orden{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+        .estado-orden h2{margin:0}
+        .estado-orden .chips{display:flex;gap:6px;flex-wrap:wrap}
+        .linea{list-style:none;margin:0;padding:0}
+        .linea li{display:grid;grid-template-columns:64px 14px 1fr;gap:12px;align-items:start;padding:0 0 22px}
+        .linea .hora{min-width:52px;text-align:center;margin-top:1px}
+        /* Punto y línea vertical que unen las horas, como en la referencia. */
+        .linea .punto{position:relative;align-self:stretch}
+        .linea .punto::before{content:"";position:absolute;left:3px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--primario)}
+        .linea .punto::after{content:"";position:absolute;left:6px;top:19px;bottom:-22px;width:2px;background:#C9D6EA}
+        .linea li:last-child{padding-bottom:0}
+        .linea li:last-child .punto::after{display:none}
+        .linea .nombre{font-weight:600}
+        .linea .detalle{font-size:.85rem;color:var(--texto-suave)}
+        .iniciales{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;
+                   border-radius:50%;background:var(--info-suave);color:var(--primario);
+                   font-weight:700;font-size:.85rem;flex-shrink:0}
         .banner{display:block;width:100%;height:auto;border-radius:10px;margin-bottom:20px}
         .cabecera{margin-bottom:20px}
         .cabecera h1{font-size:1.3rem;margin:0 0 4px}
@@ -63,9 +137,14 @@
         @media(max-width:600px){.rejilla{grid-template-columns:1fr}}
         label{display:block;font-weight:600;font-size:.88rem;margin-bottom:5px}
         .opcional{font-weight:400;color:var(--texto-suave);font-size:.8rem}
-        input[type=text],input[type=email],input[type=tel],select{
+        input[type=text],input[type=email],input[type=tel],input[type=date],input[type=number],select{
             width:100%;padding:10px 12px;font:inherit;color:inherit;background:#fff;
             border:1px solid var(--borde);border-radius:8px}
+        input[type=file]{width:100%;padding:6px;font:inherit;font-size:.9rem;color:var(--texto-suave);background:#fff;
+                         border:1px solid var(--borde);border-radius:8px;cursor:pointer}
+        input[type=file]::file-selector-button{margin-right:12px;padding:6px 14px;font:inherit;font-weight:600;color:var(--texto);
+                         background:var(--fondo);border:1px solid var(--borde);border-radius:6px;cursor:pointer}
+        input[type=file]::file-selector-button:hover{border-color:var(--primario);color:var(--primario)}
         input:focus,select:focus{outline:2px solid var(--primario);outline-offset:1px;border-color:var(--primario)}
         [aria-invalid=true]{border-color:var(--error)}
         .ayuda{color:var(--texto-suave);font-size:.8rem;margin-top:4px}
@@ -83,7 +162,9 @@
         .btn-primario:hover{background:var(--primario-oscuro)}
         .btn-secundario{background:#fff;color:var(--texto);border:1px solid var(--borde)}
         .btn-peligro{background:transparent;color:var(--error);border:1px solid var(--borde);padding:6px 12px;font-size:.83rem}
-        .btn:disabled,.btn[disabled]{opacity:.62;cursor:progress}
+        .btn:disabled,.btn[disabled]{opacity:.62;cursor:not-allowed}
+        .btn[aria-busy=true]{cursor:progress}
+        fieldset:disabled input{background:#F2F4F7;color:var(--texto-suave)}
         table{width:100%;border-collapse:collapse;font-size:.9rem}
         th{text-align:left;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;
            color:var(--texto-suave);padding:8px 10px;border-bottom:1px solid var(--borde)}
@@ -100,7 +181,7 @@
 </head>
 <body>
 <div class="envoltura @yield('envoltura')">
-    @include('publico._banner', ['evento' => $event, 'ubicacion' => 'form'])
+    <div class="portal-banner">@include('publico._banner', ['evento' => $event, 'ubicacion' => 'form'])</div>
 
     <div class="cabecera">
         <h1>{{ $event->name }}</h1>

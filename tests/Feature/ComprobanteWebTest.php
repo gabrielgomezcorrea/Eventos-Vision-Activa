@@ -6,7 +6,6 @@ use App\Actions\ConfirmarOrden;
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
-use App\Mail\EnlaceDeAcceso;
 use App\Models\Event;
 use App\Models\MagicLink;
 use App\Models\Order;
@@ -51,9 +50,9 @@ class ComprobanteWebTest extends TestCase
         [, $this->token] = MagicLink::emitir($event, 'ana@colegio.cl', $this->orden);
     }
 
-    private function ruta(string $nombre): string
+    private function ruta(string $nombre, array $extra = []): string
     {
-        return route("inscripcion.{$nombre}", ['token' => $this->token]);
+        return route("inscripcion.{$nombre}", ['token' => $this->token] + $extra);
     }
 
     public function test_una_reserva_vencida_muestra_a_quien_contactar_ahi_mismo(): void
@@ -61,28 +60,14 @@ class ComprobanteWebTest extends TestCase
         $this->orden->event->update(['contact_name' => 'Flor Vidal Oliva', 'contact_phone' => '56951887769', 'contact_email' => 'administracion@visionactiva.cl']);
         $this->orden->update(['status' => OrderStatus::Vencida]);
 
-        $this->get($this->ruta('estado'))
+        $this->get($this->ruta('portal.pago'))
             ->assertOk()
             ->assertSeeInOrder(['La reserva de cupos venció', 'Flor Vidal Oliva', '+56 9 5188 7769', 'administracion@visionactiva.cl']);
     }
 
-    public function test_inscribir_otro_establecimiento_manda_el_enlace_sin_volver_a_pedir_el_correo(): void
-    {
-        // Vuelve al mismo bloque desde el que se apretó: sin el ancla, la
-        // página recarga arriba y el aviso queda fuera de pantalla.
-        $this->post(route('inscripcion.otro', ['token' => $this->token]))
-            ->assertRedirect(route('inscripcion.estado', ['token' => $this->token, 'enviado' => 1]).'#otro');
-
-        Mail::assertQueued(EnlaceDeAcceso::class, fn (EnlaceDeAcceso $correo): bool => $correo->numeroDeOrden === null);
-
-        $this->get(route('inscripcion.estado', ['token' => $this->token, 'enviado' => 1]))
-            ->assertOk()
-            ->assertSee('Te enviamos un correo a ana@colegio.cl');
-    }
-
     public function test_la_pantalla_de_estado_ofrece_informar_el_pago(): void
     {
-        $html = $this->get($this->ruta('estado'))
+        $html = $this->get($this->ruta('portal.pago'))
             ->assertOk()
             ->assertSee('name="proof"', escape: false)
             ->getContent();
@@ -105,11 +90,14 @@ class ComprobanteWebTest extends TestCase
             'payer_name' => 'Fundación Educar',
             'payer_rut' => '76.086.428-5',
             'proof' => UploadedFile::fake()->create('comprobante.pdf', 200, 'application/pdf'),
-        ])->assertRedirect($this->ruta('estado'));
+        ])->assertRedirect($this->ruta('portal.pago', ['comprobante' => 'recibido']));
 
         $this->assertSame(PaymentStatus::EnValidacion, $this->orden->fresh()->payment_status);
 
-        $this->get($this->ruta('estado'))
+        $this->get($this->ruta('portal.pago', ['comprobante' => 'recibido']))
+            ->assertSee('Se ha subido correctamente tu comprobante.');
+
+        $this->get($this->ruta('portal.pago'))
             ->assertOk()
             ->assertSee('Comprobante en validación')
             ->assertDontSee('Informar el pago');
@@ -168,7 +156,7 @@ class ComprobanteWebTest extends TestCase
             'payer_name' => 'Fundación Educar',
             'payer_rut' => '76.086.428-5',
             'proof' => UploadedFile::fake()->create('c.pdf', 50, 'application/pdf'),
-        ])->assertRedirect($this->ruta('estado'));
+        ])->assertRedirect($this->ruta('portal.pago', ['comprobante' => 'recibido']));
 
         $this->assertSame('76086428-5', $this->orden->fresh()->pagoVigente()->payer_rut);
     }
@@ -179,5 +167,35 @@ class ComprobanteWebTest extends TestCase
             'amount' => 90000,
             'proof' => UploadedFile::fake()->create('c.pdf', 50, 'application/pdf'),
         ])->assertForbidden();
+    }
+
+    public function test_si_falla_otro_campo_el_comprobante_no_se_vuelve_a_pedir(): void
+    {
+        $html = $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'bank_name' => 'BancoEstado',
+            'payer_name' => 'Fundación Educar',
+            'payer_rut' => '76.086.428-5',
+            // Contenido de PDF real: al reusarlo, el tipo se lee del archivo.
+            'proof' => UploadedFile::fake()->createWithContent('comprobante.pdf', "%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"),
+        ])->assertOk()
+            ->assertSee('comprobante.pdf')
+            ->getContent();
+
+        preg_match('/name="proof_guardado" value="([^"]+)"/', $html, $m);
+        $this->assertNotEmpty($m[1] ?? null, 'El archivo no quedó guardado para el siguiente intento.');
+
+        // Segundo intento: solo se agrega la fecha, sin volver a subir el archivo.
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'paid_on' => now()->toDateString(),
+            'bank_name' => 'BancoEstado',
+            'payer_name' => 'Fundación Educar',
+            'payer_rut' => '76.086.428-5',
+            'proof_guardado' => html_entity_decode($m[1]),
+        ])->assertRedirect($this->ruta('portal.pago', ['comprobante' => 'recibido']));
+
+        $pago = $this->orden->fresh()->pagoVigente();
+        $this->assertSame('comprobante.pdf', $pago->proofs->sole()->original_name);
     }
 }

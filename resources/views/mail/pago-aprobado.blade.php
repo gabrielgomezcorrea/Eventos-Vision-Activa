@@ -22,13 +22,11 @@ Hola {{ $orden->responsible_name }},
 ## Credenciales de acceso
 
 Las credenciales de tus {{ $orden->participantesVigentes->count() }} participante(s) ya están
-disponibles. Puedes verlas todas juntas, imprimirlas o reenviarlas.
+disponibles. Desde ahí descargas o reenvías la de cada uno.
 
 <x-mail::button :url="$urlCredenciales">
-Ver e imprimir las credenciales
+Ver las credenciales
 </x-mail::button>
-
-También enviamos su credencial a cada participante que registró un correo.
 
 @include('mail._contacto', ['evento' => $event])
 

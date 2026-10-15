@@ -34,16 +34,16 @@ Gracias por tu interés en **{{ $event->name }}**.@if ($event->attachments->isNo
 
 **Así te inscribes en línea:**
 
-1. Entras con tu correo desde el botón de abajo, sin contraseña.
+1. Entras desde el botón de abajo, sin contraseña ni volver a escribir tu correo.
 2. Completas tus datos, los del establecimiento y los participantes.
 3. Transfieres el valor de la inscripción y subes el comprobante.
-4. Cuando validamos el pago, cada participante recibe su credencial con código QR.
+4. Cuando validamos el pago, recibes las credenciales con código QR de tus participantes.
 
-<x-mail::button :url="route('inscripcion.inicio', $event)">
+<x-mail::button :url="$enlace">
 Inscribirme
 </x-mail::button>
 
-Entra con tu correo. No necesitas contraseña y puedes retomar cuando quieras.
+Este botón te lleva directo a tu inscripción. Puedes retomarla cuando quieras desde este mismo correo.
 
 @include('mail._contacto', ['evento' => $event])
 

@@ -1,5 +1,5 @@
 import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
-import { CheckCircle2, Mail, Trash2, Undo2 } from 'lucide-react';
+import { Mail, Trash2 } from 'lucide-react';
 import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoController';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
 import { Campo } from '@/components/campo';
@@ -72,52 +72,6 @@ export default function SolicitudShow({ solicitud, respuestas, puede }: Props) {
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {puede.gestionar && (
-                            <Confirmar
-                                titulo={
-                                    solicitud.inscrita
-                                        ? 'Deshacer la marca'
-                                        : 'Marcar que se inscribió'
-                                }
-                                descripcion={
-                                    solicitud.inscrita
-                                        ? 'La solicitud vuelve a quedar como pendiente de seguimiento.'
-                                        : `Queda registrado que ${solicitud.persona} ya hizo su inscripción.`
-                                }
-                                textoAccion={
-                                    solicitud.inscrita
-                                        ? 'Deshacer'
-                                        : 'Confirmar'
-                                }
-                                destructivo={false}
-                                onConfirmar={() =>
-                                    router.post(
-                                        SolicitudController.alternarInscrita.url(
-                                            solicitud.id,
-                                        ),
-                                        {},
-                                        opciones,
-                                    )
-                                }
-                            >
-                                <Button
-                                    variant={
-                                        solicitud.inscrita
-                                            ? 'outline'
-                                            : 'default'
-                                    }
-                                >
-                                    {solicitud.inscrita ? (
-                                        <Undo2 />
-                                    ) : (
-                                        <CheckCircle2 />
-                                    )}
-                                    {solicitud.inscrita
-                                        ? 'Deshacer: no se inscribió'
-                                        : 'Marcar que se inscribió'}
-                                </Button>
-                            </Confirmar>
-                        )}
                         {puede.gestionar && (
                             <Confirmar
                                 titulo="Reenviar el programa"

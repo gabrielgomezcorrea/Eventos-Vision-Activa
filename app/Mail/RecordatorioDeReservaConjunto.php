@@ -43,7 +43,7 @@ class RecordatorioDeReservaConjunto extends Mailable implements ShouldQueue
                 'ordenes' => $this->ordenes,
                 'event' => $this->grupo->event,
                 'total' => (int) $this->ordenes->sum('total'),
-                'urlEstado' => route('inscripcion.estado', ['token' => $token]),
+                'urlEstado' => route('inscripcion.portal.pago', ['token' => $token]),
             ],
         );
     }

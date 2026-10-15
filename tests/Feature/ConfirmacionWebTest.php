@@ -62,21 +62,21 @@ class ConfirmacionWebTest extends TestCase
 
     public function test_el_resumen_ofrece_confirmar(): void
     {
-        $this->get($this->ruta('resumen'))
+        $this->get($this->ruta('portal.pago'))
             ->assertOk()
-            ->assertSee('Confirmar inscripción y recibir instrucciones de pago');
+            ->assertSee('confirmar tu inscripción');
     }
 
     public function test_confirmar_lleva_al_estado_con_los_datos_bancarios(): void
     {
-        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('estado'));
+        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('portal.pago'));
 
         $this->orden->refresh();
 
         $this->assertSame(OrderStatus::Reservada, $this->orden->status);
         $this->assertNotNull($this->orden->number);
 
-        $this->get($this->ruta('estado'))
+        $this->get($this->ruta('portal.pago'))
             ->assertOk()
             ->assertSee($this->orden->number)
             ->assertSee('BancoEstado')
@@ -89,8 +89,8 @@ class ConfirmacionWebTest extends TestCase
     {
         $this->post($this->ruta('confirmar'));
 
-        $this->get($this->ruta('participantes'))->assertForbidden();
-        $this->get($this->ruta('estado'))->assertOk();
+        $this->post($this->ruta('responsable.guardar'))->assertForbidden();
+        $this->get($this->ruta('portal.pago'))->assertOk();
     }
 
     public function test_muestra_un_mensaje_claro_si_se_agotaron_los_cupos(): void
@@ -120,7 +120,7 @@ class ConfirmacionWebTest extends TestCase
 
     public function test_un_doble_envio_no_crea_dos_reservas(): void
     {
-        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('estado'));
+        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('portal.pago'));
         $numero = $this->orden->fresh()->number;
 
         // El cliente vuelve atrás y reenvía el formulario.

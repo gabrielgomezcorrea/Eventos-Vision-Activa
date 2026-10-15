@@ -38,7 +38,7 @@ class OrdenConfirmada extends Mailable implements ShouldQueue
             with: [
                 'orden' => $this->orden,
                 'event' => $this->orden->event,
-                'urlSeguimiento' => route('inscripcion.estado', ['token' => $token]),
+                'urlSeguimiento' => route('inscripcion.portal.pago', ['token' => $token]),
             ],
         );
     }

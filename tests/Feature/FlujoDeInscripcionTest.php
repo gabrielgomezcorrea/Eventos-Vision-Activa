@@ -85,7 +85,7 @@ class FlujoDeInscripcionTest extends TestCase
         [, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
 
         $this->get(route('inscripcion.acceso', ['token' => $token]))
-            ->assertRedirect(route('inscripcion.responsable', ['token' => $token]));
+            ->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token]));
 
         $orden = Order::sole();
 
@@ -117,7 +117,7 @@ class FlujoDeInscripcionTest extends TestCase
         $this->get(route('inscripcion.acceso', ['token' => $tokenBeto]));
 
         // El token de Beto abre su propia orden, nunca la de Ana.
-        $this->get(route('inscripcion.responsable', ['token' => $tokenBeto]))
+        $this->get(route('inscripcion.portal.inscripcion', ['token' => $tokenBeto]))
             ->assertOk()
             ->assertDontSee('ana@colegio.cl');
 
@@ -130,7 +130,7 @@ class FlujoDeInscripcionTest extends TestCase
         [, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
         $this->get(route('inscripcion.acceso', ['token' => $token]));
 
-        $this->get(route('inscripcion.responsable', ['token' => $token]))
+        $this->get(route('inscripcion.portal.inscripcion', ['token' => $token]))
             ->assertOk()
             ->assertDontSee('Invitado especial');
 
@@ -161,13 +161,13 @@ class FlujoDeInscripcionTest extends TestCase
             'responsible_phone' => '56912345678',
             'responsible_institution' => 'Fundación Educar',
             'kind' => OrderKind::Institucional->value,
-        ])->assertRedirect(route('inscripcion.establecimientos', ['token' => $token]));
+        ])->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'guardado' => 'responsable']).'#responsable');
 
         // 2. Establecimiento
 
         $this->post(route('inscripcion.establecimientos.agregar', ['token' => $token]), [
             'name' => 'Colegio San José', 'rbd' => '12345', 'address' => 'Calle 1', 'commune' => 'Ñuñoa',
-        ])->assertRedirect(route('inscripcion.establecimientos', ['token' => $token]));
+        ])->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'guardado' => 'establecimientos']).'#establecimientos');
 
         $orden = Order::sole();
         $establecimiento = $orden->establishments()->sole();
@@ -177,13 +177,13 @@ class FlujoDeInscripcionTest extends TestCase
             'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Docente Enseñanza Media', 'email' => 'carlos@colegio.cl', 'rut' => '11.111.111-1',
             'access_type_id' => $this->ambas->id,
             'establishment_id' => $establecimiento->id,
-        ])->assertRedirect(route('inscripcion.participantes', ['token' => $token]));
+        ])->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'guardado' => 'participantes']).'#participantes');
 
         $this->post(route('inscripcion.participantes.agregar', ['token' => $token]), [
             'first_name' => 'Luisa', 'last_name' => 'Soto', 'position' => 'Director/a', 'email' => 'luisa@colegio.cl', 'rut' => '22.222.222-2',
             'access_type_id' => $this->jornada1->id,
             'establishment_id' => $establecimiento->id,
-        ])->assertRedirect(route('inscripcion.participantes', ['token' => $token]));
+        ])->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'guardado' => 'participantes']).'#participantes');
 
         // 4. Facturación, penúltimo paso
         $this->post(route('inscripcion.pagador.guardar', ['token' => $token]), [
@@ -193,7 +193,7 @@ class FlujoDeInscripcionTest extends TestCase
             'commune' => 'Ñuñoa',
             'billing_email' => 'pagos@fundacion.cl',
             'phone' => '56912345678',
-        ])->assertRedirect(route('inscripcion.resumen', ['token' => $token]));
+        ])->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'guardado' => 'pagador']).'#pagador');
 
         $orden->refresh()->load('participants.accessType');
 
@@ -206,11 +206,13 @@ class FlujoDeInscripcionTest extends TestCase
         $this->assertSame([1 => 2, 2 => 1], $orden->consumoDeCupos());
 
         // 5. Resumen
-        $this->get(route('inscripcion.resumen', ['token' => $token]))
+        $this->get(route('inscripcion.portal.inscripcion', ['token' => $token]))
             ->assertOk()
-            ->assertSee('Ana Pérez')
-            ->assertSee('Fundación Educar')
-            ->assertSee('Colegio San José')
+            ->assertSee('Ana')
+            ->assertSee('Fundación Educar');
+
+        $this->get(route('inscripcion.portal.pago', ['token' => $token]))
+            ->assertOk()
             ->assertSee('Carlos Rojas')
             ->assertSee('240.000');
     }

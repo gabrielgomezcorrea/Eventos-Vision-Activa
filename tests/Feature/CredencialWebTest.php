@@ -127,7 +127,7 @@ class CredencialWebTest extends TestCase
     {
         [, $token] = MagicLink::emitir($this->orden->event, $this->orden->responsible_email, $this->orden);
 
-        $this->get(route('inscripcion.credenciales', ['token' => $token]))
+        $this->get(route('inscripcion.portal.credenciales', ['token' => $token]))
             ->assertOk()
             ->assertSee($this->orden->number)
             ->assertSee('Carlos Rojas')

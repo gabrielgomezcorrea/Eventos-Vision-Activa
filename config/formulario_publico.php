@@ -11,13 +11,14 @@ return [
     | sin límite sirve para bombardear el correo de un tercero y de paso quema
     | la cuota de envío. El tope por IP vive en la ruta; este es por dirección.
     |
-    | Es generoso a propósito: una persona que pide el programa dos o tres veces
-    | en una hora no debe encontrarse con una puerta cerrada.
+    | Mide ráfagas, no cantidad: más de 20 envíos con el mismo correo en un
+    | minuto (alguien enviando sin parar, no una persona). Quien lo pide cada tanto, o varias veces en una hora, no se topa
+    | con nada. Si salta, la persona ve un aviso: nunca una falsa confirmación.
     |
     */
 
-    'max_por_correo' => (int) env('PROGRAMA_MAX_POR_CORREO', 3),
-    'ventana_minutos' => (int) env('PROGRAMA_VENTANA_MINUTOS', 60),
+    'max_por_correo' => (int) env('PROGRAMA_MAX_POR_CORREO', 20),
+    'ventana_segundos' => (int) env('PROGRAMA_VENTANA_SEGUNDOS', 60),
 
     /*
     |--------------------------------------------------------------------------
@@ -29,11 +30,12 @@ return [
     | formulario viaja firmado en un campo oculto, porque estas rutas no tienen
     | sesión donde guardarlo.
     |
-    | Bajo no sirve de nada y alto castiga a quien escribe rápido: 3 segundos es
-    | el punto donde no hay falsos positivos.
+    | Bajo no sirve de nada y alto castiga a quien escribe rápido: 2 segundos.
+    | Si salta, la persona ve un aviso y puede volver a enviar: el formulario
+    | conserva lo escrito.
     |
     */
 
-    'segundos_minimos' => (int) env('PROGRAMA_SEGUNDOS_MINIMOS', 3),
+    'segundos_minimos' => (int) env('PROGRAMA_SEGUNDOS_MINIMOS', 1),
 
 ];

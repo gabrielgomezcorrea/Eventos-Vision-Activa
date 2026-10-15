@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Actions\ConfirmarOrden;
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
 use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\Order;
+use App\Models\Participant;
 use App\Models\PayerEntity;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -132,32 +134,76 @@ class ConcurrenciaMysqlTest extends TestCase
         $this->assertSame(self::CAPACIDAD, (int) $jornada->fresh()->reserved_seats, 'Una orden rechazada dejó cupos tomados.');
     }
 
+    public function test_agregar_participantes_en_paralelo_no_sobrevende_la_ultima_vacante(): void
+    {
+        $event = Event::create(['name' => 'Seminario', 'slug' => 'seminario', 'status' => EventStatus::Publicado]);
+        $jornada = $event->sessions()->create(['name' => 'J1', 'position' => 1, 'capacity' => self::CAPACIDAD]);
+        $acceso = $event->accessTypes()->create(['name' => 'J1', 'position' => 1, 'price' => 1000]);
+        $acceso->sessions()->sync([$jornada->id => ['seats' => 1]]);
+
+        // Dos inscripciones confirmadas toman 2 de los 3 cupos: queda 1 vacante.
+        $ordenes = [];
+        for ($i = 0; $i < 2; $i++) {
+            $orden = Order::create([
+                'event_id' => $event->id,
+                'responsible_name' => 'Cliente '.$i,
+                'responsible_lastname' => 'Apellido '.$i,
+                'responsible_email' => "cliente{$i}@colegio.cl",
+                'payer_entity_id' => PayerEntity::create(['name' => 'Entidad '.$i])->id,
+            ]);
+            $orden->participants()->create(['first_name' => 'P'.$i, 'access_type_id' => $acceso->id]);
+            $ordenes[] = app(ConfirmarOrden::class)($orden->fresh());
+        }
+
+        $this->assertSame(2, (int) $jornada->fresh()->reserved_seats);
+
+        // Seis peticiones a la vez, repartidas entre las dos inscripciones.
+        $resultados = $this->lanzarEnParalelo(array_map(
+            fn (int $i): array => [$ordenes[$i % 2]->id, $acceso->id],
+            range(0, 5),
+        ), 'agregar-participante.php');
+
+        $this->assertSame([], array_filter($resultados, fn (string $r): bool => ! in_array($r, ['ok', 'sin_cupo'], true)), implode(' | ', $resultados));
+        $this->assertSame(1, count(array_filter($resultados, fn (string $r): bool => $r === 'ok')), 'Entró más de una persona por la última vacante.');
+        $this->assertSame(self::CAPACIDAD, (int) $jornada->fresh()->reserved_seats);
+        $this->assertSame(3, Participant::count());
+    }
+
     /**
-     * Lanza un proceso PHP por orden, todos apuntando a la misma base.
-     *
      * @param  array<int, int>  $ids
      * @return array<int, string>
      */
     private function confirmarEnParalelo(array $ids): array
     {
-        $script = base_path('tests/scripts/confirmar-orden.php');
+        return $this->lanzarEnParalelo(array_map(fn (int $id): array => [$id], $ids), 'confirmar-orden.php');
+    }
+
+    /**
+     * Lanza un proceso PHP por cada juego de argumentos, todos apuntando a la misma base.
+     *
+     * @param  array<int, array<int, int>>  $argumentos
+     * @return array<int, string>
+     */
+    private function lanzarEnParalelo(array $argumentos, string $archivo): array
+    {
+        $script = base_path('tests/scripts/'.$archivo);
         $procesos = [];
 
-        foreach ($ids as $id) {
+        foreach ($argumentos as $indice => $args) {
             $cmd = sprintf(
-                'MYSQL_TEST_DSN=%s MYSQL_TEST_DATABASE=%s php %s %d 2>&1',
+                'MYSQL_TEST_DSN=%s MYSQL_TEST_DATABASE=%s php %s %s 2>&1',
                 escapeshellarg(env('MYSQL_TEST_DSN')),
                 escapeshellarg(env('MYSQL_TEST_DATABASE', 'inscripciones_test')),
                 escapeshellarg($script),
-                $id,
+                implode(' ', array_map('intval', $args)),
             );
 
-            $procesos[$id] = popen($cmd, 'r');
+            $procesos[$indice] = popen($cmd, 'r');
         }
 
         $resultados = [];
-        foreach ($procesos as $id => $proceso) {
-            $resultados[$id] = trim((string) stream_get_contents($proceso));
+        foreach ($procesos as $indice => $proceso) {
+            $resultados[$indice] = trim((string) stream_get_contents($proceso));
             pclose($proceso);
         }
 

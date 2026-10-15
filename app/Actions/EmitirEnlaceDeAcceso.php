@@ -72,6 +72,36 @@ class EmitirEnlaceDeAcceso
     }
 
     /**
+     * URL de acceso para quien ya pidió el programa: emite el enlace y lo
+     * devuelve sin mandar correo. Va dentro del correo del programa, que ya
+     * pasó por el honeypot, el tiempo mínimo y el tope por correo del
+     * formulario, así que aquí no se suma el límite de `__invoke`.
+     *
+     * Si el correo ya tiene inscripción viva retoma esa; si no, el enlace queda
+     * sin orden y el borrador nace al hacer clic (`InscripcionController::acceso`).
+     */
+    public function urlDeAcceso(Event $event, string $email): string
+    {
+        $email = mb_strtolower(trim($email));
+
+        $colegios = $this->colegiosVigentesDe($event, $email);
+
+        if ($colegios !== null) {
+            [, $token] = MagicLink::emitirParaGrupo($event, $email, $colegios->first()->group);
+        } else {
+            $orden = $this->ordenVigenteDe($event, $email);
+
+            if ($orden !== null && $orden->group_id === null) {
+                $orden->forceFill(['group_id' => OrderGroup::paraResponsable($event, $email)->getKey()])->save();
+            }
+
+            [, $token] = MagicLink::emitir($event, $email, $orden);
+        }
+
+        return route('inscripcion.acceso', ['token' => $token]);
+    }
+
+    /**
      * Orden a la que debe volver este correo: un borrador o una reserva viva.
      * Las canceladas y vencidas no se retoman.
      */

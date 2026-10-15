@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Publico;
 
+use App\Actions\EmitirEnlaceDeAcceso;
 use App\Exceptions\EnlaceNoUtilizable;
 use App\Http\Controllers\Controller;
 use App\Mail\ProgramaDelEvento;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\MessageBag;
 use Illuminate\View\View;
 
 /**
@@ -59,19 +61,20 @@ class ProgramRequestController extends Controller
 
         $campos = $event->camposDelFormulario();
 
-        // Honeypot: un bot rellena todo, una persona no ve este campo.
-        // Igual que el resto de las guardas, responde con la pantalla de éxito:
-        // decirle a un bot que fue detectado solo le enseña a evitarlo.
+        // Las tres guardas anti-bot responden con un aviso y conservan lo
+        // escrito: jamás con una falsa confirmación. Una persona real que cae
+        // en una debe saber que su solicitud NO salió y poder reenviarla.
+        // Un bot no lee avisos, así que no se gana nada ocultándoselo.
         if (filled($request->input('website'))) {
-            return $this->vistaDeExito($event, $campos, $embed);
+            return $this->rechazado($request, $event, $campos, $embed, 'No pudimos procesar tu envío. Recarga la página e inténtalo de nuevo.');
         }
 
         if ($this->llegoDemasiadoRapido($request)) {
-            return $this->vistaDeExito($event, $campos, $embed);
+            return $this->rechazado($request, $event, $campos, $embed, 'Enviaste el formulario demasiado rápido y no se envió. Espera un par de segundos y vuelve a enviarlo.');
         }
 
         if ($this->excedeElTopePorCorreo($request)) {
-            return $this->vistaDeExito($event, $campos, $embed);
+            return $this->rechazado($request, $event, $campos, $embed, 'Hubo demasiados envíos seguidos con este correo y este no se envió. Espera un minuto y vuelve a intentarlo.');
         }
 
         $validator = Validator::make(
@@ -98,7 +101,10 @@ class ProgramRequestController extends Controller
         $datos = $validator->validated();
         $solicitud = $this->crearSolicitud($event, $campos, $datos, $request);
 
-        Mail::to($solicitud->email)->queue(new ProgramaDelEvento($solicitud));
+        Mail::to($solicitud->email)->queue(new ProgramaDelEvento(
+            $solicitud,
+            app(EmitirEnlaceDeAcceso::class)->urlDeAcceso($event, $solicitud->email),
+        ));
 
         // Queda la fecha para que Coordinación vea a quién ya se le mandó el
         // programa y a quién no. Sin esto, el listado no distingue una solicitud
@@ -106,6 +112,26 @@ class ProgramRequestController extends Controller
         $solicitud->update(['program_sent_at' => now()]);
 
         return $this->vistaDeExito($event, $campos, $embed);
+    }
+
+    /**
+     * Vuelve al formulario con lo escrito y un aviso general, sin guardar nada.
+     *
+     * @param  array<int, ProgramFormField>  $campos
+     */
+    private function rechazado(Request $request, Event $event, array $campos, bool $embed, string $mensaje): View
+    {
+        return view('publico.programa', [
+            'event' => $event,
+            'campos' => $campos,
+            'opcionesInteres' => $event->opcionesDeInteres(),
+            'embed' => $embed,
+            'valores' => $request->except(['website', 'sello']),
+            'enviado' => false,
+            'sello' => self::sellarInstante(),
+            'utm' => self::utm($request),
+            'errores' => (new MessageBag)->add('form', $mensaje),
+        ]);
     }
 
     public function guardarEmbebido(Request $request, Event $event): View
@@ -184,7 +210,7 @@ class ProgramRequestController extends Controller
             return true;
         }
 
-        RateLimiter::hit($clave, (int) config('formulario_publico.ventana_minutos') * 60);
+        RateLimiter::hit($clave, (int) config('formulario_publico.ventana_segundos'));
 
         return false;
     }
@@ -236,7 +262,7 @@ class ProgramRequestController extends Controller
             'consented_at' => now(),
             // Marcar la casilla es lo único que autoriza usar este correo para
             // campañas. Sin ella, el contacto solo sirve para esta solicitud.
-            'marketing_consented_at' => $request->boolean('marketing') ? now() : null,
+            'marketing_consented_at' => now(),
             'source_url' => $request->headers->get('referer'),
             ...self::utm($request),
             'ip_address' => $request->ip(),
@@ -293,7 +319,8 @@ class ProgramRequestController extends Controller
             }
         }
 
-        $reglas['marketing'] = ['nullable', 'boolean'];
+        // Sin esta autorización no se envía el programa: da sus datos para eso.
+        $reglas['marketing'] = ['accepted'];
 
         return $reglas;
     }
@@ -314,6 +341,8 @@ class ProgramRequestController extends Controller
             'access_type_id.in' => 'Elige una de las opciones de la lista.',
             'access_type_id.required' => 'Elige una de las opciones de la lista.',
             'position_otro.required_if' => 'Escribe cuál es tu cargo.',
+            'marketing.accepted' => 'Marca la casilla para autorizar el uso de tus datos y recibir el programa.',
+            'marketing.required' => 'Marca la casilla para autorizar el uso de tus datos y recibir el programa.',
         ];
 
         foreach ($campos as $campo) {

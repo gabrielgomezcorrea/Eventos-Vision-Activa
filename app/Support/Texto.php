@@ -110,6 +110,23 @@ class Texto
     }
 
     /**
+     * Si un celular con forma válida parece inventado: los ocho dígitos que
+     * siguen al 9 usan a lo más dos cifras distintas (900000000, 911111111,
+     * 987878787). No dice si el número es real —eso solo lo prueba un SMS—,
+     * pero frena el relleno más común de quien escribe cualquier cosa.
+     */
+    public static function telefonoParecePuestoAlAzar(?string $valor): bool
+    {
+        $normal = self::telefono($valor);
+
+        if ($normal === null) {
+            return false;
+        }
+
+        return count(array_unique(str_split(substr($normal, 3)))) <= 2;
+    }
+
+    /**
      * Comuna en su forma oficial si coincide con la lista, sin importar tildes
      * ni mayúsculas ("nunoa" → "Ñuñoa"). Lo que no está en la lista se acepta
      * limpio y capitalizado: nunca se bloquea a la persona por una comuna.

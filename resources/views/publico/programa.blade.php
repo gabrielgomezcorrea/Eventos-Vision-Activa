@@ -137,7 +137,9 @@
                 @endif
             </div>
         @else
-            @if ($errores->isNotEmpty())
+            @if ($errores->has('form'))
+                <div class="aviso aviso-error">{{ $errores->first('form') }}</div>
+            @elseif ($errores->isNotEmpty())
                 <div class="aviso aviso-error">Revisa los campos marcados y vuelve a enviar.</div>
             @endif
 
@@ -251,10 +253,14 @@
                      se pueden usar para eso. --}}
                 <div class="campo">
                     <label class="casilla">
-                        <input type="checkbox" name="marketing" value="1"
+                        <input type="checkbox" name="marketing" value="1" required aria-required="true"
+                               @if ($errores->has('marketing')) aria-invalid="true" @endif
                                @checked(old('marketing', $valores['marketing'] ?? false))>
                         <span>{{ \App\Models\Event::CONSENTIMIENTO_POR_DEFECTO }}</span>
                     </label>
+                    @if ($errores->has('marketing'))
+                        <div class="error-campo">{{ $errores->first('marketing') }}</div>
+                    @endif
                 </div>
 
                 <button type="submit" data-enviando-texto="Enviando…">Enviar solicitud</button>

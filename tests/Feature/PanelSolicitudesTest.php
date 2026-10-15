@@ -64,17 +64,6 @@ class PanelSolicitudesTest extends TestCase
                 ->where('respuestas.0.respuesta', 'Ñuñoa'));
     }
 
-    public function test_marcar_que_se_inscribio_se_puede_deshacer(): void
-    {
-        $coordinadora = $this->usuario(Rol::Coordinacion);
-
-        $this->actingAs($coordinadora)->post(route('solicitudes.inscrita', $this->solicitud));
-        $this->assertNotNull($this->solicitud->fresh()->converted_at);
-
-        $this->actingAs($coordinadora)->post(route('solicitudes.inscrita', $this->solicitud));
-        $this->assertNull($this->solicitud->fresh()->converted_at);
-    }
-
     public function test_reenviar_el_programa_le_escribe_a_la_persona(): void
     {
         $this->actingAs($this->usuario(Rol::Coordinacion))

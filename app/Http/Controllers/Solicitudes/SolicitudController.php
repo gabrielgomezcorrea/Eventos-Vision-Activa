@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Solicitudes;
 
+use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\ExportarContactos;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
@@ -140,27 +141,15 @@ class SolicitudController extends Controller
         return back();
     }
 
-    /**
-     * Se marca y se desmarca con el mismo botón: equivocarse tiene vuelta atrás.
-     */
-    public function alternarInscrita(ProgramRequest $programRequest): RedirectResponse
-    {
-        Gate::authorize('update', $programRequest);
-
-        $marcada = $programRequest->yaConvertida();
-        $programRequest->update(['converted_at' => $marcada ? null : now()]);
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => $marcada ? 'Marca deshecha.' : 'Anotado: ya se inscribió.']);
-
-        return back();
-    }
-
     /** El correo lleva el programa adjunto y el enlace para inscribirse. */
     public function reenviarPrograma(ProgramRequest $programRequest): RedirectResponse
     {
         Gate::authorize('update', $programRequest);
 
-        Mail::to($programRequest->email)->queue(new ProgramaDelEvento($programRequest));
+        Mail::to($programRequest->email)->queue(new ProgramaDelEvento(
+            $programRequest,
+            app(EmitirEnlaceDeAcceso::class)->urlDeAcceso($programRequest->event, $programRequest->email),
+        ));
         $programRequest->update(['program_sent_at' => now()]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Correo en camino a '.$programRequest->email.'.']);

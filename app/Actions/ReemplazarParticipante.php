@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Enums\OrderKind;
 use App\Enums\ParticipantStatus;
 use App\Exceptions\ReemplazoNoPermitido;
 use App\Mail\CredencialParticipante;
@@ -84,7 +85,9 @@ class ReemplazarParticipante
 
             $nuevo = $entrante->fresh()->ticketVigente();
 
-            if ($nuevo && filled($entrante->email) && filter_var($entrante->email, FILTER_VALIDATE_EMAIL)) {
+            // Solo el invitado recibe su credencial por correo (ver EmitirTickets).
+            if ($saliente->order->kind === OrderKind::Invitado
+                && $nuevo && filled($entrante->email) && filter_var($entrante->email, FILTER_VALIDATE_EMAIL)) {
                 Mail::to($entrante->email)->queue(new CredencialParticipante($nuevo));
             }
         }

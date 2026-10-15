@@ -33,7 +33,7 @@ class PagoAprobado extends Mailable implements ShouldQueue
             with: [
                 'orden' => $this->orden,
                 'event' => $this->orden->event,
-                'urlCredenciales' => route('inscripcion.credenciales', ['token' => $token]),
+                'urlCredenciales' => route('inscripcion.portal.credenciales', ['token' => $token]),
             ],
         );
     }

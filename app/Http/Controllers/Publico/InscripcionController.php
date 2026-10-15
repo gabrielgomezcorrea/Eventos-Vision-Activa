@@ -6,27 +6,36 @@ use App\Actions\AplicarCodigoDeDescuento;
 use App\Actions\ConfirmarConjunto;
 use App\Actions\ConfirmarOrden;
 use App\Actions\EmitirEnlaceDeAcceso;
+use App\Actions\ModificarInscripcion;
 use App\Actions\RegistrarComprobante;
 use App\Enums\OrderKind;
+use App\Exceptions\CambioNoPermitido;
 use App\Exceptions\CodigoNoAplicable;
 use App\Exceptions\ComprobanteNoAceptado;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\EnlaceNoUtilizable;
 use App\Exceptions\OrdenNoConfirmable;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Publico\Concerns\ResuelveOrdenesDelPortal;
+use App\Models\AccessType;
 use App\Models\Establishment;
 use App\Models\Event;
 use App\Models\MagicLink;
 use App\Models\Order;
 use App\Models\OrderGroup;
 use App\Models\PayerEntity;
+use App\Models\ProgramRequest;
 use App\Rules\RutValido;
 use App\Support\Auditor;
 use App\Support\ReglasDeContacto;
 use App\Support\Rut;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\MessageBag;
 use Illuminate\Validation\Rule;
@@ -40,6 +49,8 @@ use Illuminate\Validation\Rule;
  */
 class InscripcionController extends Controller
 {
+    use ResuelveOrdenesDelPortal;
+
     // ---------------------------------------------------------------- acceso
 
     public function inicio(Event $event): Renderable
@@ -94,17 +105,30 @@ class InscripcionController extends Controller
 
         $link->registrarUso();
 
-        // Un enlace de conjunto ya tiene sus órdenes confirmadas: va directo
-        // al estado, nunca crea un borrador.
-        if ($link->order_group_id !== null) {
-            return redirect()->route('inscripcion.estado', ['token' => $token]);
+        // Un enlace de conjunto ya tiene sus órdenes confirmadas, y una orden
+        // que ya no es borrador se retoma donde le toca: nunca crea un borrador.
+        $existente = $link->order ?? $link->group?->orders()->oldest('id')->first();
+
+        if ($existente !== null && ! $existente->esBorrador()) {
+            return redirect()->route($this->pestanaPorDefecto($existente), ['token' => $token]);
         }
 
         if (! $link->order) {
+            // Quien pidió el programa ya dio estos datos: llega con ellos escritos.
+            $solicitud = ProgramRequest::query()
+                ->where('event_id', $link->event_id)
+                ->where('email', $link->email)
+                ->latest('id')
+                ->first();
+
             $orden = Order::create([
                 'event_id' => $link->event_id,
                 'responsible_email' => $link->email,
-                'responsible_name' => '',
+                'responsible_name' => $solicitud?->first_name ?? '',
+                'responsible_lastname' => $solicitud?->last_name,
+                'responsible_position' => $solicitud?->position,
+                'responsible_phone' => $solicitud?->phone,
+                'responsible_institution' => $solicitud?->institution,
                 'kind' => OrderKind::Institucional,
             ]);
 
@@ -113,26 +137,17 @@ class InscripcionController extends Controller
             Auditor::registrar($orden, 'orden.borrador_creado', actorLabel: $link->email);
         }
 
-        return redirect()->route('inscripcion.responsable', ['token' => $token]);
+        return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
     }
 
     // ----------------------------------------------------------------- pasos
 
-    public function responsable(string $token): Renderable
+    /** Enlace histórico del paso: ahora es un bloque de la pestaña Inscripción. */
+    public function responsable(string $token): RedirectResponse
     {
-        [$orden] = $this->resolver($token);
+        $this->resolverParaConsulta($token);
 
-        return $this->vistaPaso('responsable', $token, $orden, [
-            'valores' => [
-                'responsible_name' => $orden->responsible_name,
-                'responsible_lastname' => $orden->responsible_lastname,
-                ...ReglasDeContacto::separarCargo($orden->responsible_position, 'responsible_position'),
-                'responsible_email' => $orden->responsible_email,
-                'responsible_phone' => $orden->responsible_phone,
-                'responsible_institution' => $orden->responsible_institution,
-                'kind' => $orden->kind->value,
-            ],
-        ]);
+        return $this->aBloque($token, 'responsable', guardado: false);
     }
 
     public function guardarResponsable(Request $request, string $token): RedirectResponse|Renderable
@@ -161,10 +176,7 @@ class InscripcionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->vistaPaso('responsable', $token, $orden, [
-                'valores' => $request->all(),
-                'errores' => $validator->errors(),
-            ]);
+            return $this->vistaInscripcion($token, $orden, 'responsable', $request->all(), $validator->errors());
         }
 
         $orden->update(ReglasDeContacto::normalizar($validator->validated(), [
@@ -175,29 +187,20 @@ class InscripcionController extends Controller
             'responsible_institution' => 'nombre',
         ]));
 
-        return redirect()->route('inscripcion.establecimientos', ['token' => $token]);
+        return $this->aBloque($token, 'responsable');
     }
 
-    public function pagador(string $token): Renderable
+    /** Enlace histórico del paso: ahora es un bloque de la pestaña Inscripción. */
+    public function pagador(string $token): RedirectResponse
     {
-        [$orden] = $this->resolver($token);
-        $pagador = $orden->payerEntity;
+        $this->resolverParaConsulta($token);
 
-        return $this->vistaPaso('pagador', $token, $orden, [
-            'valores' => [
-                'name' => $pagador->name ?? ($orden->kind === OrderKind::Particular ? $orden->responsableNombreCompleto() : ''),
-                'rut' => $pagador?->rut,
-                'address' => $pagador?->address,
-                'commune' => $pagador?->commune,
-                'billing_email' => $pagador->billing_email ?? $orden->responsible_email,
-                'phone' => $pagador->phone ?? $orden->responsible_phone,
-            ],
-        ]);
+        return $this->aBloque($token, 'pagador', guardado: false);
     }
 
-    public function guardarPagador(Request $request, string $token): RedirectResponse|Renderable
+    public function guardarPagador(Request $request, string $token, ModificarInscripcion $modificar): RedirectResponse|Renderable
     {
-        [$orden] = $this->resolver($token);
+        [$orden] = $this->resolverParaCambio($token);
 
         // Everything the invoice needs from the payer.
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
@@ -217,10 +220,7 @@ class InscripcionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->vistaPaso('pagador', $token, $orden, [
-                'valores' => $request->all(),
-                'errores' => $validator->errors(),
-            ]);
+            return $this->vistaInscripcion($token, $orden, 'pagador', $request->all(), $validator->errors());
         }
 
         $datos = ReglasDeContacto::normalizar($validator->validated(), [
@@ -232,20 +232,31 @@ class InscripcionController extends Controller
         ]);
         $datos['rut'] = Rut::normalizar($datos['rut'] ?? null);
 
+        if (! $orden->esBorrador()) {
+            try {
+                $modificar->actualizarPagador($orden, $datos);
+            } catch (CambioNoPermitido $e) {
+                return $this->vistaInscripcion($token, $orden->fresh(), 'pagador', $request->all(), (new MessageBag)->add('cambio', $e->getMessage()));
+            }
+
+            return $this->aBloque($token, 'pagador');
+        }
+
         if ($orden->payerEntity) {
             $orden->payerEntity->update($datos);
         } else {
             $orden->update(['payer_entity_id' => PayerEntity::create($datos)->getKey()]);
         }
 
-        return redirect()->route('inscripcion.resumen', ['token' => $token]);
+        return $this->aBloque($token, 'pagador');
     }
 
-    public function establecimientos(string $token): Renderable
+    /** Enlace histórico del paso: ahora es un bloque de la pestaña Inscripción. */
+    public function establecimientos(string $token): RedirectResponse
     {
-        [$orden] = $this->resolver($token);
+        $this->resolverParaConsulta($token);
 
-        return $this->vistaPaso('establecimientos', $token, $orden, ['valores' => []]);
+        return $this->aBloque($token, 'establecimientos', guardado: false);
     }
 
     /**
@@ -271,10 +282,7 @@ class InscripcionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->vistaPaso('establecimientos', $token, $orden, [
-                'valores' => $request->all(),
-                'errores' => $validator->errors(),
-            ]);
+            return $this->vistaInscripcion($token, $orden, 'establecimientos', $request->all(), $validator->errors());
         }
 
         $orden->establishments()->attach(Establishment::create(ReglasDeContacto::normalizar($validator->validated(), [
@@ -284,7 +292,7 @@ class InscripcionController extends Controller
             'commune' => 'comuna',
         ])));
 
-        return redirect()->route('inscripcion.establecimientos', ['token' => $token]);
+        return $this->aBloque($token, 'establecimientos');
     }
 
     public function quitarEstablecimiento(string $token, Establishment $establishment): RedirectResponse
@@ -297,19 +305,20 @@ class InscripcionController extends Controller
 
         $orden->establishments()->detach($establishment);
 
-        return redirect()->route('inscripcion.establecimientos', ['token' => $token]);
+        return $this->aBloque($token, 'establecimientos');
     }
 
-    public function participantes(string $token): Renderable
+    /** Enlace histórico del paso: ahora es un bloque de la pestaña Inscripción. */
+    public function participantes(string $token): RedirectResponse
     {
-        [$orden] = $this->resolver($token);
+        $this->resolverParaConsulta($token);
 
-        return $this->vistaPaso('participantes', $token, $orden, ['valores' => []]);
+        return $this->aBloque($token, 'participantes', guardado: false);
     }
 
-    public function agregarParticipante(Request $request, string $token): RedirectResponse|Renderable
+    public function agregarParticipante(Request $request, string $token, ModificarInscripcion $modificar): RedirectResponse|Renderable
     {
-        [$orden] = $this->resolver($token);
+        [$orden] = $this->resolverParaCambio($token);
 
         $accesos = $orden->event->accessTypes()->where('is_active', true)->pluck('id')->all();
         $establecimientos = $orden->establishments->pluck('id')->all();
@@ -340,10 +349,7 @@ class InscripcionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->vistaPaso('participantes', $token, $orden, [
-                'valores' => $request->all(),
-                'errores' => $validator->errors(),
-            ]);
+            return $this->vistaInscripcion($token, $orden, 'participantes', $request->all(), $validator->errors());
         }
 
         $datos = ReglasDeContacto::normalizar($validator->validated(), [
@@ -357,18 +363,141 @@ class InscripcionController extends Controller
             ? (int) $validator->validated()['establishment_id']
             : ($establecimientos[0] ?? null);
 
-        $orden->participants()->create($datos);
+        if ($orden->esBorrador()) {
+            $orden->participants()->create($datos);
 
-        return redirect()->route('inscripcion.participantes', ['token' => $token]);
+            return $this->aBloque($token, 'participantes');
+        }
+
+        // Ya confirmada: toma cupos, usos del código y recalcula el monto.
+        try {
+            $modificar->agregarParticipante($orden, $datos, AccessType::findOrFail($datos['access_type_id']));
+        } catch (CambioNoPermitido|CuposInsuficientes $e) {
+            return $this->vistaInscripcion($token, $orden->fresh(), 'participantes', $request->all(), (new MessageBag)->add('cambio', $e->getMessage()));
+        }
+
+        return $this->aBloque($token, 'participantes');
     }
 
-    public function quitarParticipante(string $token, int $participante): RedirectResponse
+    public function quitarParticipante(string $token, int $participante, ModificarInscripcion $modificar): RedirectResponse|Renderable
     {
-        [$orden] = $this->resolver($token);
+        [$orden] = $this->resolverParaCambio($token);
 
-        $orden->participants()->whereKey($participante)->delete();
+        if ($orden->esBorrador()) {
+            $orden->participants()->whereKey($participante)->delete();
 
-        return redirect()->route('inscripcion.participantes', ['token' => $token]);
+            return $this->aBloque($token, 'participantes');
+        }
+
+        try {
+            $modificar->quitarParticipante($orden, $orden->participants()->findOrFail($participante));
+        } catch (CambioNoPermitido $e) {
+            return $this->vistaInscripcion($token, $orden->fresh(), 'participantes', [], (new MessageBag)->add('cambio', $e->getMessage()));
+        }
+
+        return $this->aBloque($token, 'participantes');
+    }
+
+    /** Cambia el acceso de un participante en una inscripción ya confirmada. */
+    public function cambiarAcceso(Request $request, string $token, int $participante, ModificarInscripcion $modificar): RedirectResponse|Renderable
+    {
+        [$orden] = $this->resolverParaCambio($token);
+
+        $accesos = $orden->event->accessTypes()->where('is_active', true)->pluck('id')->all();
+
+        $validator = Validator::make($request->all(), [
+            'access_type_id' => ['required', Rule::in($accesos)],
+        ], ['access_type_id.required' => 'Seleccione el tipo de acceso.', 'access_type_id.in' => 'Seleccione un tipo de acceso disponible.']);
+
+        if ($validator->fails()) {
+            return $this->vistaInscripcion($token, $orden, 'participantes', $request->all(), $validator->errors());
+        }
+
+        try {
+            $modificar->cambiarAcceso(
+                $orden,
+                $orden->participants()->findOrFail($participante),
+                AccessType::findOrFail($validator->validated()['access_type_id']),
+            );
+        } catch (CambioNoPermitido|CuposInsuficientes $e) {
+            return $this->vistaInscripcion($token, $orden->fresh(), 'participantes', [], (new MessageBag)->add('cambio', $e->getMessage()));
+        }
+
+        return $this->aBloque($token, 'participantes');
+    }
+
+    /** Corrige nombre y contacto de un participante, sin tocar acceso ni monto. */
+    public function corregirParticipante(Request $request, string $token, int $participante, ModificarInscripcion $modificar): RedirectResponse|Renderable
+    {
+        [$orden] = $this->resolverParaCambio($token, soloDatos: true);
+
+        $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
+            'first_name' => ReglasDeContacto::nombres(),
+            'last_name' => ReglasDeContacto::apellidos(),
+            'position' => ReglasDeContacto::cargo(true, $orden->event->cargosDeParticipante()),
+            'position_otro' => ReglasDeContacto::cargoOtro('position'),
+            'email' => ReglasDeContacto::correo(),
+            'phone' => ReglasDeContacto::telefono(false),
+        ], [], [
+            'first_name' => 'nombre', 'last_name' => 'apellidos', 'position' => 'cargo',
+            'position_otro' => 'cargo', 'email' => 'correo', 'phone' => 'teléfono',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->vistaInscripcion($token, $orden, 'participantes', $request->all(), $validator->errors());
+        }
+
+        // Ni el RUT ni el acceso ni el establecimiento llegan hasta aquí: no
+        // están en las reglas, y `validated()` solo devuelve lo que ellas listan.
+        $datos = ReglasDeContacto::normalizar($validator->validated(), [
+            'first_name' => 'nombre', 'last_name' => 'nombre', 'position' => 'cargo',
+            'email' => 'correo', 'phone' => 'telefono',
+        ]);
+        unset($datos['position_otro']);
+
+        try {
+            $modificar->corregirParticipante($orden, $orden->participants()->findOrFail($participante), $datos);
+        } catch (CambioNoPermitido $e) {
+            return $this->vistaInscripcion($token, $orden->fresh(), 'participantes', [], (new MessageBag)->add('cambio', $e->getMessage()));
+        }
+
+        return $this->aBloque($token, 'participantes');
+    }
+
+    /** Corrige nombre y contacto del responsable; el correo y el tipo quedan fijos. */
+    public function corregirResponsable(Request $request, string $token, ModificarInscripcion $modificar): RedirectResponse|Renderable
+    {
+        [$orden] = $this->resolverParaCambio($token, soloDatos: true);
+
+        $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
+            'responsible_name' => ReglasDeContacto::nombres(),
+            'responsible_lastname' => ReglasDeContacto::apellidos(),
+            'responsible_position' => ReglasDeContacto::cargo(),
+            'responsible_position_otro' => ReglasDeContacto::cargoOtro('responsible_position'),
+            'responsible_phone' => ReglasDeContacto::telefono(),
+        ], [], [
+            'responsible_name' => 'nombre', 'responsible_lastname' => 'apellidos',
+            'responsible_position' => 'cargo', 'responsible_position_otro' => 'cargo',
+            'responsible_phone' => 'teléfono',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->vistaInscripcion($token, $orden, 'responsable', $request->all(), $validator->errors());
+        }
+
+        $datos = ReglasDeContacto::normalizar($validator->validated(), [
+            'responsible_name' => 'nombre', 'responsible_lastname' => 'nombre',
+            'responsible_position' => 'cargo', 'responsible_phone' => 'telefono',
+        ]);
+        unset($datos['responsible_position_otro']);
+
+        try {
+            $modificar->corregirResponsable($orden, $datos);
+        } catch (CambioNoPermitido $e) {
+            return $this->vistaInscripcion($token, $orden->fresh(), 'responsable', [], (new MessageBag)->add('cambio', $e->getMessage()));
+        }
+
+        return $this->aBloque($token, 'responsable');
     }
 
     /** Copia los datos del responsable como participante. */
@@ -387,14 +516,15 @@ class InscripcionController extends Controller
             'establishment_id' => $request->input('establishment_id'),
         ]);
 
-        return $this->agregarParticipante($request, $token);
+        return $this->agregarParticipante($request, $token, app(ModificarInscripcion::class));
     }
 
-    public function resumen(string $token): Renderable
+    /** Enlace histórico del resumen: vive en la pestaña Pago. */
+    public function resumen(string $token): RedirectResponse
     {
-        [$orden] = $this->resolver($token);
+        $this->resolverParaConsulta($token);
 
-        return $this->vistaPaso('resumen', $token, $orden, ['valores' => []]);
+        return redirect()->route('inscripcion.portal.pago', ['token' => $token]);
     }
 
     public function aplicarCodigo(AplicarCodigoDeDescuento $aplicar, Request $request, string $token): RedirectResponse|Renderable
@@ -404,16 +534,13 @@ class InscripcionController extends Controller
         try {
             $aplicar($orden, (string) $request->input('codigo'));
         } catch (CodigoNoAplicable $e) {
-            return $this->vistaPaso('resumen', $token, $orden->load([
-                'event', 'establishments', 'participants.accessType', 'participants.establishment', 'payerEntity',
-            ]), [
-                'valores' => [],
+            return $this->vistaInscripcion($token, $orden, extra: [
                 'errorDeCodigo' => $e->getMessage(),
                 'codigoEscrito' => (string) $request->input('codigo'),
             ]);
         }
 
-        return redirect()->to(route('inscripcion.resumen', ['token' => $token]).'#codigo');
+        return redirect()->to(route('inscripcion.portal.inscripcion', ['token' => $token]).'#codigo');
     }
 
     public function quitarCodigo(string $token): RedirectResponse
@@ -422,7 +549,7 @@ class InscripcionController extends Controller
 
         $orden->forceFill(['discount_code_id' => null])->save();
 
-        return redirect()->to(route('inscripcion.resumen', ['token' => $token]).'#codigo');
+        return redirect()->to(route('inscripcion.portal.inscripcion', ['token' => $token]).'#codigo');
     }
 
     public function confirmar(ConfirmarOrden $confirmar, ConfirmarConjunto $confirmarConjunto, string $token): RedirectResponse|Renderable
@@ -443,52 +570,25 @@ class InscripcionController extends Controller
                 ? $confirmarConjunto($orden)
                 : $confirmar($orden, actorLabel: $orden->responsible_email);
         } catch (OrdenNoConfirmable|CuposInsuficientes $e) {
-            return $this->vistaPaso('resumen', $token, $orden->fresh()->load([
-                'event', 'establishments', 'participants.accessType', 'participants.establishment', 'payerEntity',
-            ]), [
-                'valores' => [],
-                'errorDeConfirmacion' => $e->getMessage(),
-            ]);
+            return $this->vistaResumen($token, $orden->fresh(), ['errorDeConfirmacion' => $e->getMessage()]);
         }
 
-        return redirect()->route('inscripcion.estado', ['token' => $token]);
+        return redirect()->route('inscripcion.portal.pago', ['token' => $token]);
     }
 
     /**
-     * Estado de una orden ya confirmada. A diferencia de los pasos, aquí no se
-     * exige que la orden sea editable: el cliente debe poder consultarla siempre.
+     * Enlace histórico (correos ya enviados): lleva a la pestaña del portal
+     * que corresponde a la situación de la orden, conservando el colegio.
      */
-    public function estado(Request $request, string $token): Renderable
+    public function estado(Request $request, string $token): RedirectResponse
     {
-        $orden = $this->resolverParaConsulta($token);
+        $orden = $this->colegioElegido($this->resolverParaConsulta($token), $request);
 
-        if ($orden->esBorrador()) {
-            return $this->vistaPaso('resumen', $token, $orden, ['valores' => []]);
-        }
-
-        return $this->vistaEstado($token, $this->colegioElegido($orden, $request));
-    }
-
-    /**
-     * Otro establecimiento: cada colegio va en su propia inscripción, con el
-     * mismo correo, para poder ver después todo lo que inscribió esa persona.
-     * No se le vuelve a pedir el correo: ya lo tenemos.
-     */
-    public function otroEstablecimiento(EmitirEnlaceDeAcceso $emitir, Request $request, string $token): RedirectResponse
-    {
-        $orden = $this->resolverParaConsulta($token);
-
-        $emitir($orden->event, $orden->responsible_email, $request->ip(), nuevaInscripcion: true);
-
-        // Vuelve al mismo colegio y al mismo bloque: sin el ancla, la página
-        // recarga arriba del todo y el aviso de "te enviamos el correo" queda
-        // fuera de pantalla. En pruebas de uso la persona apretó y creyó que
-        // no había pasado nada.
-        return redirect()->to(route('inscripcion.estado', [
+        return redirect()->to(route($this->pestanaPorDefecto($orden), array_filter([
             'token' => $token,
-            'enviado' => 1,
             'colegio' => $request->integer('colegio') ?: null,
-        ]).'#otro');
+            'enviado' => $request->boolean('enviado') ? 1 : null,
+        ])));
     }
 
     /** Carga del comprobante de transferencia por parte del cliente. */
@@ -498,7 +598,12 @@ class InscripcionController extends Controller
 
         $saldo = $orden->saldo();
 
-        $validator = Validator::make($request->all(), [
+        // Si en el intento anterior el archivo venía bien y falló otro campo,
+        // se guardó aparte: no se le pide subirlo de nuevo.
+        $guardado = $request->hasFile('proof') ? null : $this->comprobanteGuardado($request, $orden);
+        $archivo = $request->file('proof') ?? $guardado;
+
+        $validator = Validator::make(['proof' => $archivo] + $request->except('proof'), [
             'amount' => ['required', 'integer', 'min:1', 'max:'.max(1, $saldo)],
             'paid_on' => ['required', 'date', 'before_or_equal:today'],
             'bank_name' => ['required', 'string', 'max:255'],
@@ -524,130 +629,110 @@ class InscripcionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->vistaEstado($token, $orden, $request->except('proof'), $validator->errors());
+            $valores = $request->except(['proof', 'proof_guardado']);
+
+            if ($archivo !== null && ! $validator->errors()->has('proof')) {
+                $valores += $this->guardarComprobanteAparte($archivo, $orden, $guardado);
+            }
+
+            return view('publico.portal.pago', $this->datosDelPortal(
+                $token, $orden, 'pago', $valores, $validator->errors(),
+            ));
         }
 
         $datos = $validator->validated();
+        unset($datos['proof']);
         $datos['payer_rut'] = Rut::normalizar($datos['payer_rut'] ?? null);
         $datos['reference'] = $orden->number;
 
         try {
-            $registrar($orden, $datos, $request->file('proof'), actorLabel: $orden->responsible_email);
+            $registrar($orden, $datos, $archivo, actorLabel: $orden->responsible_email);
         } catch (ComprobanteNoAceptado $e) {
-            return $this->vistaEstado($token, $orden->fresh(), [], null, $e->getMessage());
+            return view('publico.portal.pago', $this->datosDelPortal(
+                $token, $orden->fresh(), 'pago', errorDeComprobante: $e->getMessage(),
+            ));
+        }
+
+        if ($guardado !== null) {
+            @unlink($guardado->getPathname());
         }
 
         // Vuelve al colegio desde el que se subió: mandarlo al primero del
         // conjunto lo deja buscando en cuál de los siete estaba.
-        return redirect()->route('inscripcion.estado', [
-            'token' => $token, 'colegio' => $establishment?->id,
+        // `comprobante=recibido` hace que Pago lo confirme en una alerta: sin
+        // sesión no hay mensajes flash, y recargar en silencio no dice nada.
+        return redirect()->route('inscripcion.portal.pago', [
+            'token' => $token, 'colegio' => $establishment?->id, 'comprobante' => 'recibido',
         ]);
     }
 
     // ------------------------------------------------------------- auxiliares
 
     /**
-     * @param  array<string, mixed>  $valores  Solo se aplican a la tarjeta de
-     *                                         $orden: cada colegio del conjunto
-     *                                         se equivoca por su cuenta.
+     * Guarda el comprobante de un intento fallido para no pedirlo otra vez.
+     * Sin sesión, lo que identifica el archivo viaja cifrado en un campo
+     * oculto, atado a esta orden: no se puede apuntar a un archivo ajeno.
+     *
+     * @return array{proof_guardado: string, proof_nombre: string}
      */
-    private function vistaEstado(
-        string $token,
-        Order $orden,
-        array $valores = [],
-        ?MessageBag $errores = null,
-        ?string $errorDeComprobante = null,
-    ): Renderable {
-        $orden->load('payments.proofs', 'payments.reviews');
+    private function guardarComprobanteAparte(UploadedFile $archivo, Order $orden, ?UploadedFile $yaGuardado): array
+    {
+        $ruta = $yaGuardado?->getPathname()
+            ?? Storage::disk(config('filesystems.private_disk'))->path(
+                $archivo->store('comprobantes/pendientes', config('filesystems.private_disk'))
+            );
 
-        // Con un solo colegio no hay conjunto que mostrar: se ve igual que hoy.
-        $colegios = $orden->group
-            ? $orden->group->orders()->with([
-                'event', 'establishments', 'participants.accessType', 'participants.establishment',
-                'payerEntity', 'payments.proofs', 'payments.reviews',
-            ])->get()
-            : collect([$orden]);
-
-        return view('publico.inscripcion.estado', [
-            'token' => $token,
-            'orden' => $orden,
-            'colegios' => $colegios,
-            'event' => $orden->event,
-            'valores' => $valores,
-            'errores' => $errores ?? new MessageBag,
-            'errorDeComprobante' => $errorDeComprobante,
-        ]);
+        return [
+            'proof_guardado' => Crypt::encryptString(json_encode([
+                'ruta' => $ruta,
+                'nombre' => $archivo->getClientOriginalName(),
+                'tipo' => $archivo->getClientMimeType(),
+                'orden' => $orden->getKey(),
+            ])),
+            'proof_nombre' => $archivo->getClientOriginalName(),
+        ];
     }
 
-    /**
-     * Colegio que se está mirando en la pantalla de estado, elegido con
-     * `?colegio=` desde el menú lateral. A diferencia de las acciones, aquí un
-     * colegio ajeno no corta con 403: se vuelve al del token. Es un selector de
-     * vista, no una acción, y dejar a alguien fuera de su propia pantalla por
-     * un parámetro mal copiado es peor que ignorarlo. Lo que protege el dato
-     * sigue siendo lo mismo: solo se muestran colegios del conjunto del token.
-     */
-    private function colegioElegido(Order $delToken, Request $request): Order
+    /** El comprobante guardado en el intento anterior, si sigue siendo de esta orden. */
+    private function comprobanteGuardado(Request $request, Order $orden): ?UploadedFile
     {
-        $elegido = $request->integer('colegio');
-
-        if ($elegido === 0) {
-            return $delToken;
+        try {
+            $datos = json_decode(Crypt::decryptString((string) $request->input('proof_guardado')), true);
+        } catch (DecryptException) {
+            return null;
         }
 
-        $orden = $delToken->group?->load('orders.establishments')->orders
-            ->first(fn (Order $o) => $o->establishments->contains('id', $elegido));
-
-        return $orden?->load([
-            'event', 'establishments', 'participants.accessType', 'participants.establishment',
-            'payerEntity', 'payments.proofs', 'payments.reviews',
-        ]) ?? $delToken;
-    }
-
-    /**
-     * Orden objetivo dentro del conjunto: la del token si no se indica
-     * colegio, o la del colegio indicado si pertenece al mismo conjunto que
-     * el token. El colegio nunca autoriza por sí solo: siempre se verifica
-     * contra el conjunto ya resuelto desde el token, nunca contra un id de
-     * orden aceptado directamente de la URL.
-     */
-    private function ordenDelConjunto(Order $delToken, ?Establishment $establishment): Order
-    {
-        if ($establishment === null) {
-            return $delToken;
+        if (($datos['orden'] ?? null) !== $orden->getKey() || ! is_file($datos['ruta'] ?? '')) {
+            return null;
         }
 
-        $orden = $delToken->group?->load('orders.establishments')->orders
-            ->first(fn (Order $o) => $o->establishments->contains($establishment));
-
-        abort_if($orden === null, 403);
-
-        return $orden->load([
-            'event', 'establishments', 'participants.accessType', 'participants.establishment',
-            'payerEntity', 'payments.proofs', 'payments.reviews',
-        ]);
+        return new UploadedFile($datos['ruta'], $datos['nombre'], $datos['tipo'], null, true);
     }
 
-    /** Resuelve el token sin exigir que la orden sea editable. */
     /**
-     * Un enlace de orden resuelve directo; uno de conjunto no apunta a
-     * ninguna en particular, así que se toma la más antigua como referencia
-     * (vistaEstado igual junta a todas sus hermanas).
+     * Como `resolver`, pero también deja pasar a una inscripción confirmada
+     * mientras su nivel de cambio lo permita (portal V2). El servidor lo
+     * revalida otra vez dentro de la transacción que modifica.
+     *
+     * @return array{0: Order, 1: MagicLink}
      */
-    private function resolverParaConsulta(string $token): Order
+    private function resolverParaCambio(string $token, bool $soloDatos = false): array
     {
         $link = MagicLink::resolver($token);
 
-        if ($link === null || ($link->order === null && $link->order_group_id === null)) {
+        if ($link === null || $link->order === null) {
             throw EnlaceNoUtilizable::vencido(MagicLink::porToken($token)?->event);
         }
 
-        $orden = $link->order ?? $link->group->orders()->oldest('id')->firstOrFail();
+        $nivel = $link->order->nivelDeCambioDelCliente();
 
-        return $orden->load([
-            'event', 'establishments', 'participants.accessType', 'participants.establishment',
-            'payerEntity', 'payments.proofs', 'payments.reviews',
-        ]);
+        $permitido = $soloDatos ? $nivel->permiteCorregirDatos() : $nivel->permiteCambiarLaInscripcion();
+
+        if (! $permitido) {
+            throw EnlaceNoUtilizable::ordenNoEditable($token);
+        }
+
+        return [$link->order->load(['event', 'establishments', 'participants.accessType', 'participants.establishment', 'payerEntity']), $link];
     }
 
     /**
@@ -669,21 +754,5 @@ class InscripcionController extends Controller
         }
 
         return [$link->order->load(['event', 'establishments', 'participants.accessType', 'participants.establishment', 'payerEntity']), $link];
-    }
-
-    /**
-     * @param  'responsable'|'pagador'|'establecimientos'|'participantes'|'resumen'  $paso
-     * @param  array<string, mixed>  $datos
-     */
-    private function vistaPaso(string $paso, string $token, Order $orden, array $datos): Renderable
-    {
-        return view("publico.inscripcion.{$paso}", array_merge([
-            'token' => $token,
-            'orden' => $orden,
-            'event' => $orden->event,
-            'paso' => $paso,
-            'errores' => new MessageBag,
-            'errorDeConfirmacion' => null,
-        ], $datos));
     }
 }

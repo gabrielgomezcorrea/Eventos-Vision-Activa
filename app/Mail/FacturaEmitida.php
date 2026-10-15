@@ -46,7 +46,7 @@ class FacturaEmitida extends Mailable implements ShouldQueue
                 'factura' => $this->factura,
                 'orden' => $orden,
                 'event' => $orden->event,
-                'urlEstado' => route('inscripcion.estado', ['token' => $token]),
+                'urlEstado' => route('inscripcion.portal.pago', ['token' => $token]),
             ],
         );
     }

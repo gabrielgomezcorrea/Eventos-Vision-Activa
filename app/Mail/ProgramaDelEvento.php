@@ -19,7 +19,11 @@ class ProgramaDelEvento extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public ProgramRequest $solicitud) {}
+    /**
+     * @param  string|null  $urlDeInscripcion  Enlace que deja al cliente dentro de su
+     *                                         inscripción sin escribir el correo de nuevo.
+     */
+    public function __construct(public ProgramRequest $solicitud, public ?string $urlDeInscripcion = null) {}
 
     public function envelope(): Envelope
     {
@@ -35,6 +39,7 @@ class ProgramaDelEvento extends Mailable implements ShouldQueue
             with: [
                 'solicitud' => $this->solicitud,
                 'event' => $this->solicitud->event,
+                'enlace' => $this->urlDeInscripcion ?? route('inscripcion.inicio', $this->solicitud->event),
             ],
         );
     }

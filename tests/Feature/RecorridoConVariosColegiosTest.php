@@ -135,7 +135,7 @@ class RecorridoConVariosColegiosTest extends TestCase
     {
         $this->agregarDosColegiosConUnParticipanteCadaUno();
 
-        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('estado'));
+        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('portal.pago'));
 
         $this->assertSame(1, OrderGroup::count());
         $grupo = OrderGroup::sole();
@@ -272,7 +272,7 @@ class RecorridoConVariosColegiosTest extends TestCase
             'email' => 'carlos@colegio.cl', 'rut' => '11.111.111-1', 'access_type_id' => $this->acceso->id,
         ]);
 
-        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('estado'));
+        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('portal.pago'));
 
         $orden = $this->borrador->fresh();
         $this->assertSame(OrderStatus::Reservada, $orden->status);
@@ -302,7 +302,7 @@ class RecorridoConVariosColegiosTest extends TestCase
 
         // Se ve un colegio a la vez: el del token, con su credencial lista. El
         // menú lateral nombra a los dos y dice cuál sigue debiendo.
-        $respuesta = $this->get($this->ruta('estado'))->assertOk();
+        $respuesta = $this->get($this->ruta('portal.pago'))->assertOk();
 
         $respuesta->assertSee('Colegio San José')
             ->assertSee('Colegio los Robles')
@@ -311,7 +311,7 @@ class RecorridoConVariosColegiosTest extends TestCase
             ->assertDontSee(route('inscripcion.comprobante', ['token' => $this->token, 'establishment' => $losRobles->establishments->sole()->id]), escape: false);
 
         // Al elegir el otro colegio en el menú, aparece su formulario de pago.
-        $this->get($this->ruta('estado', ['colegio' => $losRobles->establishments->sole()->id]))
+        $this->get($this->ruta('portal.pago', ['colegio' => $losRobles->establishments->sole()->id]))
             ->assertOk()
             ->assertSee(route('inscripcion.comprobante', ['token' => $this->token, 'establishment' => $losRobles->establishments->sole()->id]), escape: false)
             ->assertDontSee('Ver las credenciales');
@@ -325,7 +325,7 @@ class RecorridoConVariosColegiosTest extends TestCase
         // Un colegio ajeno en la URL no abre nada: se vuelve al del token.
         $ajeno = Establishment::factory()->create(['name' => 'Colegio Ajeno']);
 
-        $this->get($this->ruta('estado', ['colegio' => $ajeno->id]))
+        $this->get($this->ruta('portal.pago', ['colegio' => $ajeno->id]))
             ->assertOk()
             ->assertSee('Colegio San José')
             ->assertDontSee('Colegio Ajeno');
@@ -344,7 +344,7 @@ class RecorridoConVariosColegiosTest extends TestCase
                 && str_contains($html, 'Colegio San José')
                 && str_contains($html, 'Colegio los Robles')
                 && str_contains($html, '90.000')
-                && (bool) preg_match('#/i/o/[A-Za-z0-9]{20,}/estado#', $html);
+                && (bool) preg_match('#/i/o/[A-Za-z0-9]{20,}/portal/pago#', $html);
         });
 
         Mail::assertNotQueued(OrdenConfirmada::class);
@@ -357,7 +357,7 @@ class RecorridoConVariosColegiosTest extends TestCase
         $this->seed(RolesSeeder::class);
 
         $this->agregarTresColegiosConUnParticipanteCadaUno();
-        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('estado'));
+        $this->post($this->ruta('confirmar'))->assertRedirect($this->ruta('portal.pago'));
 
         $grupo = OrderGroup::sole();
         $sanJose = $grupo->orders()->whereHas('establishments', fn ($q) => $q->where('name', 'Colegio San José'))->sole();

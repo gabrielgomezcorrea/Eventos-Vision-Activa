@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\InvoiceStatus;
+use App\Enums\NivelDeCambio;
 use App\Enums\OrderKind;
 use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
@@ -193,6 +194,44 @@ class Order extends Model
     public function puedeEditarlaElCliente(): bool
     {
         return $this->status->esEditablePorElCliente();
+    }
+
+    /**
+     * Cuánto puede cambiar el cliente por su cuenta (portal V2).
+     *
+     * Un borrador sigue como siempre: todo editable y sin límite. Una reserva
+     * se cierra el día anterior al evento (`Event::limiteDeReemplazos()`), con
+     * un abono pasa a solo corregir datos y un invitado no cambia nada: nadie
+     * paga por él y lo gestiona Administración.
+     */
+    public function nivelDeCambioDelCliente(): NivelDeCambio
+    {
+        if ($this->esBorrador()) {
+            return NivelDeCambio::Completo;
+        }
+
+        if ($this->status !== OrderStatus::Reservada || $this->kind === OrderKind::Invitado) {
+            return NivelDeCambio::Ninguno;
+        }
+
+        $limite = $this->event?->limiteDeReemplazos();
+
+        if ($limite !== null && now()->isAfter($limite)) {
+            return NivelDeCambio::Ninguno;
+        }
+
+        // Con plata de por medio (abono en revisión, observado o aprobado) o con
+        // el pago ya aprobado, solo se corrigen datos. Un abono rechazado no
+        // cuenta: no dejó nada pagado.
+        $conAbono = $this->payments()
+            ->whereIn('status', [PaymentStatus::EnValidacion->value, PaymentStatus::Observado->value, PaymentStatus::Aprobado->value])
+            ->exists();
+
+        if ($conAbono || $this->payment_status === PaymentStatus::Aprobado) {
+            return NivelDeCambio::SoloDatos;
+        }
+
+        return NivelDeCambio::Completo;
     }
 
     /**

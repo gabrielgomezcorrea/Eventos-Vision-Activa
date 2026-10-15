@@ -5,14 +5,12 @@ namespace App\Actions;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Exceptions\ComprobanteNoAceptado;
-use App\Mail\ComprobanteRecibido;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
 use App\Support\Auditor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -103,8 +101,6 @@ class RegistrarComprobante
 
             throw $e;
         }
-
-        Mail::to($orden->responsible_email)->queue(new ComprobanteRecibido($orden->fresh()));
 
         return $pago;
     }

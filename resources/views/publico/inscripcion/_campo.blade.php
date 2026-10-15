@@ -4,8 +4,8 @@
     $placeholder, $autocomplete, $ayuda, $ancho, $atributos (extra raw attributes).
 --}}
 <div @if ($ancho ?? false) class="ancho" @endif>
-    <label for="{{ $campo }}">{{ $etiqueta }} @if ($opcional ?? false)<span class="opcional">(opcional)</span>@endif</label>
-    <input type="{{ $tipoCampo ?? 'text' }}" id="{{ $campo }}" name="{{ $campo }}"
+    <label for="{{ ($prefijo ?? '').$campo }}">{{ $etiqueta }} @if ($opcional ?? false)<span class="opcional">(opcional)</span>@endif</label>
+    <input type="{{ $tipoCampo ?? 'text' }}" id="{{ ($prefijo ?? '').$campo }}" name="{{ $campo }}"
            value="{{ $valores[$campo] ?? '' }}"
            @isset($placeholder) placeholder="{{ $placeholder }}" @endisset
            @isset($autocomplete) autocomplete="{{ $autocomplete }}" @endisset

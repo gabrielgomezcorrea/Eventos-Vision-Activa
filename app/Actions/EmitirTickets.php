@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Enums\OrderKind;
 use App\Enums\ParticipantStatus;
 use App\Exceptions\TicketsNoLiberables;
 use App\Mail\CredencialParticipante;
@@ -63,7 +64,13 @@ class EmitirTickets
             );
         }
 
-        $this->enviarACadaParticipante($emitidos);
+        // El portal V2 quitó el correo por participante: el responsable ve y
+        // reenvía las credenciales desde su pestaña. El invitado es la
+        // excepción: nadie paga por él, no hay correo de "pago aprobado" y su
+        // credencial solo le llega por aquí.
+        if ($orden->kind === OrderKind::Invitado) {
+            $this->enviarACadaParticipante($emitidos);
+        }
 
         return $orden->fresh()->load('participants.tickets')->participantesVigentes
             ->flatMap(fn (Participant $p) => $p->tickets->where('revoked_at', null));

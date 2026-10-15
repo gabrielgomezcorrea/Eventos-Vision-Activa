@@ -60,7 +60,7 @@ class Event extends Model
      * Declara la finalidad y no la herramienta: sirve igual si esos correos
      * terminan en el CRM o en una plataforma de campañas.
      */
-    public const CONSENTIMIENTO_POR_DEFECTO = 'Quiero recibir información sobre este y otros eventos.';
+    public const CONSENTIMIENTO_POR_DEFECTO = 'Autorizo que usen mis datos para enviarme el programa de este evento y para recibir información sobre este u otros eventos.';
 
     protected function casts(): array
     {

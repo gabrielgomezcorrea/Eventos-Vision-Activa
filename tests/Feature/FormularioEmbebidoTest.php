@@ -112,6 +112,7 @@ class FormularioEmbebidoTest extends TestCase
             'last_name' => 'Pérez',
             'email' => 'ana@colegio.cl',
             'phone' => '56912345678',
+            'marketing' => '1',
             'position' => 'Directivo',
             'institution' => 'Liceo A-12',
         ]);

@@ -134,13 +134,14 @@ class ReemplazoDeParticipanteTest extends TestCase
         $this->assertFalse($resultado->permiteAcreditar());
     }
 
-    public function test_le_envia_la_credencial_al_entrante(): void
+    public function test_el_entrante_de_una_orden_pagada_no_recibe_correo_propio(): void
     {
         $this->aprobarYEmitir();
 
         $this->reemplazar(['email' => 'luisa@colegio.cl']);
 
-        Mail::assertQueued(CredencialParticipante::class, fn ($m) => $m->hasTo('luisa@colegio.cl'));
+        // Su credencial se ve y se reenvía desde la pestaña Credenciales.
+        Mail::assertNotQueued(CredencialParticipante::class);
     }
 
     public function test_sin_pago_aprobado_no_emite_credencial_todavia(): void

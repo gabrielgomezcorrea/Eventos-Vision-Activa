@@ -11,7 +11,6 @@ use App\Enums\PaymentReviewAction;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
 use App\Exceptions\RevisionNoValida;
-use App\Mail\AbonoRecibido;
 use App\Mail\PagoAprobado;
 use App\Mail\PagoObservado;
 use App\Mail\PagoRechazado;
@@ -215,7 +214,8 @@ class ValidacionContableTest extends TestCase
         $this->assertSame(PaymentStatus::Pendiente, $orden->payment_status, 'Con saldo el pago sigue pendiente.');
         $this->assertSame(0, $orden->tickets()->count(), 'Las credenciales salen solo con el total.');
 
-        Mail::assertQueued(AbonoRecibido::class, fn (AbonoRecibido $m): bool => $m->abono->amount === 40000);
+        // Un abono parcial no pide nada al cliente: no hay correo.
+        Mail::assertQueuedCount(1); // solo el de la orden confirmada, ninguno por el abono
         Mail::assertNotQueued(PagoAprobado::class);
 
         // El segundo abono completa el total: ahí sí se liberan.

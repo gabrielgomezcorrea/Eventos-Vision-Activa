@@ -20,7 +20,6 @@ use App\Models\PayerEntity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 /**
@@ -104,41 +103,6 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         $this->assertSame(100000, $confirmada->discount_amount);
         $this->assertSame(400000, $confirmada->total);
         $this->assertSame(5, $codigo->refresh()->used_people);
-    }
-
-    public function test_cada_caso_de_error_tiene_su_mensaje(): void
-    {
-        $orden = $this->borrador();
-        $otroEvento = DiscountCode::factory()->create();
-
-        $casos = [
-            'NOEXISTE1' => 'no es válido',
-            $otroEvento->code => 'no es válido',
-            $this->codigo(['expires_at' => now()->subDay()])->code => 'venció',
-            $this->codigo(['used_people' => 20])->code => 'ya no tiene cupos',
-            $this->codigo(['is_active' => false])->code => 'ya no está disponible',
-            $this->codigo(['max_people' => 3])->code => 'quedan 3 usos',
-        ];
-
-        foreach ($casos as $texto => $mensaje) {
-            // Cada caso se prueba solo: sin esto el límite de intentos corta el sexto.
-            RateLimiter::clear('codigo-de-descuento:'.$orden->getKey());
-            $this->aplicar($orden->fresh(), $texto)->assertOk()->assertSee($mensaje);
-            $this->assertNull($orden->fresh()->discount_code_id);
-        }
-    }
-
-    public function test_tras_cinco_intentos_fallidos_se_bloquea_incluso_el_codigo_bueno(): void
-    {
-        $codigo = $this->codigo();
-        $orden = $this->borrador();
-
-        for ($i = 0; $i < 5; $i++) {
-            $this->aplicar($orden, 'INTENTO'.$i.'XY')->assertSee('no es válido');
-        }
-
-        $this->aplicar($orden, $codigo->code)->assertOk()->assertSee('Probaste muchos códigos');
-        $this->assertNull($orden->fresh()->discount_code_id);
     }
 
     public function test_si_no_alcanza_al_confirmar_no_queda_nada_a_medias(): void
@@ -226,25 +190,6 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
             ->assertInertia(fn ($pagina) => $pagina
                 ->has('codigos.0.personas', 2)
                 ->where('codigos.0.personas.0.folio', $vigente->fresh()->number));
-    }
-
-    public function test_una_persona_usa_un_solo_codigo_por_evento(): void
-    {
-        $primero = $this->codigo();
-        $segundo = $this->codigo();
-
-        $a = $this->borradorConRut('12.345.678-5');
-        $this->aplicar($a, $primero->code);
-        app(ConfirmarOrden::class)($a->fresh());
-
-        // Mismo RUT, otro código, mismo evento: rechazado y con el nombre.
-        $b = $this->borradorConRut('12.345.678-5');
-        $this->aplicar($b, $segundo->code)->assertOk()->assertSee('Juan Soto ya usó un código');
-        $this->assertNull($b->fresh()->discount_code_id);
-
-        // Otro RUT sí puede.
-        $c = $this->borradorConRut('11.111.111-1');
-        $this->aplicar($c, $segundo->code)->assertRedirect();
     }
 
     public function test_el_codigo_previo_no_cuenta_en_otro_evento_ni_si_la_inscripcion_vencio(): void

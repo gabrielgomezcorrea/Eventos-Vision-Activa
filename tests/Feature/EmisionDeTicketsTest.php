@@ -209,36 +209,20 @@ class EmisionDeTicketsTest extends TestCase
         $this->assertSame($ticket->code, Ticket::sole()->code);
     }
 
-    public function test_envia_la_credencial_a_cada_participante_con_correo(): void
+    public function test_una_orden_pagada_no_manda_correo_por_participante(): void
     {
         $orden = $this->orden([
             ['first_name' => 'Carlos', 'email' => 'carlos@colegio.cl'],
-            ['first_name' => 'Luisa', 'email' => 'luisa@colegio.cl'],
-        ]);
-        $this->aprobar($orden);
-
-        Mail::assertQueued(CredencialParticipante::class, 2);
-        Mail::assertQueued(CredencialParticipante::class, fn ($m) => $m->hasTo('carlos@colegio.cl'));
-    }
-
-    public function test_un_correo_invalido_o_ausente_no_frena_la_emision(): void
-    {
-        // En inscripciones institucionales muchos participantes vienen sin
-        // correo o con uno mal escrito. Eso no puede romper la orden.
-        $orden = $this->orden([
             ['first_name' => 'Sin correo'],
             ['first_name' => 'Mal escrito', 'email' => 'esto-no-es-un-correo'],
-            ['first_name' => 'Correcto', 'email' => 'ok@colegio.cl'],
         ]);
-
         $this->aprobar($orden);
 
-        // Las tres credenciales se emiten igual.
+        // Las tres credenciales se emiten igual; el responsable las ve y
+        // reenvía desde su pestaña Credenciales.
         $this->assertSame(3, Ticket::count());
-
-        // Solo se envía correo al que tiene una dirección válida.
-        Mail::assertQueued(CredencialParticipante::class, 1);
-        $this->assertSame(1, Ticket::whereNotNull('emailed_at')->count());
+        Mail::assertNotQueued(CredencialParticipante::class);
+        $this->assertSame(0, Ticket::whereNotNull('emailed_at')->count());
     }
 
     public function test_queda_registrado_en_auditoria(): void

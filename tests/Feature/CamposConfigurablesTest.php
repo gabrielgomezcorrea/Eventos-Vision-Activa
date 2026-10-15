@@ -93,6 +93,7 @@ class CamposConfigurablesTest extends TestCase
             'email' => 'ana@colegio.cl',
             'comuna' => 'Providencia',
             'rbd' => '12345',
+            'marketing' => '1',
         ])->assertOk()->assertSee('Revisa tu correo');
 
         $solicitud = ProgramRequest::sole();
@@ -137,7 +138,7 @@ class CamposConfigurablesTest extends TestCase
             ->assertSee('56912345678');
         $this->assertSame(0, ProgramRequest::count());
 
-        $this->post("/f/{$evento->slug}", ['first_name' => 'Ana', 'email' => 'ana@colegio.cl', 'whatsapp' => '+56 9 1234 5678'])->assertOk();
+        $this->post("/f/{$evento->slug}", ['first_name' => 'Ana', 'email' => 'ana@colegio.cl', 'whatsapp' => '+56 9 1234 5678', 'marketing' => '1'])->assertOk();
 
         $this->assertSame('56912345678', ProgramRequest::sole()->extra['whatsapp']);
     }

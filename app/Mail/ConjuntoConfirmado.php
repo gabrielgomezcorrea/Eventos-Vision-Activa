@@ -49,7 +49,7 @@ class ConjuntoConfirmado extends Mailable implements ShouldQueue
                 'responsable' => $responsable,
                 'event' => $this->grupo->event,
                 'total' => (int) $this->ordenes->sum('total'),
-                'urlSeguimiento' => route('inscripcion.estado', ['token' => $token]),
+                'urlSeguimiento' => route('inscripcion.portal.pago', ['token' => $token]),
             ],
         );
     }

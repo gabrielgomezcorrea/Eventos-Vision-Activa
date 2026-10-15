@@ -74,7 +74,7 @@ class ExperienciaDeUsoTest extends TestCase
 
         MagicLink::query()->update(['expires_at' => now()->subDay()]);
 
-        $this->get(route('inscripcion.estado', ['token' => $token]))
+        $this->get(route('inscripcion.portal.pago', ['token' => $token]))
             ->assertForbidden()
             ->assertSee('Este enlace ya no es válido')
             ->assertSee('Pedir un enlace nuevo')
@@ -88,7 +88,7 @@ class ExperienciaDeUsoTest extends TestCase
 
         Order::sole()->update(['status' => OrderStatus::Reservada]);
 
-        $this->get(route('inscripcion.participantes', ['token' => $token]))
+        $this->post(route('inscripcion.responsable.guardar', ['token' => $token]))
             ->assertForbidden()
             ->assertSee('Tu inscripción ya está confirmada')
             ->assertSee('Ver el estado de mi inscripción')
@@ -107,7 +107,7 @@ class ExperienciaDeUsoTest extends TestCase
             'access_type_id' => $this->event->accessTypes()->sole()->id,
         ]);
 
-        $this->get(route('inscripcion.participantes', ['token' => $token]))
+        $this->get(route('inscripcion.portal.inscripcion', ['token' => $token]))
             ->assertOk()
             ->assertSee('data-confirmar="¿Quitar a Rosa Miranda', escape: false);
     }
@@ -118,7 +118,7 @@ class ExperienciaDeUsoTest extends TestCase
         $this->get(route('inscripcion.acceso', ['token' => $token]));
 
         // Sin señal de espera la persona vuelve a hacer clic y envía dos veces.
-        $this->get(route('inscripcion.responsable', ['token' => $token]))
+        $this->get(route('inscripcion.portal.inscripcion', ['token' => $token]))
             ->assertOk()
             ->assertSee('data-enviando-texto', escape: false);
     }

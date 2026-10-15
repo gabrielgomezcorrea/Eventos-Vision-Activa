@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\Ticket;
 use App\Support\GeneradorQr;
 use Illuminate\Contracts\Support\Renderable;
+use Illuminate\Http\RedirectResponse;
 
 /**
  * Credenciales para el cliente.
@@ -42,8 +43,11 @@ class TicketController extends Controller
         ]);
     }
 
-    /** Todas las credenciales de una orden, para el responsable. */
-    public function deLaOrden(string $token, ?Establishment $establishment = null): Renderable
+    /**
+     * Enlace histórico de las credenciales de una orden: hoy viven en la
+     * pestaña Credenciales del portal, que respeta el colegio pedido.
+     */
+    public function deLaOrden(string $token, ?Establishment $establishment = null): RedirectResponse
     {
         $link = MagicLink::resolver($token);
 
@@ -52,15 +56,12 @@ class TicketController extends Controller
         }
 
         $delEnlace = $link->order ?? $link->group->orders()->oldest('id')->firstOrFail();
-        $orden = $this->ordenDelConjunto($delEnlace, $establishment)->load('event');
+        // Verifica que el colegio sea del conjunto del token; si no, 403.
+        $this->ordenDelConjunto($delEnlace, $establishment);
 
-        return view('publico.ticket.orden', [
-            'orden' => $orden,
-            'tickets' => $orden->tickets()
-                ->vigentes()
-                ->with('event', 'order', 'participant.accessType.sessions', 'participant.establishment')
-                ->get(),
-            'qr' => $this->qr,
+        return redirect()->route('inscripcion.portal.credenciales', [
+            'token' => $token,
+            'colegio' => $establishment?->id,
         ]);
     }
 

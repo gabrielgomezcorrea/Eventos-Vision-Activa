@@ -33,7 +33,7 @@ class RecordatorioDeReserva extends Mailable implements ShouldQueue
             with: [
                 'orden' => $this->orden,
                 'event' => $this->orden->event,
-                'urlEstado' => route('inscripcion.estado', ['token' => $token]),
+                'urlEstado' => route('inscripcion.portal.pago', ['token' => $token]),
             ],
         );
     }

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Publico\BannerController;
 use App\Http\Controllers\Publico\InscripcionController;
 use App\Http\Controllers\Publico\InvitacionController;
+use App\Http\Controllers\Publico\PortalController;
 use App\Http\Controllers\Publico\ProgramRequestController;
 use App\Http\Controllers\Publico\TicketController;
 use Illuminate\Support\Facades\Route;
@@ -26,14 +27,14 @@ Route::get('/f/{event:slug}', [ProgramRequestController::class, 'mostrar'])
     ->name('publico.programa');
 
 Route::post('/f/{event:slug}', [ProgramRequestController::class, 'guardar'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:30,1')
     ->name('publico.programa.guardar');
 
 Route::get('/f/{event:slug}/embed', [ProgramRequestController::class, 'mostrarEmbebido'])
     ->name('publico.programa.embed');
 
 Route::post('/f/{event:slug}/embed', [ProgramRequestController::class, 'guardarEmbebido'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:30,1')
     ->name('publico.programa.embed.guardar');
 
 // Invitación personal: el token identifica la invitación y de ella salen el
@@ -78,6 +79,11 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
     Route::post('/participantes', [InscripcionController::class, 'agregarParticipante'])->name('participantes.agregar');
     Route::post('/participantes/responsable', [InscripcionController::class, 'responsableParticipa'])->name('participantes.responsable');
     Route::delete('/participantes/{participante}', [InscripcionController::class, 'quitarParticipante'])->name('participantes.quitar');
+    // Inscripción ya confirmada: el cliente cambia el acceso o corrige datos.
+    // El servidor revalida el nivel de cambio en cada petición.
+    Route::patch('/participantes/{participante}/acceso', [InscripcionController::class, 'cambiarAcceso'])->name('participantes.acceso');
+    Route::patch('/participantes/{participante}/datos', [InscripcionController::class, 'corregirParticipante'])->name('participantes.corregir');
+    Route::patch('/responsable/datos', [InscripcionController::class, 'corregirResponsable'])->name('responsable.corregir');
 
     Route::get('/resumen', [InscripcionController::class, 'resumen'])->name('resumen');
     Route::post('/confirmar', [InscripcionController::class, 'confirmar'])->name('confirmar');
@@ -87,8 +93,18 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
         ->name('codigo.aplicar');
     Route::post('/codigo/quitar', [InscripcionController::class, 'quitarCodigo'])->name('codigo.quitar');
 
+    // Portal del cliente: cuatro pestañas libres, cada una con su ruta. Todas
+    // se pueden ver siempre. `?colegio=` elige el colegio dentro del conjunto.
+    Route::get('/portal/programa', [PortalController::class, 'programa'])->name('portal.programa');
+    Route::get('/portal/inscripcion', [PortalController::class, 'inscripcion'])->name('portal.inscripcion');
+    Route::get('/portal/pago', [PortalController::class, 'pago'])->name('portal.pago');
+    Route::get('/portal/credenciales', [PortalController::class, 'credenciales'])->name('portal.credenciales');
+    Route::get('/portal/adjunto/{attachment}', [PortalController::class, 'adjunto'])->name('portal.adjunto');
+    Route::get('/portal/calendario.ics', [PortalController::class, 'calendario'])->name('portal.calendario');
+
+    // Enlaces de correos ya enviados: no pueden morir. Redirigen a la
+    // pestaña que corresponde a la situación de la orden.
     Route::get('/estado', [InscripcionController::class, 'estado'])->name('estado');
-    Route::post('/otro-establecimiento', [InscripcionController::class, 'otroEstablecimiento'])->name('otro');
     // {establishment} identifica el colegio dentro del mismo conjunto, nunca
     // una orden por id: sin colegio, la acción es sobre la orden del token.
     Route::get('/credenciales/{establishment?}', [TicketController::class, 'deLaOrden'])->name('credenciales');

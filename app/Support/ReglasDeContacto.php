@@ -143,6 +143,8 @@ class ReglasDeContacto
             function (string $atributo, mixed $valor, Closure $falla): void {
                 if (Texto::telefono((string) $valor) === null) {
                     $falla('Escribe un celular con código de país, como 56912345678.');
+                } elseif (Texto::telefonoParecePuestoAlAzar((string) $valor)) {
+                    $falla('Revisa el número: escribe tu celular real, con código de país, como 56912345678.');
                 }
             },
         ];

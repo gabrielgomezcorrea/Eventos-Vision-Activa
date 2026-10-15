@@ -139,7 +139,7 @@ class ConjuntoDeInscripcionesTest extends TestCase
         [, $token] = MagicLink::emitirParaGrupo($this->event, 'ana@colegio.cl', $grupo);
 
         $this->get(route('inscripcion.acceso', ['token' => $token]))
-            ->assertRedirect(route('inscripcion.estado', ['token' => $token]));
+            ->assertRedirect(route('inscripcion.portal.pago', ['token' => $token]));
 
         $this->assertSame(1, Order::count(), 'No se creó un borrador nuevo.');
     }

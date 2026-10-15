@@ -265,13 +265,13 @@ class PanelEventosTest extends TestCase
         $this->put(route('eventos.formulario.update', $evento), [
             'campos' => $campos,
             'contact_name' => 'Flor Vidal Oliva', 'contact_role' => 'Administración y Atención Clientes', 'contact_organization' => 'Corporación Liderazgo y Calidad Educacional',
-            'contact_email' => ' Flor@VisionActiva.cl', 'contact_phone' => '9-51887769', 'contact_whatsapp' => '9 3333 4444',
+            'contact_email' => ' Flor@VisionActiva.cl', 'contact_phone' => '9-51887769', 'contact_whatsapp' => '9 3456 7890',
         ])->assertSessionHasNoErrors();
 
         $evento->refresh();
         $this->assertSame('flor@visionactiva.cl', $evento->contact_email);
         $this->assertSame('56951887769', $evento->contact_phone);
-        $this->assertSame('56933334444', $evento->contact_whatsapp);
+        $this->assertSame('56934567890', $evento->contact_whatsapp);
     }
 
     public function test_el_programa_solo_acepta_pdf_y_hasta_cinco_archivos(): void

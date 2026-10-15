@@ -6,7 +6,6 @@ use App\Enums\PaymentReviewAction;
 use App\Enums\PaymentStatus;
 use App\Exceptions\RevisionNoValida;
 use App\Exceptions\TicketsNoLiberables;
-use App\Mail\AbonoRecibido;
 use App\Mail\PagoAprobado;
 use App\Mail\PagoObservado;
 use App\Mail\PagoRechazado;
@@ -96,12 +95,18 @@ class RevisarPago
             }
         }
 
-        Mail::to($orden->responsible_email)->queue(match (true) {
+        // Un abono aprobado con saldo pendiente no manda correo: no pide nada,
+        // y el cliente ve el abono y el saldo en la pestaña Pago.
+        $correo = match (true) {
             $totalPagado => new PagoAprobado($orden),
-            $nuevoEstado === PaymentStatus::Aprobado => new AbonoRecibido($orden, $pago->fresh()),
+            $nuevoEstado === PaymentStatus::Aprobado => null,
             $nuevoEstado === PaymentStatus::Observado => new PagoObservado($orden, $comentario ?? ''),
             default => new PagoRechazado($orden, $comentario ?? ''),
-        });
+        };
+
+        if ($correo !== null) {
+            Mail::to($orden->responsible_email)->queue($correo);
+        }
 
         return $pago->fresh();
     }

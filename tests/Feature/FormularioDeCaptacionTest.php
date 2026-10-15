@@ -8,6 +8,7 @@ use App\Models\Event;
 use App\Models\ProgramRequest;
 use App\Support\Forms\ProgramFormField;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -48,6 +49,7 @@ class FormularioDeCaptacionTest extends TestCase
             'position' => 'Directivo',
             'institution' => 'Colegio San José',
             'phone' => '56912345678',
+            'marketing' => '1',
         ], $extra);
     }
 
@@ -115,14 +117,48 @@ class FormularioDeCaptacionTest extends TestCase
         $this->assertSame(0, ProgramRequest::count());
     }
 
-    public function test_el_honeypot_descarta_bots_sin_avisarles(): void
+    public function test_el_honeypot_no_guarda_y_avisa_que_no_se_envio(): void
     {
         $this->post("/f/{$this->event->slug}", $this->datosValidos(['website' => 'http://spam.cl']))
             ->assertOk()
-            ->assertSee('Revisa tu correo'); // el bot cree que funcionó
+            ->assertSee('No pudimos procesar tu envío')
+            ->assertDontSee('Revisa tu correo');
 
         $this->assertSame(0, ProgramRequest::count());
         Mail::assertNothingQueued();
+    }
+
+    public function test_un_envio_demasiado_rapido_no_se_guarda_y_lo_dice_conservando_lo_escrito(): void
+    {
+        $sello = Crypt::encryptString((string) now()->getTimestamp());
+
+        $this->post("/f/{$this->event->slug}", $this->datosValidos(['sello' => $sello]))
+            ->assertOk()
+            ->assertSee('demasiado rápido y no se envió')
+            ->assertSee('value="Ana"', escape: false)
+            ->assertDontSee('Revisa tu correo');
+
+        $this->assertSame(0, ProgramRequest::count());
+        Mail::assertNothingQueued();
+
+        // Pasados los segundos mínimos, el mismo envío sí sale.
+        $antiguo = Crypt::encryptString((string) now()->subSeconds(10)->getTimestamp());
+        $this->post("/f/{$this->event->slug}", $this->datosValidos(['sello' => $antiguo]))
+            ->assertSee('Revisa tu correo');
+    }
+
+    public function test_solo_una_rafaga_de_mas_de_veinte_envios_con_el_mismo_correo_se_frena(): void
+    {
+        for ($i = 0; $i < 20; $i++) {
+            $this->post("/f/{$this->event->slug}", $this->datosValidos())->assertSee('Revisa tu correo');
+        }
+
+        $this->post("/f/{$this->event->slug}", $this->datosValidos())
+            ->assertOk()
+            ->assertSee('demasiados envíos seguidos')
+            ->assertDontSee('Revisa tu correo');
+
+        $this->assertSame(20, ProgramRequest::count());
     }
 
     public function test_no_requiere_token_csrf_ni_sesion(): void
@@ -168,5 +204,33 @@ class FormularioDeCaptacionTest extends TestCase
             ->assertSee('Elige una de las opciones de la lista');
 
         $this->assertSame(0, ProgramRequest::count());
+    }
+
+    public function test_sin_autorizar_el_uso_de_los_datos_no_se_envia_el_programa(): void
+    {
+        $datos = $this->datosValidos();
+        unset($datos['marketing']);
+
+        $this->post("/f/{$this->event->slug}", $datos)
+            ->assertOk()
+            ->assertSee('Marca la casilla para autorizar')
+            ->assertDontSee('Revisa tu correo');
+
+        $this->assertSame(0, ProgramRequest::count());
+        Mail::assertNotQueued(ProgramaDelEvento::class);
+    }
+
+    public function test_un_celular_con_forma_valida_pero_puesto_al_azar_se_rechaza(): void
+    {
+        foreach (['56900000000', '56911111111', '56988888888', '56993939393'] as $i => $telefono) {
+            $this->post("/f/{$this->event->slug}", $this->datosValidos(['phone' => $telefono, 'email' => "ana{$i}@colegio.cl"]))
+                ->assertOk()
+                ->assertSee('escribe tu celular real');
+        }
+
+        $this->assertSame(0, ProgramRequest::count());
+
+        $this->post("/f/{$this->event->slug}", $this->datosValidos(['phone' => '+56 9 8765 4321']))
+            ->assertSee('Revisa tu correo');
     }
 }
