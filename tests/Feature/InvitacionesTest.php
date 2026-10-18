@@ -59,37 +59,53 @@ class InvitacionesTest extends TestCase
         return [$invitacion, $token];
     }
 
-    public function test_administracion_invita_a_varios_y_cada_uno_recibe_su_propio_enlace(): void
+    private function crear(array $cambios = []): array
+    {
+        return [
+            'first_name' => 'ana maría', 'last_name' => 'pérez soto', 'email' => 'ANA@colegio.cl',
+            'access_type_id' => $this->acceso->id,
+            'expires_on' => now()->addWeek()->format('Y-m-d'),
+            ...$cambios,
+        ];
+    }
+
+    public function test_administracion_invita_con_nombre_y_el_correo_saluda_por_el_nombre(): void
     {
         $this->actingAs($this->usuarioConRol(Rol::Administrador))
-            ->post(route('eventos.invitaciones.store', $this->evento), [
-                'emails' => "ana@colegio.cl\nBETO@colegio.cl, carla@colegio.cl",
-                'access_type_id' => $this->acceso->id,
-                'expires_on' => now()->addWeek()->format('Y-m-d'),
-            ])->assertSessionHasNoErrors();
+            ->post(route('eventos.invitaciones.store', $this->evento), $this->crear())
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame(3, Invitation::count());
-        Mail::assertQueued(InvitacionAlEvento::class, 3);
+        $invitacion = Invitation::sole();
+        $this->assertSame('Ana María', $invitacion->first_name);
+        $this->assertSame('Pérez Soto', $invitacion->last_name);
+        $this->assertSame('ana@colegio.cl', $invitacion->email);
 
-        $urls = [];
-        Mail::assertQueued(InvitacionAlEvento::class, function (InvitacionAlEvento $correo) use (&$urls): bool {
-            $urls[] = $correo->url;
+        Mail::assertQueued(InvitacionAlEvento::class, function (InvitacionAlEvento $correo): bool {
+            $this->assertStringContainsString('Hola Ana María,', $correo->render());
+            // En la base solo queda el hash: el enlace no se puede reconstruir desde ahí.
+            $this->assertStringNotContainsString(Invitation::first()->token_hash, $correo->url);
 
             return true;
         });
-        $this->assertCount(3, array_unique($urls));
-        // En la base solo queda el hash: el enlace no se puede reconstruir desde ahí.
-        $this->assertStringNotContainsString(Invitation::first()->token_hash, $urls[0]);
     }
 
-    public function test_un_correo_mal_escrito_no_pierde_los_demas_ni_crea_nada(): void
+    public function test_una_invitacion_antigua_sin_nombre_saluda_hola(): void
+    {
+        [$invitacion] = $this->invitar();
+
+        $html = (new InvitacionAlEvento($invitacion->load('event'), 'https://x.test/i'))->render();
+
+        $this->assertStringContainsString('Hola,', $html);
+    }
+
+    public function test_sin_nombre_o_con_correo_mal_escrito_no_se_crea_nada(): void
     {
         $this->actingAs($this->usuarioConRol(Rol::Administrador))
-            ->post(route('eventos.invitaciones.store', $this->evento), [
-                'emails' => "ana@colegio.cl\nbeto@colegio",
-                'access_type_id' => $this->acceso->id,
-                'expires_on' => now()->addWeek()->format('Y-m-d'),
-            ])->assertSessionHasErrors('emails');
+            ->post(route('eventos.invitaciones.store', $this->evento), $this->crear(['first_name' => '', 'last_name' => '']))
+            ->assertSessionHasErrors(['first_name', 'last_name']);
+
+        $this->post(route('eventos.invitaciones.store', $this->evento), $this->crear(['email' => 'beto@colegio']))
+            ->assertSessionHasErrors('email');
 
         $this->assertSame(0, Invitation::count());
     }
@@ -99,26 +115,41 @@ class InvitacionesTest extends TestCase
         $this->invitar('ana@colegio.cl');
 
         $this->actingAs($this->usuarioConRol(Rol::Administrador))
-            ->post(route('eventos.invitaciones.store', $this->evento), [
-                'emails' => 'ana@colegio.cl, beto@colegio.cl',
-                'access_type_id' => $this->acceso->id,
-                'expires_on' => now()->addWeek()->format('Y-m-d'),
-            ]);
+            ->post(route('eventos.invitaciones.store', $this->evento), $this->crear());
 
-        $this->assertSame(2, Invitation::count());
-        Mail::assertQueued(InvitacionAlEvento::class, 1);
+        $this->assertSame(1, Invitation::count());
+        Mail::assertNotQueued(InvitacionAlEvento::class);
     }
 
-    public function test_solo_administracion_crea_y_anula_invitaciones(): void
+    public function test_la_pagina_de_la_invitacion_trae_el_nombre_precargado(): void
+    {
+        [, $token] = Invitation::emitir($this->evento, $this->acceso, 'juan@colegio.cl', now()->addWeek(), null, 'Juan', 'De la Cruz');
+
+        $this->get(route('publico.invitacion', $token))
+            ->assertOk()
+            ->assertSee('value="Juan"', false)
+            ->assertSee('value="De la Cruz"', false);
+    }
+
+    public function test_coordinacion_crea_invitaciones(): void
+    {
+        $this->actingAs($this->usuarioConRol(Rol::Coordinacion))
+            ->get(route('eventos.invitaciones.index', $this->evento))->assertOk();
+        $this->post(route('eventos.invitaciones.store', $this->evento), $this->crear())->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Invitation::count());
+    }
+
+    public function test_contabilidad_y_acreditacion_no_crean_ni_anulan_invitaciones(): void
     {
         [$invitacion] = $this->invitar();
 
-        foreach ([Rol::Coordinacion, Rol::Contabilidad, Rol::Acreditacion] as $rol) {
+        foreach ([Rol::Contabilidad, Rol::Acreditacion] as $rol) {
             $usuario = $this->usuarioConRol($rol);
 
             $this->actingAs($usuario)->get(route('eventos.invitaciones.index', $this->evento))->assertForbidden();
             $this->actingAs($usuario)->post(route('eventos.invitaciones.store', $this->evento), [
-                'emails' => 'x@colegio.cl', 'access_type_id' => $this->acceso->id, 'expires_on' => now()->addDay()->format('Y-m-d'),
+                ...$this->crear(['email' => 'x@colegio.cl']),
             ])->assertForbidden();
             $this->actingAs($usuario)->patch(route('eventos.invitaciones.anular', [$this->evento, $invitacion]))->assertForbidden();
         }

@@ -221,14 +221,15 @@ class CambiosDelClienteTest extends TestCase
         $this->assertSame(90000, (int) $orden->total);
     }
 
-    public function test_con_codigo_agregar_toma_un_uso_y_quitar_lo_devuelve(): void
+    public function test_con_codigo_sumar_o_quitar_gente_no_gasta_usos_y_recalcula_el_porcentaje(): void
     {
         $codigo = DiscountCode::factory()->create(['event_id' => $this->event->id, 'max_people' => 5, 'used_people' => 1]);
         $this->orden->forceFill(['discount_code_id' => $codigo->id, 'discount_amount' => 9000, 'total' => 81000])->save();
 
         $this->post($this->ruta('participantes.agregar'), $this->nuevoParticipante());
 
-        $this->assertSame(2, (int) $codigo->fresh()->used_people);
+        // El cupo del código es por persona (el solicitante), no por participante.
+        $this->assertSame(1, (int) $codigo->fresh()->used_people);
         // 10 % sobre 180.000
         $this->assertSame(162000, (int) $this->orden->fresh()->total);
 
@@ -236,17 +237,17 @@ class CambiosDelClienteTest extends TestCase
         $this->delete($this->ruta('participantes.quitar', ['participante' => $luisa->id]));
 
         $this->assertSame(1, (int) $codigo->fresh()->used_people);
+        $this->assertSame(81000, (int) $this->orden->fresh()->total);
     }
 
-    public function test_con_el_codigo_agotado_no_se_agrega(): void
+    public function test_con_el_codigo_lleno_igual_se_suma_gente_porque_la_persona_ya_lo_usa(): void
     {
         $codigo = DiscountCode::factory()->create(['event_id' => $this->event->id, 'max_people' => 1, 'used_people' => 1]);
         $this->orden->forceFill(['discount_code_id' => $codigo->id])->save();
 
-        $this->post($this->ruta('participantes.agregar'), $this->nuevoParticipante())->assertOk();
+        $this->post($this->ruta('participantes.agregar'), $this->nuevoParticipante())->assertRedirect();
 
-        $this->assertSame(1, $this->orden->fresh()->participantesVigentes()->count());
-        $this->assertSame(1, $this->asientos($this->jornada1), 'El cupo tomado se devuelve.');
+        $this->assertSame(2, $this->orden->fresh()->participantesVigentes()->count());
         $this->assertSame(1, (int) $codigo->fresh()->used_people);
     }
 
@@ -339,7 +340,7 @@ class CambiosDelClienteTest extends TestCase
 
         $this->get($this->ruta('portal.inscripcion'))
             ->assertOk()
-            ->assertSee('Ya enviaste un pago: para cambiar participantes escríbenos')
+            ->assertDontSee('Ya enviaste un pago')
             ->assertSee('Corregir datos');
     }
 }

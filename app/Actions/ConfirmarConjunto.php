@@ -4,11 +4,14 @@ namespace App\Actions;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\TipoDescuento;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\OrdenNoConfirmable;
 use App\Mail\ConjuntoConfirmado;
+use App\Models\DiscountCode;
 use App\Models\Order;
 use App\Models\Participant;
+use App\Support\DescuentoDeCodigo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -39,8 +42,17 @@ class ConfirmarConjunto
             // propia copia con lockForUpdate y devuelve esa, ya con folio y
             // precio congelados. Sin capturar el retorno, el correo del
             // conjunto se arma con los datos viejos del borrador.
+            // Un monto fijo cubre el recorrido una sola vez: se reparte entre los
+            // colegios en proporción a lo que paga cada uno.
+            $asignados = $this->repartoDelMontoFijo($ordenes);
+
             $ordenes = array_map(
-                fn (Order $orden) => ($this->confirmar)($orden, actorLabel: $orden->responsible_email, enviarCorreo: false),
+                fn (Order $orden) => ($this->confirmar)(
+                    $orden,
+                    actorLabel: $orden->responsible_email,
+                    enviarCorreo: false,
+                    descuentoAsignado: $asignados[$orden->getKey()] ?? null,
+                ),
                 $ordenes,
             );
 
@@ -49,6 +61,28 @@ class ConfirmarConjunto
 
             return $ordenes;
         });
+    }
+
+    /**
+     * @param  array<int, Order>  $ordenes
+     * @return array<int|string, int> [order_id => parte del monto fijo]
+     */
+    private function repartoDelMontoFijo(array $ordenes): array
+    {
+        $codigo = $ordenes[0]->discount_code_id !== null ? DiscountCode::find($ordenes[0]->discount_code_id) : null;
+
+        if ($codigo === null || $codigo->type !== TipoDescuento::Monto) {
+            return [];
+        }
+
+        $subtotales = [];
+
+        foreach ($ordenes as $orden) {
+            $orden->unsetRelation('participantesVigentes');
+            $subtotales[$orden->getKey()] = $orden->calcularSubtotal();
+        }
+
+        return DescuentoDeCodigo::repartir(DescuentoDeCodigo::montoDisponible($codigo, $ordenes[0]), $subtotales);
     }
 
     /**
@@ -83,7 +117,7 @@ class ConfirmarConjunto
             $hermana = $borrador->replicate([
                 'number', 'status', 'payment_status', 'total', 'subtotal',
                 'discount_amount', 'discount_label', 'confirmed_at', 'reserved_until',
-                'applied_tariff', 'applied_tariff_until', 'cancelled_at',
+                'applied_tariff', 'applied_tariff_until', 'cancelled_at', 'public_id',
             ]);
             $hermana->unsetRelation('establishments');
             $hermana->forceFill([

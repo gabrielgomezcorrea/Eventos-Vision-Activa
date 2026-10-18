@@ -28,6 +28,12 @@ class ProgramRequestPolicy
         return $user->can(Permiso::GestionarOrdenes->value);
     }
 
+    /** Borra la solicitud y todo lo que generó: irreversible, solo Administración. */
+    public function deleteAll(User $user, ProgramRequest $request): bool
+    {
+        return $user->esAdministrador();
+    }
+
     public function delete(User $user, ProgramRequest $request): bool
     {
         return $user->can(Permiso::GestionarOrdenes->value);

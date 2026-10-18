@@ -118,7 +118,12 @@ type Props = {
     };
     codigos: string[];
     invitaciones: string[];
-    puede: { editar: boolean; eliminar: boolean; descuentos: boolean };
+    puede: {
+        editar: boolean;
+        eliminar: boolean;
+        descuentos: boolean;
+        invitaciones: boolean;
+    };
 };
 
 function enumerar(items: string[]): string {
@@ -763,7 +768,7 @@ export default function EventoShow({
                     </SeccionFicha>
                 )}
 
-                {puede.descuentos && (
+                {puede.invitaciones && (
                     <SeccionFicha
                         titulo="Invitaciones"
                         accion={

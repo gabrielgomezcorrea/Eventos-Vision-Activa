@@ -157,27 +157,30 @@ class BorradorDeInscripcionTest extends TestCase
         $this->assertSame('ana@colegio.cl', $participante->email);
     }
 
-    public function test_quitar_un_establecimiento_no_borra_a_sus_participantes(): void
+    public function test_quitar_un_establecimiento_se_lleva_a_sus_participantes_y_deja_los_de_los_otros(): void
     {
         $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca']);
-        $establecimiento = $this->orden->fresh()->establishments()->sole();
+        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio Norte', 'address' => 'Calle 2', 'commune' => 'Talca']);
+        [$sanJose, $norte] = $this->orden->fresh()->establishments->all();
 
-        $this->post($this->ruta('participantes.agregar'), [
-            'first_name' => 'Carlos',
-            'last_name' => 'Rojas',
-            'position' => 'Docente Enseñanza Básica',
-            'email' => 'carlos@colegio.cl',
-            'rut' => '11.111.111-1',
-            'access_type_id' => $this->acceso->id,
-            'establishment_id' => $establecimiento->id,
-        ]);
+        foreach ([['Carlos', $sanJose], ['Marta', $norte]] as [$nombre, $colegio]) {
+            $this->post($this->ruta('participantes.agregar'), [
+                'first_name' => $nombre,
+                'last_name' => 'Rojas',
+                'position' => 'Docente Enseñanza Básica',
+                'email' => strtolower($nombre).'@colegio.cl',
+                'rut' => $nombre === 'Carlos' ? '11.111.111-1' : '22.222.222-2',
+                'access_type_id' => $this->acceso->id,
+                'establishment_id' => $colegio->id,
+            ]);
+        }
 
-        $this->delete($this->ruta('establecimientos.quitar', ['establishment' => $establecimiento->id]));
+        $this->delete($this->ruta('establecimientos.quitar', ['establishment' => $sanJose->id]));
 
-        $participante = $this->orden->fresh()->participants()->sole();
-
-        $this->assertSame('Carlos', $participante->first_name);
-        $this->assertNull($participante->establishment_id);
+        // Carlos se fue con su colegio; Marta sigue en el suyo, nadie queda "sin establecimiento".
+        $restantes = $this->orden->fresh()->participants;
+        $this->assertSame(['Marta'], $restantes->pluck('first_name')->all());
+        $this->assertSame($norte->id, $restantes->first()->establishment_id);
     }
 
     public function test_no_acepta_un_acceso_de_otro_evento(): void

@@ -65,6 +65,7 @@ class NormalizacionDeDatosTest extends TestCase
             'phone' => '9 1234 5678',
             'position' => 'Docente',
             'institution' => 'liceo   bicentenario a-12',
+            'marketing' => '1',
         ])->assertOk();
 
         $solicitud = ProgramRequest::sole();

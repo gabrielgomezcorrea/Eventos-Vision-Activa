@@ -26,7 +26,10 @@ class InvitacionController extends Controller
     {
         $invitacion = $this->resolver($token);
 
-        return $this->vista($invitacion, ['valores' => [], 'errores' => new MessageBag]);
+        return $this->vista($invitacion, [
+            'valores' => ['first_name' => $invitacion->first_name, 'last_name' => $invitacion->last_name],
+            'errores' => new MessageBag,
+        ]);
     }
 
     public function guardar(AceptarInvitacion $aceptar, Request $request, string $token): Renderable

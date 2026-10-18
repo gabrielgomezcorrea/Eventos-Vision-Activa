@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Publico;
 use App\Actions\EmitirEnlaceDeAcceso;
 use App\Exceptions\EnlaceNoUtilizable;
 use App\Http\Controllers\Controller;
+use App\Mail\AvisoNuevaSolicitud;
 use App\Mail\ProgramaDelEvento;
 use App\Models\Event;
 use App\Models\ProgramRequest;
+use App\Support\DestinatariosDeAvisos;
 use App\Support\Forms\ProgramFormField;
 use App\Support\ReglasDeContacto;
 use App\Support\Texto;
@@ -110,6 +112,10 @@ class ProgramRequestController extends Controller
         // programa y a quién no. Sin esto, el listado no distingue una solicitud
         // recién llegada de una que ya tuvo respuesta.
         $solicitud->update(['program_sent_at' => now()]);
+
+        foreach (DestinatariosDeAvisos::para('notify_program_requests') as $destinatario) {
+            Mail::to($destinatario)->queue(new AvisoNuevaSolicitud($solicitud));
+        }
 
         return $this->vistaDeExito($event, $campos, $embed);
     }

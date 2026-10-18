@@ -28,13 +28,26 @@
         <div class="aviso aviso-error">{{ $errores->first('cambio') }}</div>
     @endif
 
-    @foreach ($orden->participants as $participante)
+    @php
+        // Con varios colegios, cada uno con su título y sus participantes; con uno solo, la lista de siempre.
+        $grupos = $variosColegios
+            ? $orden->establishments
+                ->map(fn ($e) => ['titulo' => $e->name, 'personas' => $orden->participants->where('establishment_id', $e->id)])
+                ->push(['titulo' => 'Sin establecimiento', 'personas' => $orden->participants->whereNull('establishment_id')])
+                ->filter(fn ($g) => $g['personas']->isNotEmpty())
+            : collect([['titulo' => null, 'personas' => $orden->participants]]);
+    @endphp
+    @foreach ($grupos as $grupo)
+    @if ($grupo['titulo'])
+        <p class="etiqueta-seccion" style="margin:18px 0 6px">{{ $grupo['titulo'] }} · {{ $grupo['personas']->count() }} {{ $grupo['personas']->count() === 1 ? 'participante' : 'participantes' }}</p>
+    @endif
+    @foreach ($grupo['personas'] as $participante)
         <div class="fila-persona">
             <span class="iniciales">{{ mb_strtoupper(mb_substr($participante->first_name, 0, 1).mb_substr((string) $participante->last_name, 0, 1)) }}</span>
             <div class="fila-persona-datos">
                 <strong>{{ $participante->nombre_completo }}</strong>
                 <span class="ayuda" style="margin:0">
-                    {{ collect([$participante->rut, $participante->accessType?->name, $participante->establishment?->name])->filter()->implode(' · ') }}
+                    {{ collect([$participante->rut, $participante->accessType?->name, $variosColegios ? null : $participante->establishment?->name])->filter()->implode(' · ') }}
                     · ${{ number_format($valorDe($participante), 0, ',', '.') }}
                 </span>
                 @unless ($orden->esBorrador())
@@ -63,6 +76,24 @@
             </form>
         </div>
     @endforeach
+    @endforeach
+
+    @php $descuento = $orden->esBorrador() ? $orden->calcularDescuento() : (int) $orden->discount_amount; @endphp
+    @if ($orden->participants->isNotEmpty() && $descuento > 0)
+        {{-- Con descuento (código o por cantidad) se ve de dónde sale el total. --}}
+        <table>
+            <tbody>
+                <tr>
+                    <td style="color:var(--texto-suave)">Subtotal</td>
+                    <td style="text-align:right">${{ number_format($orden->esBorrador() ? $orden->calcularSubtotal() : $orden->subtotal, 0, ',', '.') }}</td>
+                </tr>
+                <tr>
+                    <td style="color:var(--exito)">{{ $orden->esBorrador() ? $orden->etiquetaDeDescuento() : $orden->discount_label }}</td>
+                    <td style="text-align:right;color:var(--exito)">-${{ number_format($descuento, 0, ',', '.') }}</td>
+                </tr>
+            </tbody>
+        </table>
+    @endif
 
     @if ($orden->participants->isNotEmpty())
         <div class="total">

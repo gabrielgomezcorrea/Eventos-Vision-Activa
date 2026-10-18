@@ -22,6 +22,8 @@ import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoContr
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
 import { Campo } from '@/components/campo';
 import { Confirmar } from '@/components/confirmar';
+import { NotasConFecha } from '@/components/notas-con-fecha';
+import type { Nota } from '@/components/notas-con-fecha';
 import { EditarSeccion } from '@/components/editar-seccion';
 import { EstadoBadge } from '@/components/estado-badge';
 import {
@@ -67,8 +69,8 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { tonoVencimiento } from '@/pages/inscripciones/index';
-import type { Vencimiento } from '@/pages/inscripciones/index';
+import { tonoVencimiento } from '@/lib/vencimiento';
+import type { Vencimiento } from '@/lib/vencimiento';
 import type { Estado } from '@/types';
 
 type Participante = {
@@ -104,6 +106,7 @@ type Props = {
         descuento: number;
         descuento_etiqueta: string | null;
         internal_notes: string | null;
+        notas: Nota[];
         responsable: {
             nombre: string | null;
             cargo: string | null;
@@ -1572,51 +1575,19 @@ export default function InscripcionShow({
                     </SeccionFicha>
                 )}
 
-                <SeccionFicha
+                <NotasConFecha
                     titulo="Notas internas"
-                    accion={
-                        puede.editarNotas && (
-                            <EditarSeccion
-                                titulo="Notas internas"
-                                url={InscripcionController.actualizarNotas.url(
-                                    orden.id,
-                                )}
-                                inicial={{
-                                    internal_notes: orden.internal_notes ?? '',
-                                }}
-                            >
-                                {(f) => (
-                                    <Campo
-                                        label="Solo las ve el equipo. No se envían al cliente."
-                                        htmlFor="internal_notes"
-                                        error={f.errors.internal_notes}
-                                    >
-                                        <Textarea
-                                            id="internal_notes"
-                                            rows={6}
-                                            value={f.data.internal_notes}
-                                            onChange={(e) =>
-                                                f.set(
-                                                    'internal_notes',
-                                                    e.target.value,
-                                                )
-                                            }
-                                        />
-                                    </Campo>
-                                )}
-                            </EditarSeccion>
-                        )
-                    }
-                >
-                    <p
-                        className={cn(
-                            'text-sm whitespace-pre-line',
-                            !orden.internal_notes && 'text-muted-foreground',
-                        )}
-                    >
-                        {orden.internal_notes || 'Sin notas.'}
-                    </p>
-                </SeccionFicha>
+                    url={InscripcionController.guardarNota.url(orden.id)}
+                    notas={orden.notas}
+                />
+
+                {orden.internal_notes && (
+                    <SeccionFicha titulo="Notas anteriores">
+                        <p className="text-sm whitespace-pre-line">
+                            {orden.internal_notes}
+                        </p>
+                    </SeccionFicha>
+                )}
             </div>
         </>
     );

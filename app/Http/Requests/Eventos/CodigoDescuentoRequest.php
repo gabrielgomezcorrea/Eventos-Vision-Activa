@@ -42,6 +42,7 @@ class CodigoDescuentoRequest extends FormRequest
             'type' => ['required', Rule::enum(TipoDescuento::class)],
             'value' => ['required', 'integer', 'min:1', $this->input('type') === 'percent' ? 'max:100' : 'max:100000000'],
             'max_people' => ['required', 'integer', 'min:1', 'max:99'],
+            'uses_per_person' => ['required', Rule::in(array_keys(DiscountCode::USOS_POR_PERSONA))],
             'expires_on' => ['required', 'date', 'after_or_equal:today'],
         ];
     }
@@ -67,7 +68,8 @@ class CodigoDescuentoRequest extends FormRequest
             'code' => 'código',
             'type' => 'tipo de descuento',
             'value' => 'valor del descuento',
-            'max_people' => 'máximo de personas',
+            'max_people' => 'personas que pueden usarlo',
+            'uses_per_person' => 'usos por persona',
             'expires_on' => 'fecha de vencimiento',
         ];
     }

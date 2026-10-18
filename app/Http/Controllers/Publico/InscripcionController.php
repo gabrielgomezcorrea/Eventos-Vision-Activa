@@ -6,6 +6,7 @@ use App\Actions\AplicarCodigoDeDescuento;
 use App\Actions\ConfirmarConjunto;
 use App\Actions\ConfirmarOrden;
 use App\Actions\EmitirEnlaceDeAcceso;
+use App\Actions\IniciarInscripcionAdicional;
 use App\Actions\ModificarInscripcion;
 use App\Actions\RegistrarComprobante;
 use App\Enums\OrderKind;
@@ -14,9 +15,12 @@ use App\Exceptions\CodigoNoAplicable;
 use App\Exceptions\ComprobanteNoAceptado;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\EnlaceNoUtilizable;
+use App\Exceptions\InscripcionAdicionalNoPermitida;
 use App\Exceptions\OrdenNoConfirmable;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Publico\Concerns\ResuelveOrdenesDelPortal;
+use App\Mail\AvisoComprobantePorRevisar;
+use App\Mail\AvisoInscripcionConfirmada;
 use App\Models\AccessType;
 use App\Models\Establishment;
 use App\Models\Event;
@@ -27,6 +31,7 @@ use App\Models\PayerEntity;
 use App\Models\ProgramRequest;
 use App\Rules\RutValido;
 use App\Support\Auditor;
+use App\Support\DestinatariosDeAvisos;
 use App\Support\ReglasDeContacto;
 use App\Support\Rut;
 use Illuminate\Contracts\Encryption\DecryptException;
@@ -35,6 +40,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\MessageBag;
@@ -202,6 +208,10 @@ class InscripcionController extends Controller
     {
         [$orden] = $this->resolverParaCambio($token);
 
+        // En una inscripción adicional la entidad pagadora es la misma de la
+        // original: editarla cambiaría su factura.
+        abort_if($orden->parent_order_id !== null, 403);
+
         // Everything the invoice needs from the payer.
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'name' => ReglasDeContacto::texto('Fundación Educacional Los Andes'),
@@ -268,6 +278,9 @@ class InscripcionController extends Controller
     {
         [$orden] = $this->resolver($token);
 
+        // Una inscripción adicional es del mismo colegio que la original.
+        abort_if($orden->parent_order_id !== null, 403);
+
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'name' => ReglasDeContacto::establecimiento(),
             'rbd' => ReglasDeContacto::rbd(),
@@ -299,9 +312,11 @@ class InscripcionController extends Controller
     {
         [$orden] = $this->resolver($token);
 
-        // Los participantes de ese establecimiento quedan sin asignar, no se borran.
-        $orden->participants()->where('establishment_id', $establishment->getKey())
-            ->update(['establishment_id' => null]);
+        abort_if($orden->parent_order_id !== null, 403);
+
+        // Los participantes de ese establecimiento se van con él: dejarlos sin
+        // colegio los mezclaría con otro al confirmar.
+        $orden->participants()->where('establishment_id', $establishment->getKey())->delete();
 
         $orden->establishments()->detach($establishment);
 
@@ -540,7 +555,7 @@ class InscripcionController extends Controller
             ]);
         }
 
-        return redirect()->to(route('inscripcion.portal.inscripcion', ['token' => $token]).'#codigo');
+        return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
     }
 
     public function quitarCodigo(string $token): RedirectResponse
@@ -549,7 +564,7 @@ class InscripcionController extends Controller
 
         $orden->forceFill(['discount_code_id' => null])->save();
 
-        return redirect()->to(route('inscripcion.portal.inscripcion', ['token' => $token]).'#codigo');
+        return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
     }
 
     public function confirmar(ConfirmarOrden $confirmar, ConfirmarConjunto $confirmarConjunto, string $token): RedirectResponse|Renderable
@@ -566,11 +581,18 @@ class InscripcionController extends Controller
         }
 
         try {
-            $orden->establishments->count() > 1
+            $confirmadas = $orden->establishments->count() > 1
                 ? $confirmarConjunto($orden)
-                : $confirmar($orden, actorLabel: $orden->responsible_email);
+                : [$confirmar($orden, actorLabel: $orden->responsible_email)];
         } catch (OrdenNoConfirmable|CuposInsuficientes $e) {
             return $this->vistaResumen($token, $orden->fresh(), ['errorDeConfirmacion' => $e->getMessage()]);
+        }
+
+        // Un solo aviso por confirmación, aunque sean varios colegios.
+        $confirmadas = collect($confirmadas)->each->load(['event', 'establishments', 'payerEntity']);
+
+        foreach (DestinatariosDeAvisos::para('notify_confirmed_orders') as $destinatario) {
+            Mail::to($destinatario)->queue(new AvisoInscripcionConfirmada($confirmadas));
         }
 
         return redirect()->route('inscripcion.portal.pago', ['token' => $token]);
@@ -587,8 +609,48 @@ class InscripcionController extends Controller
         return redirect()->to(route($this->pestanaPorDefecto($orden), array_filter([
             'token' => $token,
             'colegio' => $request->integer('colegio') ?: null,
+            'inscripcion' => $request->query('inscripcion'),
             'enviado' => $request->boolean('enviado') ? 1 : null,
         ])));
+    }
+
+    /**
+     * "Inscribir más participantes": crea una inscripción nueva del mismo
+     * colegio, sin tocar la ya confirmada, y lleva al cliente a completarla.
+     * Se edita con su propio enlace (ver `aSuPropioEnlace`).
+     */
+    public function adicional(Request $request, IniciarInscripcionAdicional $iniciar, string $token): RedirectResponse
+    {
+        $origen = $this->ordenDelConjunto($this->resolverParaConsulta($token), null);
+
+        try {
+            $nueva = $iniciar($origen);
+        } catch (InscripcionAdicionalNoPermitida $e) {
+            throw EnlaceNoUtilizable::inscripcionAdicionalNoDisponible($e->getMessage(), $token);
+        }
+
+        [, $propio] = MagicLink::emitir($nueva->event, $nueva->responsible_email, $nueva);
+
+        return redirect()->to(route('inscripcion.portal.inscripcion', ['token' => $propio, 'inscripcion' => $nueva->public_id]).'#participantes');
+    }
+
+    /**
+     * "Agregar otro establecimiento": borrador nuevo del mismo conjunto, sin
+     * colegio ni entidad pagadora, que el cliente completa con su propio enlace.
+     */
+    public function otroEstablecimiento(IniciarInscripcionAdicional $iniciar, string $token): RedirectResponse
+    {
+        $origen = $this->ordenDelConjunto($this->resolverParaConsulta($token), null);
+
+        try {
+            $nueva = $iniciar->otroEstablecimiento($origen);
+        } catch (InscripcionAdicionalNoPermitida $e) {
+            throw EnlaceNoUtilizable::inscripcionAdicionalNoDisponible($e->getMessage(), $token);
+        }
+
+        [, $propio] = MagicLink::emitir($nueva->event, $nueva->responsible_email, $nueva);
+
+        return redirect()->to(route('inscripcion.portal.inscripcion', ['token' => $propio, 'inscripcion' => $nueva->public_id]).'#establecimientos');
     }
 
     /** Carga del comprobante de transferencia por parte del cliente. */
@@ -646,7 +708,7 @@ class InscripcionController extends Controller
         $datos['reference'] = $orden->number;
 
         try {
-            $registrar($orden, $datos, $archivo, actorLabel: $orden->responsible_email);
+            $pago = $registrar($orden, $datos, $archivo, actorLabel: $orden->responsible_email);
         } catch (ComprobanteNoAceptado $e) {
             return view('publico.portal.pago', $this->datosDelPortal(
                 $token, $orden->fresh(), 'pago', errorDeComprobante: $e->getMessage(),
@@ -657,12 +719,17 @@ class InscripcionController extends Controller
             @unlink($guardado->getPathname());
         }
 
+        foreach (DestinatariosDeAvisos::para('notify_payment_proofs') as $destinatario) {
+            Mail::to($destinatario)->queue(new AvisoComprobantePorRevisar($pago));
+        }
+
         // Vuelve al colegio desde el que se subió: mandarlo al primero del
         // conjunto lo deja buscando en cuál de los siete estaba.
         // `comprobante=recibido` hace que Pago lo confirme en una alerta: sin
         // sesión no hay mensajes flash, y recargar en silencio no dice nada.
         return redirect()->route('inscripcion.portal.pago', [
-            'token' => $token, 'colegio' => $establishment?->id, 'comprobante' => 'recibido',
+            'token' => $token, 'comprobante' => 'recibido',
+            ...($orden->group_id !== null && $orden->group->orders()->count() > 1 ? ['inscripcion' => $orden->public_id] : []),
         ]);
     }
 

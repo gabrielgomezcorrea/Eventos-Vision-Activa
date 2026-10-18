@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Enums\NivelDeCambio;
+use App\Enums\TipoDescuento;
 use App\Exceptions\CambioNoPermitido;
 use App\Exceptions\CuposInsuficientes;
 use App\Models\AccessType;
@@ -41,11 +42,9 @@ class ModificarInscripcion
             $acceso->loadMissing('sessions');
             $this->cupos->tomar($acceso->consumoDeCupos());
 
+            // El cupo del código es por persona (el solicitante), no por participante:
+            // sumar a alguien no ocupa otro.
             $codigo = $this->codigoDe($fresca);
-
-            if ($codigo !== null && ! $codigo->tomarUsos(1)) {
-                throw CambioNoPermitido::porque($codigo->refresh()->impedimento(1) ?? 'Este código ya no tiene usos disponibles.');
-            }
 
             $participante = $fresca->participants()->create($datos + [
                 'access_type_id' => $acceso->getKey(),
@@ -90,7 +89,6 @@ class ModificarInscripcion
             }
 
             $this->cupos->devolver($propio->accessType?->consumoDeCupos() ?? []);
-            $this->codigoDe($fresca)?->devolverUsos(1);
 
             $nombre = $propio->nombre_completo;
             $propio->delete();
@@ -258,9 +256,11 @@ class ModificarInscripcion
         $codigo = $this->codigoDe($orden);
 
         if ($codigo !== null) {
-            $descuento = (int) $orden->participantesVigentes
-                ->groupBy('establishment_id')
-                ->sum(fn ($grupo): int => $codigo->calcular((int) $grupo->sum(fn (Participant $p): int => (int) $p->unit_price)));
+            // Porcentaje: sobre el nuevo subtotal. Monto fijo: conserva la parte que
+            // le tocó al confirmar (el recorrido ya usó su monto), sin pasar del subtotal.
+            $descuento = $codigo->type === TipoDescuento::Porcentaje
+                ? $codigo->calcular($subtotal)
+                : min((int) $orden->discount_amount, $subtotal);
             $etiqueta = 'Código '.$codigo->formateado().' ('.$codigo->etiqueta().')';
         } else {
             $tramo = $orden->event->tramoDeDescuento($orden->participantesParaDescuento());

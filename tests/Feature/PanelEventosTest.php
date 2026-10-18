@@ -274,7 +274,7 @@ class PanelEventosTest extends TestCase
         $this->assertSame('56934567890', $evento->contact_whatsapp);
     }
 
-    public function test_el_programa_solo_acepta_pdf_y_hasta_cinco_archivos(): void
+    public function test_el_programa_solo_acepta_pdf_de_hasta_5_mb(): void
     {
         Storage::fake(config('filesystems.private_disk'));
         $evento = $this->evento();
@@ -284,17 +284,27 @@ class PanelEventosTest extends TestCase
             'programa' => UploadedFile::fake()->create('programa.docx', 50, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
         ])->assertSessionHasErrors('programa');
 
-        foreach (range(1, 5) as $numero) {
+        $this->post(route('eventos.programa.store', $evento), [
+            'programa' => UploadedFile::fake()->create('grande.pdf', 5 * 1024 + 1, 'application/pdf'),
+        ])->assertSessionHasErrors('programa');
+
+        $this->assertSame(0, $evento->attachments()->count());
+    }
+
+    public function test_subir_otro_programa_reemplaza_al_anterior_y_borra_su_archivo(): void
+    {
+        Storage::fake(config('filesystems.private_disk'));
+        $evento = $this->evento();
+        $this->actingAs($this->usuario(Rol::Administrador));
+
+        foreach (['uno', 'dos'] as $nombre) {
             $this->post(route('eventos.programa.store', $evento), [
-                'programa' => UploadedFile::fake()->create("programa-{$numero}.pdf", 50, 'application/pdf'),
+                'programa' => UploadedFile::fake()->create("{$nombre}.pdf", 50, 'application/pdf'),
             ])->assertSessionHasNoErrors();
         }
 
-        $this->post(route('eventos.programa.store', $evento), [
-            'programa' => UploadedFile::fake()->create('programa-6.pdf', 50, 'application/pdf'),
-        ])->assertSessionHasErrors('programa');
-
-        $this->assertSame(5, $evento->attachments()->count());
+        $this->assertSame(['dos.pdf'], $evento->attachments()->pluck('original_name')->all());
+        $this->assertCount(1, Storage::disk(config('filesystems.private_disk'))->allFiles('programas'));
     }
 
     public function test_un_evento_nuevo_parte_con_el_contacto_por_defecto(): void

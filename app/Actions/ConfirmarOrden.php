@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\Participant;
 use App\Models\ProgramRequest;
 use App\Support\Auditor;
+use App\Support\DescuentoDeCodigo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -35,11 +36,11 @@ class ConfirmarOrden
      * @throws OrdenNoConfirmable
      * @throws CuposInsuficientes
      */
-    public function __invoke(Order $orden, ?string $actorLabel = null, bool $enviarCorreo = true): Order
+    public function __invoke(Order $orden, ?string $actorLabel = null, bool $enviarCorreo = true, ?int $descuentoAsignado = null): Order
     {
         $this->verificar($orden);
 
-        $orden = DB::transaction(function () use ($orden) {
+        $orden = DB::transaction(function () use ($orden, $descuentoAsignado) {
             // Se recarga dentro de la transacción para no confirmar dos veces
             // si llegan dos envíos del mismo formulario.
             $fresca = Order::whereKey($orden->getKey())->lockForUpdate()->firstOrFail();
@@ -91,18 +92,24 @@ class ConfirmarOrden
             // descuentos sobre la misma inscripción. Los usos se toman aquí,
             // no al aplicarlo, y si no alcanzan se revierte todo.
             $codigo = $fresca->discount_code_id !== null ? DiscountCode::find($fresca->discount_code_id) : null;
-            $personas = $fresca->participantesVigentes->count();
 
             if ($codigo !== null && ($previos = $fresca->participantesConCodigoPrevio())->isNotEmpty()) {
                 throw OrdenNoConfirmable::porque(DiscountCode::mensajePorCodigoPrevio($previos));
             }
 
-            if ($codigo !== null && ! $codigo->tomarUsos($personas)) {
-                throw OrdenNoConfirmable::porque($codigo->refresh()->impedimento($personas) ?? 'Este código ya no está disponible.');
+            // El cupo del código es por persona (correo del solicitante), no por participante.
+            if ($codigo !== null && ($motivo = $codigo->impedimentoPara($fresca)) !== null) {
+                throw OrdenNoConfirmable::porque($motivo);
+            }
+
+            if ($codigo !== null && ! $codigo->tomarPersona($fresca)) {
+                throw OrdenNoConfirmable::porque('Este código ya alcanzó el máximo de personas que pueden usarlo.');
             }
 
             $tramo = $codigo === null ? $fresca->event->tramoDeDescuento($fresca->participantesParaDescuento()) : null;
-            $descuento = $codigo?->calcular($subtotal) ?? $tramo?->calcular($subtotal) ?? 0;
+            $descuento = $codigo !== null
+                ? DescuentoDeCodigo::para($codigo, $fresca, $subtotal, $descuentoAsignado)
+                : ($tramo?->calcular($subtotal) ?? 0);
             $sinCosto = $codigo !== null && $subtotal - $descuento === 0;
 
             $fresca->forceFill([

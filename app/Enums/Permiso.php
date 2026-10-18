@@ -30,8 +30,14 @@ enum Permiso: string
     case VerAcreditacion = 'ver_acreditacion';
     case AcreditarParticipantes = 'acreditar_participantes';
 
-    // Códigos de descuento e invitaciones sin costo: regalan cupos, solo Administración.
+    // Reporte del día del evento: cuántos llegaron. Nunca muestra montos.
+    case VerReporteAcreditacion = 'ver_reporte_acreditacion';
+
+    // Códigos de descuento: regalan cupos, solo Administración.
     case GestionarDescuentos = 'gestionar_descuentos';
+
+    // Invitaciones personales e invitado especial: también Coordinación, que no puede crear códigos.
+    case GestionarInvitaciones = 'gestionar_invitaciones';
 
     case GestionarCuentasBancarias = 'gestionar_cuentas_bancarias';
 

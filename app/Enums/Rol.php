@@ -24,6 +24,21 @@ enum Rol: string
     }
 
     /**
+     * Avisos por correo que parten encendidos al crear un usuario con este rol.
+     * Cambiar el rol después no los toca.
+     *
+     * @return array<int, string>
+     */
+    public function avisosPorDefecto(): array
+    {
+        return match ($this) {
+            self::Coordinacion => ['notify_program_requests', 'notify_confirmed_orders'],
+            self::Contabilidad => ['notify_payment_proofs'],
+            default => [],
+        };
+    }
+
+    /**
      * Permisos que se asignan a este rol al sembrar la base.
      *
      * @return array<int, Permiso>
@@ -43,6 +58,8 @@ enum Rol: string
                 Permiso::VerComprobantes,
                 Permiso::VerAcreditacion,
                 Permiso::VerAuditoria,
+                Permiso::GestionarInvitaciones,
+                Permiso::VerReporteAcreditacion,
             ],
 
             // Contabilidad no configura eventos ni hace seguimiento comercial:
@@ -61,6 +78,7 @@ enum Rol: string
             self::Acreditacion => [
                 Permiso::VerAcreditacion,
                 Permiso::AcreditarParticipantes,
+                Permiso::VerReporteAcreditacion,
             ],
         };
     }

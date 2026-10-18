@@ -88,6 +88,12 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
     Route::get('/resumen', [InscripcionController::class, 'resumen'])->name('resumen');
     Route::post('/confirmar', [InscripcionController::class, 'confirmar'])->name('confirmar');
 
+    Route::post('/adicional', [InscripcionController::class, 'adicional'])
+        ->middleware('throttle:10,1')
+        ->name('adicional');
+    Route::post('/otro-establecimiento', [InscripcionController::class, 'otroEstablecimiento'])
+        ->middleware('throttle:10,1')
+        ->name('otro-establecimiento');
     Route::post('/codigo', [InscripcionController::class, 'aplicarCodigo'])
         ->middleware('throttle:10,1')
         ->name('codigo.aplicar');
@@ -100,6 +106,7 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
     Route::get('/portal/pago', [PortalController::class, 'pago'])->name('portal.pago');
     Route::get('/portal/credenciales', [PortalController::class, 'credenciales'])->name('portal.credenciales');
     Route::get('/portal/adjunto/{attachment}', [PortalController::class, 'adjunto'])->name('portal.adjunto');
+    Route::get('/comprobante/{payment}/ver', [PortalController::class, 'verComprobante'])->name('comprobante.ver');
     Route::get('/portal/calendario.ics', [PortalController::class, 'calendario'])->name('portal.calendario');
 
     // Enlaces de correos ya enviados: no pueden morir. Redirigen a la

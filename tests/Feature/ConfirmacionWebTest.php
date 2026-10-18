@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
+use App\Enums\Rol;
+use App\Mail\AvisoInscripcionConfirmada;
 use App\Mail\OrdenConfirmada;
 use App\Models\AccessType;
 use App\Models\Event;
@@ -83,6 +85,31 @@ class ConfirmacionWebTest extends TestCase
             ->assertSee('12345678');
 
         Mail::assertQueued(OrdenConfirmada::class);
+    }
+
+    public function test_confirmar_avisa_una_sola_vez_al_equipo_suscrito(): void
+    {
+        $flor = $this->usuarioConRol(Rol::Coordinacion, ['notify_confirmed_orders' => true]);
+        $this->usuarioConRol(Rol::Coordinacion, ['notify_confirmed_orders' => false]);
+
+        $this->post($this->ruta('confirmar'));
+        // Un segundo clic no confirma de nuevo ni vuelve a avisar.
+        $this->post($this->ruta('confirmar'));
+
+        Mail::assertQueued(AvisoInscripcionConfirmada::class, 1);
+        Mail::assertQueued(AvisoInscripcionConfirmada::class, fn (AvisoInscripcionConfirmada $m): bool => $m->hasTo($flor->email)
+            && str_contains($m->envelope()->subject, 'Nueva inscripción:')
+            && str_contains($m->render(), $this->orden->fresh()->number));
+    }
+
+    public function test_si_no_hay_cupo_no_se_avisa_al_equipo(): void
+    {
+        $this->usuarioConRol(Rol::Coordinacion, ['notify_confirmed_orders' => true]);
+        $this->jornada->forceFill(['reserved_seats' => 2])->save();
+
+        $this->post($this->ruta('confirmar'))->assertOk();
+
+        Mail::assertNotQueued(AvisoInscripcionConfirmada::class);
     }
 
     public function test_tras_confirmar_ya_no_se_puede_editar_pero_si_consultar(): void

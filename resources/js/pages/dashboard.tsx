@@ -489,7 +489,15 @@ export default function Dashboard({
                 )}
 
                 {tarjetas.length > 0 && (
-                    <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+                    <div
+                        className={cn(
+                            'grid grid-cols-1 gap-4 @xl/main:grid-cols-2',
+                            // Que quepan en una sola fila: 4 tarjetas en 4 columnas, no 3 y 1.
+                            tarjetas.length === 4
+                                ? '@5xl/main:grid-cols-4'
+                                : '@5xl/main:grid-cols-3',
+                        )}
+                    >
                         {tarjetas.map((tarjeta) => (
                             <TarjetaResumen
                                 key={tarjeta.titulo}

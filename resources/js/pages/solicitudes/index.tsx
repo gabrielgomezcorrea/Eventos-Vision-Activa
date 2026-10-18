@@ -23,6 +23,7 @@ import type { Estado, Paginado } from '@/types';
 type SolicitudFila = {
     id: number;
     recibida: string;
+    recibida_hora: string;
     persona: string;
     cargo: string | null;
     correo: string;
@@ -30,6 +31,7 @@ type SolicitudFila = {
     institucion: string | null;
     evento: string | null;
     estado: Estado;
+    ultima_nota: string | null;
 };
 
 type Filtros = {
@@ -37,6 +39,7 @@ type Filtros = {
     evento: number | null;
     pendientes: boolean;
     cargo: string | null;
+    seguimiento: string | null;
 };
 
 type Props = {
@@ -71,6 +74,10 @@ export default function SolicitudesIndex({
                 ...(todos.buscar ? { buscar: todos.buscar } : {}),
                 ...(todos.evento ? { evento: todos.evento } : {}),
                 ...(todos.pendientes ? { pendientes: 1 } : {}),
+                ...(todos.cargo ? { cargo: todos.cargo } : {}),
+                ...(todos.seguimiento
+                    ? { seguimiento: todos.seguimiento }
+                    : {}),
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -82,7 +89,11 @@ export default function SolicitudesIndex({
     }
 
     const hayFiltros = Boolean(
-        filtros.buscar || filtros.evento || filtros.pendientes || filtros.cargo,
+        filtros.buscar ||
+        filtros.evento ||
+        filtros.pendientes ||
+        filtros.cargo ||
+        filtros.seguimiento,
     );
 
     return (
@@ -152,6 +163,18 @@ export default function SolicitudesIndex({
                             ))}
                         </NativeSelect>
                     )}
+                    <NativeSelect
+                        aria-label="Seguimiento"
+                        className="w-auto"
+                        value={filtros.seguimiento ?? ''}
+                        onChange={(e) =>
+                            filtrar({ seguimiento: e.target.value || null })
+                        }
+                    >
+                        <option value="">Seguimiento: todas</option>
+                        <option value="sin">Sin seguimiento</option>
+                        <option value="con">Con seguimiento</option>
+                    </NativeSelect>
                     <label className="flex items-center gap-2 px-2 text-sm">
                         <Checkbox
                             checked={filtros.pendientes}
@@ -168,9 +191,9 @@ export default function SolicitudesIndex({
                         <TableHeader>
                             <TableRow className="hover:bg-transparent">
                                 <TableHead className="pl-5">Recibida</TableHead>
-                                <TableHead>Persona</TableHead>
-                                <TableHead>Contacto</TableHead>
                                 <TableHead>Institución</TableHead>
+                                <TableHead>Solicitante</TableHead>
+                                <TableHead>Contacto</TableHead>
                                 <TableHead>Evento</TableHead>
                                 <TableHead>Estado</TableHead>
                             </TableRow>
@@ -200,6 +223,12 @@ export default function SolicitudesIndex({
                                 >
                                     <TableCell className="text-muted-foreground pl-5">
                                         {s.recibida}
+                                        <span className="block text-xs">
+                                            {s.recibida_hora}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="max-w-48 truncate">
+                                        {s.institucion ?? '—'}
                                     </TableCell>
                                     <TableCell>
                                         <Link
@@ -228,13 +257,15 @@ export default function SolicitudesIndex({
                                         )}
                                     </TableCell>
                                     <TableCell className="max-w-48 truncate">
-                                        {s.institucion ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="max-w-48 truncate">
                                         {s.evento ?? '—'}
                                     </TableCell>
                                     <TableCell>
                                         <EstadoBadge estado={s.estado} />
+                                        {s.ultima_nota && (
+                                            <span className="text-muted-foreground block text-xs">
+                                                Última nota: {s.ultima_nota}
+                                            </span>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))}

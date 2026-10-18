@@ -54,8 +54,8 @@ class ReactivarReserva
             // La orden ya tenía su código: no importa que haya vencido, pero sí que quepa.
             $codigo = $fresca->discount_code_id !== null ? DiscountCode::find($fresca->discount_code_id) : null;
 
-            if ($codigo !== null && ! $codigo->tomarUsos($fresca->participantesVigentes->count(), ignorarVigencia: true)) {
-                throw ReactivacionNoPermitida::porque('El código de descuento de esta inscripción ya no tiene usos disponibles.');
+            if ($codigo !== null && (($motivo = $codigo->impedimentoPara($fresca, ignorarVigencia: true)) !== null || ! $codigo->tomarPersona($fresca, ignorarVigencia: true))) {
+                throw ReactivacionNoPermitida::porque($motivo ?? 'El código de descuento de esta inscripción ya alcanzó el máximo de personas.');
             }
 
             $totalAnterior = (int) $fresca->total;

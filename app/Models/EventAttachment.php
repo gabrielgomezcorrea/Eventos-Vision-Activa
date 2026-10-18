@@ -13,11 +13,11 @@ use Illuminate\Support\Facades\Storage;
  */
 class EventAttachment extends Model
 {
-    /** Tope por evento. Más de tres y el correo pesa más de lo que nadie lee. */
-    public const MAXIMO = 5;
-
-    /** Tamaño máximo por archivo, en MB. */
-    public const MAX_MB = 10;
+    /**
+     * Tamaño máximo del programa, en MB. Con adjuntos grandes Gmail rechazaba
+     * el primer correo (más de 25 MB) y la cola lo reintentaba sin fin.
+     */
+    public const MAX_MB = 5;
 
     protected $guarded = [];
 
@@ -35,6 +35,12 @@ class EventAttachment extends Model
     public function existe(): bool
     {
         return Storage::disk($this->disk)->exists($this->path);
+    }
+
+    /** Cabe en el correo: existe en disco y pesa el máximo o menos. */
+    public function cabeEnElCorreo(): bool
+    {
+        return $this->size <= self::MAX_MB * 1024 * 1024 && $this->existe();
     }
 
     public function tamanoLegible(): string

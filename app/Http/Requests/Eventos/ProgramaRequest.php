@@ -28,13 +28,6 @@ class ProgramaRequest extends FormRequest
                 // Only PDF: a Word file can be edited by whoever receives it.
                 'mimes:pdf',
                 'max:'.(EventAttachment::MAX_MB * 1024),
-                function (string $atributo, mixed $valor, callable $falla): void {
-                    // El tope se comprueba en el servidor y no solo en el
-                    // botón: un formulario reenviado se salta el botón.
-                    if ($this->evento()->attachments()->count() >= EventAttachment::MAXIMO) {
-                        $falla('No puedes adjuntar más de '.EventAttachment::MAXIMO.' archivos. Quita uno antes de subir otro.');
-                    }
-                },
             ],
         ];
     }
@@ -48,11 +41,5 @@ class ProgramaRequest extends FormRequest
             'programa.mimes' => 'El programa debe ser un PDF.',
             'programa.max' => 'El archivo no puede pesar más de '.EventAttachment::MAX_MB.' MB.',
         ];
-    }
-
-    private function evento(): Event
-    {
-        /** @var Event */
-        return $this->route('event');
     }
 }

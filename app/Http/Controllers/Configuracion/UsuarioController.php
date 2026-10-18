@@ -48,8 +48,18 @@ class UsuarioController extends Controller
     {
         $datos = $request->validated();
 
+        // Parten encendidos los avisos de cada rol que tenga la persona.
+        $avisos = [];
+
+        foreach ($datos['roles'] as $rol) {
+            foreach (Rol::from($rol)->avisosPorDefecto() as $campo) {
+                $avisos[$campo] = true;
+            }
+        }
+
         $usuario = User::create([
             ...Arr::only($datos, ['name', 'email']),
+            ...$avisos,
             'password' => $datos['password'],
             'is_active' => $datos['is_active'] ?? true,
         ]);
@@ -73,6 +83,7 @@ class UsuarioController extends Controller
                 'etiquetas' => self::etiquetasDeRoles($user),
                 'activo' => $user->is_active,
                 'creado' => $user->created_at?->format('d-m-Y'),
+                'avisos' => $user->avisosDisponibles(),
             ],
             'soyYo' => $user->is($request->user()),
             'puedeEliminar' => $request->user()->can('delete', $user),
@@ -88,7 +99,7 @@ class UsuarioController extends Controller
             $user->forceFill(['password' => Hash::make($datos['password'])])->save();
         }
 
-        $user->update(Arr::only($datos, ['name', 'email', 'is_active']));
+        $user->update(Arr::only($datos, ['name', 'email', 'is_active', ...array_keys(User::AVISOS)]));
 
         if (array_key_exists('roles', $datos)) {
             $user->syncRoles($datos['roles']);

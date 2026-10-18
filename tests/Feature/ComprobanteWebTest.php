@@ -6,6 +6,8 @@ use App\Actions\ConfirmarOrden;
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\Rol;
+use App\Mail\AvisoComprobantePorRevisar;
 use App\Models\Event;
 use App\Models\MagicLink;
 use App\Models\Order;
@@ -101,6 +103,51 @@ class ComprobanteWebTest extends TestCase
             ->assertOk()
             ->assertSee('Comprobante en validación')
             ->assertDontSee('Informar el pago');
+    }
+
+    public function test_el_comprobante_del_cliente_avisa_a_contabilidad_suscrita(): void
+    {
+        $gloria = $this->usuarioConRol(Rol::Contabilidad, ['notify_payment_proofs' => true]);
+        $this->usuarioConRol(Rol::Contabilidad, ['notify_payment_proofs' => false]);
+
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'paid_on' => now()->toDateString(),
+            'bank_name' => 'BancoEstado',
+            'payer_name' => 'Fundación Educar',
+            'payer_rut' => '76.086.428-5',
+            'proof' => UploadedFile::fake()->create('comprobante.pdf', 200, 'application/pdf'),
+        ]);
+
+        Mail::assertQueued(AvisoComprobantePorRevisar::class, 1);
+        Mail::assertQueued(AvisoComprobantePorRevisar::class, fn (AvisoComprobantePorRevisar $m): bool => $m->hasTo($gloria->email)
+            && str_contains($m->envelope()->subject, 'Comprobante por revisar:')
+            && str_contains($m->render(), '$90.000'));
+    }
+
+    public function test_un_comprobante_rechazado_por_validacion_no_avisa(): void
+    {
+        $this->usuarioConRol(Rol::Contabilidad, ['notify_payment_proofs' => true]);
+
+        $this->post($this->ruta('comprobante'), ['amount' => 90000, 'paid_on' => now()->toDateString()])->assertOk();
+
+        Mail::assertNotQueued(AvisoComprobantePorRevisar::class);
+    }
+
+    public function test_con_un_comprobante_en_revision_se_oculta_el_formulario(): void
+    {
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 50000, 'paid_on' => now()->toDateString(), 'bank_name' => 'BancoEstado',
+            'payer_name' => 'Fundación Educar', 'payer_rut' => '76.086.428-5',
+            'proof' => UploadedFile::fake()->create('comprobante.pdf', 200, 'application/pdf'),
+        ]);
+
+        $this->get($this->ruta('portal.pago'))
+            ->assertOk()
+            ->assertSee('Ya hay un comprobante en revisión.')
+            ->assertSee('Monto enviado: $50.000', false)
+            ->assertDontSee('name="proof"', false)
+            ->assertDontSee('Enviar comprobante');
     }
 
     public function test_exige_el_archivo(): void

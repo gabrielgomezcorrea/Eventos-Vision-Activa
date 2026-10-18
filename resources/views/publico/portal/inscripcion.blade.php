@@ -14,17 +14,6 @@
 @else
     @php $cuerpoEditable = $nivel->permiteCambiarLaInscripcion(); @endphp
 
-    @if (! $cuerpoEditable)
-        <div class="aviso aviso-info">
-            @if ($nivel->permiteCorregirDatos())
-                Ya enviaste un pago: para cambiar participantes escríbenos. Los datos de contacto sí los puedes corregir aquí.
-            @else
-                Esta inscripción ya no se puede cambiar desde aquí. Si necesitas algo, escríbenos.
-            @endif
-            @include('publico._contacto', ['evento' => $event])
-        </div>
-    @endif
-
     <div class="tarjeta" id="responsable">
         <p class="etiqueta-seccion">Datos de inscripción</p>
         <h2 style="margin-bottom:16px">Información del responsable</h2>

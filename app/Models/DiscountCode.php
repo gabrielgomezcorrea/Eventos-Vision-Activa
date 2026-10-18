@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OrderStatus;
 use App\Enums\TipoDescuento;
 use App\Support\CodigoDeDescuento;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\DB;
  * @property int $value
  * @property int $max_people
  * @property int $used_people
+ * @property string $uses_per_person
  * @property Carbon $expires_at
  * @property bool $is_active
  */
@@ -30,7 +32,14 @@ class DiscountCode extends Model
 
     protected $guarded = [];
 
+    /** Usos por persona: en todos sus recorridos del evento o en uno solo. */
+    public const USOS_POR_PERSONA = [
+        'unlimited' => 'Sin límite de uso',
+        'once' => 'Una sola vez',
+    ];
+
     protected $attributes = [
+        'uses_per_person' => 'unlimited',
         'type' => 'percent',
         'used_people' => 0,
         'is_active' => true,
@@ -63,6 +72,23 @@ class DiscountCode extends Model
     public function disponibles(): int
     {
         return max(0, $this->max_people - $this->used_people);
+    }
+
+    /**
+     * Quiénes lo usaron: una persona por correo de solicitante, con sus
+     * inscripciones vivas (confirmadas o pagadas) hechas con este código.
+     *
+     * @return Collection<string, \Illuminate\Database\Eloquent\Collection<int, Order>>
+     */
+    public function usosPorPersona(): Collection
+    {
+        return Order::query()
+            ->where('discount_code_id', $this->getKey())
+            ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada])
+            ->with('establishments')
+            ->orderBy('confirmed_at')
+            ->get()
+            ->groupBy(fn (Order $orden): string => mb_strtolower($orden->responsible_email));
     }
 
     /** El código como se lee y se dicta: XXXX-XXXX. */
@@ -104,15 +130,74 @@ class DiscountCode extends Model
     }
 
     /** Por qué no se puede usar para tantas personas, o null si se puede. */
-    public function impedimento(int $personas): ?string
+    /**
+     * Por qué esta inscripción no puede usar el código, o null si puede. Cada
+     * persona es un correo de solicitante: quien ya lo usa no ocupa otro cupo,
+     * y con "Una sola vez" no lo vuelve a usar en otro recorrido.
+     */
+    public function impedimentoPara(Order $orden, bool $ignorarVigencia = false): ?string
     {
-        return match (true) {
-            ! $this->is_active => 'Este código ya no está disponible.',
-            $this->expires_at->isPast() => 'Este código venció el '.$this->expires_at->format('d-m-Y').'.',
-            $this->disponibles() === 0 => 'Este código ya no tiene cupos disponibles.',
-            $personas > $this->disponibles() => 'El código no alcanza para todas las personas: quedan '.$this->disponibles().' usos.',
-            default => null,
-        };
+        if (! $ignorarVigencia && ! $this->is_active) {
+            return 'Este código ya no está disponible.';
+        }
+
+        if (! $ignorarVigencia && $this->expires_at->isPast()) {
+            return 'Este código venció el '.$this->expires_at->format('d-m-Y').'.';
+        }
+
+        $previas = $this->inscripcionesVivasDe($orden->responsible_email, $orden);
+
+        if ($this->uses_per_person === 'once' && $previas->contains(fn (Order $o): bool => $orden->group_id === null || $o->group_id !== $orden->group_id)) {
+            return 'Este código es de una sola vez y ya lo usaste en la inscripción '.$previas->first()->number.'.';
+        }
+
+        if ($previas->isEmpty() && $this->disponibles() === 0) {
+            return 'Este código ya alcanzó el máximo de personas que pueden usarlo.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Ocupa el cupo de la persona al confirmar. Si ya lo usa (otro colegio o
+     * recorrido suyo) no ocupa otro. El cupo nuevo se toma con un UPDATE
+     * condicional: dos personas distintas no se llevan el último a la vez.
+     */
+    public function tomarPersona(Order $orden, bool $ignorarVigencia = false): bool
+    {
+        if ($this->inscripcionesVivasDe($orden->responsible_email, $orden)->isNotEmpty()) {
+            return true;
+        }
+
+        return $this->tomarUsos(1, $ignorarVigencia);
+    }
+
+    /**
+     * Vuelve a contar las personas que lo usan después de que una inscripción
+     * venció, se canceló o se borró: el cupo se libera solo si esa persona ya
+     * no tiene otra inscripción viva con el código.
+     */
+    public function recalcularUsos(): void
+    {
+        $personas = Order::query()
+            ->where('discount_code_id', $this->getKey())
+            ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada])
+            ->distinct()
+            ->count(DB::raw('lower(responsible_email)'));
+
+        $this->forceFill(['used_people' => $personas])->save();
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Order> */
+    private function inscripcionesVivasDe(string $correo, Order $excepto): \Illuminate\Database\Eloquent\Collection
+    {
+        return Order::query()
+            ->where('discount_code_id', $this->getKey())
+            ->where('responsible_email', mb_strtolower(trim($correo)))
+            ->whereKeyNot($excepto->getKey())
+            ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada])
+            ->orderBy('id')
+            ->get();
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Acreditacion\AcreditacionController;
+use App\Http\Controllers\Acreditacion\ReporteController;
 use App\Http\Controllers\Comprobantes\ComprobanteController;
 use App\Http\Controllers\Configuracion\CuentaBancariaController;
 use App\Http\Controllers\Configuracion\UsuarioController;
@@ -40,6 +41,8 @@ Route::middleware(['auth'])->prefix('acreditacion')->name('acreditacion.')->grou
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    Route::get('acreditaciones', [ReporteController::class, 'index'])->name('acreditaciones.index');
 
     Route::get('eventos', [EventoController::class, 'index'])->name('eventos.index');
     Route::post('eventos', [EventoController::class, 'store'])->name('eventos.store');
@@ -83,6 +86,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('eventos/{event}/codigos', [CodigoDescuentoController::class, 'index'])->name('eventos.codigos.index');
         Route::post('eventos/{event}/codigos', [CodigoDescuentoController::class, 'store'])->name('eventos.codigos.store');
         Route::patch('eventos/{event}/codigos/{discountCode}', [CodigoDescuentoController::class, 'update'])->name('eventos.codigos.update');
+        Route::delete('eventos/{event}/codigos/{discountCode}', [CodigoDescuentoController::class, 'destroy'])->name('eventos.codigos.destroy');
     });
 
     Route::get('comprobantes', [ComprobanteController::class, 'index'])->name('comprobantes.index');
@@ -93,6 +97,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('inscripciones/invitado', [InscripcionController::class, 'registrarInvitado'])->name('inscripciones.invitado');
     Route::get('inscripciones/{order}', [InscripcionController::class, 'show'])->name('inscripciones.show');
     Route::get('inscripciones/{order}/credenciales', [InscripcionController::class, 'credenciales'])->name('inscripciones.credenciales');
+    Route::post('inscripciones/{order}/notas', [InscripcionController::class, 'guardarNota'])->name('inscripciones.notas.store');
     Route::patch('inscripciones/{order}/notas', [InscripcionController::class, 'actualizarNotas'])->name('inscripciones.notas');
     Route::post('inscripciones/{order}/comprobante', [InscripcionController::class, 'cargarComprobante'])->name('inscripciones.comprobante');
     Route::post('inscripciones/{order}/factura', [InscripcionController::class, 'registrarFactura'])->name('inscripciones.factura');
@@ -109,8 +114,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('solicitudes/exportar', ExportarContactosController::class)->name('solicitudes.exportar');
     Route::get('solicitudes/exportar/cantidad', [ExportarContactosController::class, 'cantidad'])->name('solicitudes.exportar.cantidad');
     Route::get('solicitudes/{programRequest}', [SolicitudController::class, 'show'])->name('solicitudes.show');
+    Route::post('solicitudes/{programRequest}/notas', [SolicitudController::class, 'guardarNota'])->name('solicitudes.notas.store');
     Route::patch('solicitudes/{programRequest}/notas', [SolicitudController::class, 'actualizarNotas'])->name('solicitudes.notas');
     Route::post('solicitudes/{programRequest}/reenviar', [SolicitudController::class, 'reenviarPrograma'])->name('solicitudes.reenviar');
+    Route::delete('solicitudes/{programRequest}/todo', [SolicitudController::class, 'destroyAll'])->name('solicitudes.destroy_all');
     Route::delete('solicitudes/{programRequest}', [SolicitudController::class, 'destroy'])->name('solicitudes.destroy');
 
     Route::get('settings/cuentas-bancarias', [CuentaBancariaController::class, 'index'])->name('cuentas-bancarias.index');

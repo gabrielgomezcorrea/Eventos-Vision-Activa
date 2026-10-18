@@ -40,13 +40,14 @@ import { show as inscripcion } from '@/routes/inscripciones';
 import type { Estado } from '@/types';
 
 type Persona = {
-    id: number;
+    correo: string;
     nombre: string;
-    rut: string | null;
-    email: string;
-    colegio: string | null;
-    folio: string | null;
-    orden_id: number;
+    primer_uso: string | null;
+    inscripciones: {
+        orden_id: number;
+        folio: string | null;
+        colegio: string | null;
+    }[];
 };
 
 type Codigo = {
@@ -57,7 +58,9 @@ type Codigo = {
     value: number;
     etiqueta: string;
     max_people: number;
-    used_people: number;
+    usado_por: number;
+    uses_per_person: string;
+    usos_texto: string;
     expires_on: string;
     vence: string;
     is_active: boolean;
@@ -69,7 +72,10 @@ type Props = {
     codigos: Codigo[];
     sugerido: string;
     hoy: string;
-    opciones: { tiposDescuento: Record<string, string> };
+    opciones: {
+        tiposDescuento: Record<string, string>;
+        usosPorPersona: Record<string, string>;
+    };
 };
 
 /** Crear pide lo mínimo y nace con un código ya generado: se puede usar tal cual. */
@@ -78,11 +84,13 @@ function NuevoCodigo({
     sugerido,
     hoy,
     tipos,
+    usos,
 }: {
     eventoId: number;
     sugerido: string;
     hoy: string;
     tipos: Record<string, string>;
+    usos: Record<string, string>;
 }) {
     const [abierto, setAbierto] = useState(false);
     const form = useForm({
@@ -90,6 +98,7 @@ function NuevoCodigo({
         type: 'full',
         value: '',
         max_people: '',
+        uses_per_person: 'unlimited',
         expires_on: '',
     });
 
@@ -218,7 +227,7 @@ function NuevoCodigo({
 
                     <div className="grid grid-cols-2 gap-4">
                         <Campo
-                            label="Máx. personas que pueden usarlo"
+                            label="¿Cuántas personas pueden usarlo?"
                             htmlFor="codigo-max"
                             error={form.errors.max_people}
                         >
@@ -252,6 +261,26 @@ function NuevoCodigo({
                         </Campo>
                     </div>
 
+                    <Campo
+                        label="Usos por persona"
+                        htmlFor="codigo-usos"
+                        error={form.errors.uses_per_person}
+                    >
+                        <NativeSelect
+                            id="codigo-usos"
+                            value={form.data.uses_per_person}
+                            onChange={(e) =>
+                                form.setData('uses_per_person', e.target.value)
+                            }
+                        >
+                            {Object.entries(usos).map(([valor, texto]) => (
+                                <option key={valor} value={valor}>
+                                    {texto}
+                                </option>
+                            ))}
+                        </NativeSelect>
+                    </Campo>
+
                     <Button type="submit" disabled={form.processing}>
                         {form.processing ? 'Creando…' : 'Crear código'}
                     </Button>
@@ -261,20 +290,20 @@ function NuevoCodigo({
     );
 }
 
-/** Quiénes usaron el código, con lo básico que dejaron al inscribirse. */
+/** Quiénes usaron el código: una persona por correo, con lo que inscribió. */
 function PersonasDelCodigo({ codigo }: { codigo: Codigo }) {
     return (
         <Sheet>
             <SheetTrigger asChild>
                 <Button variant="link" className="h-auto p-0">
-                    {codigo.used_people} de {codigo.max_people}
+                    {codigo.usado_por} de {codigo.max_people}
                 </Button>
             </SheetTrigger>
             <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
                 <SheetHeader>
                     <SheetTitle>Quiénes usaron {codigo.code}</SheetTitle>
                     <SheetDescription className="sr-only">
-                        Personas inscritas con este código
+                        Personas que usaron este código
                     </SheetDescription>
                 </SheetHeader>
                 <div className="space-y-4 px-4 pb-6">
@@ -285,26 +314,28 @@ function PersonasDelCodigo({ codigo }: { codigo: Codigo }) {
                     ) : (
                         codigo.personas.map((persona) => (
                             <div
-                                key={persona.id}
+                                key={persona.correo}
                                 className="space-y-0.5 border-b pb-3 text-sm last:border-0"
                             >
                                 <p className="font-medium">{persona.nombre}</p>
                                 <p className="text-muted-foreground">
-                                    {[persona.rut, persona.email]
-                                        .filter(Boolean)
-                                        .join(' · ')}
+                                    {persona.correo}
                                 </p>
-                                {persona.colegio && (
+                                {persona.primer_uso && (
                                     <p className="text-muted-foreground">
-                                        {persona.colegio}
+                                        Lo usó el {persona.primer_uso}
                                     </p>
                                 )}
-                                <Link
-                                    href={inscripcion.url(persona.orden_id)}
-                                    className="text-primary underline-offset-4 hover:underline"
-                                >
-                                    Inscripción {persona.folio}
-                                </Link>
+                                {persona.inscripciones.map((i) => (
+                                    <Link
+                                        key={i.orden_id}
+                                        href={inscripcion.url(i.orden_id)}
+                                        className="text-primary block underline-offset-4 hover:underline"
+                                    >
+                                        Inscripción {i.folio}
+                                        {i.colegio ? ` · ${i.colegio}` : ''}
+                                    </Link>
+                                ))}
                             </div>
                         ))
                     )}
@@ -350,6 +381,7 @@ export default function CodigosDeDescuento({
                             sugerido={sugerido}
                             hoy={hoy}
                             tipos={opciones.tiposDescuento}
+                            usos={opciones.usosPorPersona}
                         />
                     }
                 >
@@ -375,7 +407,12 @@ export default function CodigosDeDescuento({
                                         <TableCell className="font-mono font-medium tracking-wider">
                                             {codigo.code}
                                         </TableCell>
-                                        <TableCell>{codigo.etiqueta}</TableCell>
+                                        <TableCell>
+                                            {codigo.etiqueta}
+                                            <span className="text-muted-foreground block text-xs">
+                                                {codigo.usos_texto}
+                                            </span>
+                                        </TableCell>
                                         <TableCell>
                                             <PersonasDelCodigo
                                                 codigo={codigo}
@@ -397,6 +434,8 @@ export default function CodigosDeDescuento({
                                                     inicial={{
                                                         max_people:
                                                             codigo.max_people.toString(),
+                                                        uses_per_person:
+                                                            codigo.uses_per_person,
                                                         expires_on:
                                                             codigo.expires_on,
                                                     }}
@@ -404,7 +443,7 @@ export default function CodigosDeDescuento({
                                                     {(f) => (
                                                         <>
                                                             <Campo
-                                                                label="Máx. personas que pueden usarlo"
+                                                                label="¿Cuántas personas pueden usarlo?"
                                                                 htmlFor={`max-${codigo.id}`}
                                                                 error={
                                                                     f.errors
@@ -416,7 +455,7 @@ export default function CodigosDeDescuento({
                                                                     type="number"
                                                                     min={Math.max(
                                                                         1,
-                                                                        codigo.used_people,
+                                                                        codigo.usado_por,
                                                                     )}
                                                                     max={99}
                                                                     value={
@@ -434,6 +473,54 @@ export default function CodigosDeDescuento({
                                                                         )
                                                                     }
                                                                 />
+                                                            </Campo>
+                                                            <Campo
+                                                                label="Usos por persona"
+                                                                htmlFor={`usos-${codigo.id}`}
+                                                                error={
+                                                                    f.errors
+                                                                        .uses_per_person
+                                                                }
+                                                            >
+                                                                <NativeSelect
+                                                                    id={`usos-${codigo.id}`}
+                                                                    value={
+                                                                        f.data
+                                                                            .uses_per_person
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        f.set(
+                                                                            'uses_per_person',
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {Object.entries(
+                                                                        opciones.usosPorPersona,
+                                                                    ).map(
+                                                                        ([
+                                                                            valor,
+                                                                            texto,
+                                                                        ]) => (
+                                                                            <option
+                                                                                key={
+                                                                                    valor
+                                                                                }
+                                                                                value={
+                                                                                    valor
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    texto
+                                                                                }
+                                                                            </option>
+                                                                        ),
+                                                                    )}
+                                                                </NativeSelect>
                                                             </Campo>
                                                             <Campo
                                                                 label="Válido hasta"
@@ -499,6 +586,34 @@ export default function CodigosDeDescuento({
                                                     >
                                                         Activar
                                                     </Button>
+                                                )}
+                                                {codigo.usado_por === 0 && (
+                                                    <Confirmar
+                                                        titulo={`Eliminar el código ${codigo.code}`}
+                                                        descripcion="Nadie lo ha usado todavía. Si alguien lo tenía puesto sin confirmar su inscripción, deja de tener el descuento. No se puede recuperar."
+                                                        textoAccion="Eliminar código"
+                                                        onConfirmar={() =>
+                                                            router.delete(
+                                                                CodigoDescuentoController.destroy.url(
+                                                                    [
+                                                                        evento.id,
+                                                                        codigo.id,
+                                                                    ],
+                                                                ),
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-red-600 hover:text-red-700"
+                                                        >
+                                                            Eliminar
+                                                        </Button>
+                                                    </Confirmar>
                                                 )}
                                             </div>
                                         </TableCell>

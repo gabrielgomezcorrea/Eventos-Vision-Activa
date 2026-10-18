@@ -2,7 +2,6 @@
 
 namespace App\Mail;
 
-use App\Models\EventAttachment;
 use App\Models\ProgramRequest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,21 +44,18 @@ class ProgramaDelEvento extends Mailable implements ShouldQueue
     }
 
     /**
-     * Los documentos cargados en el evento, hasta tres.
-     *
-     * Un archivo que ya no está en disco se salta en silencio: un adjunto
-     * perdido no puede impedir que salga el correo con el resto.
+     * Solo el programa más reciente del evento, y solo si cabe en el correo.
+     * Los archivos antiguos siguen disponibles en el portal, pero no viajan.
      *
      * @return array<int, Attachment>
      */
     public function attachments(): array
     {
-        return $this->solicitud->event->attachments
-            ->filter(fn (EventAttachment $a): bool => $a->existe())
-            ->map(fn (EventAttachment $a): Attachment => Attachment::fromStorageDisk($a->disk, $a->path)
-                ->as($a->original_name))
-            ->values()
-            ->all();
+        $programa = $this->solicitud->event->attachments->last();
+
+        return $programa?->cabeEnElCorreo()
+            ? [Attachment::fromStorageDisk($programa->disk, $programa->path)->as($programa->original_name)]
+            : [];
     }
 
     public function build(): self

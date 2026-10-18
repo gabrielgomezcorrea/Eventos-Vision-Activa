@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers\Solicitudes;
 
+use App\Actions\EliminarSolicitudConTodo;
 use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\ExportarContactos;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Solicitudes\GuardarNotaRequest;
 use App\Mail\ProgramaDelEvento;
 use App\Models\Event;
 use App\Models\ProgramRequest;
 use App\Support\Forms\ProgramFormField;
+use App\Support\Presentar;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
@@ -34,10 +38,13 @@ class SolicitudController extends Controller
             'evento' => ['nullable', 'integer'],
             'pendientes' => ['nullable', 'boolean'],
             'cargo' => ['nullable', 'string', 'max:120'],
+            'seguimiento' => ['nullable', 'in:sin,con'],
         ]);
 
         $solicitudes = ProgramRequest::query()
             ->with('event')
+            ->withCount('notes')
+            ->withMax('notes', 'created_at')
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where(
                 fn (Builder $s) => $s->where('first_name', 'like', "%{$buscar}%")
                     ->orWhere('last_name', 'like', "%{$buscar}%")
@@ -47,12 +54,16 @@ class SolicitudController extends Controller
             ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento))
             ->when($filtros['pendientes'] ?? false, fn (Builder $q) => $q->whereNull('converted_at'))
             ->when($filtros['cargo'] ?? null, fn (Builder $q, string $cargo) => $q->where('position', $cargo))
+            // Sin seguimiento: nadie la ha contactado ni se ha inscrito todavía.
+            ->when(($filtros['seguimiento'] ?? null) === 'sin', fn (Builder $q) => $q->whereDoesntHave('notes')->whereNull('converted_at'))
+            ->when(($filtros['seguimiento'] ?? null) === 'con', fn (Builder $q) => $q->whereHas('notes'))
             ->latest()
             ->paginate(15)
             ->withQueryString()
             ->through(fn (ProgramRequest $solicitud): array => [
                 'id' => $solicitud->id,
-                'recibida' => $solicitud->created_at->format('d-m-Y H:i'),
+                'recibida' => Presentar::fecha($solicitud->created_at),
+                'recibida_hora' => $solicitud->created_at->format('H:i'),
                 'persona' => $solicitud->nombre_completo,
                 'cargo' => $solicitud->position,
                 'correo' => $solicitud->email,
@@ -60,6 +71,7 @@ class SolicitudController extends Controller
                 'institucion' => $solicitud->institution,
                 'evento' => $solicitud->event?->name,
                 'estado' => self::estado($solicitud),
+                'ultima_nota' => $solicitud->getAttribute('notes_max_created_at') === null ? null : Carbon::parse($solicitud->getAttribute('notes_max_created_at'))->format('d-m H:i'),
             ]);
 
         return Inertia::render('solicitudes/index', [
@@ -69,6 +81,7 @@ class SolicitudController extends Controller
                 'evento' => $filtros['evento'] ?? null,
                 'pendientes' => (bool) ($filtros['pendientes'] ?? false),
                 'cargo' => $filtros['cargo'] ?? null,
+                'seguimiento' => $filtros['seguimiento'] ?? null,
             ],
             'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
             'exportacion' => $request->user()->can(Permiso::ExportarContactos->value) ? [
@@ -91,7 +104,7 @@ class SolicitudController extends Controller
     {
         Gate::authorize('view', $programRequest);
 
-        $programRequest->load(['event', 'accessType']);
+        $programRequest->load(['event', 'accessType', 'notes.user']);
         $puedeGestionar = $request->user()->can('update', $programRequest);
 
         return Inertia::render('solicitudes/show', [
@@ -109,9 +122,9 @@ class SolicitudController extends Controller
                 ],
                 'estado' => self::estado($programRequest),
                 'inscrita' => $programRequest->yaConvertida(),
-                'llego' => $programRequest->created_at->format('d-m-Y H:i'),
-                'programa_enviado' => $programRequest->program_sent_at?->format('d-m-Y H:i'),
-                'se_inscribio' => $programRequest->converted_at?->format('d-m-Y H:i'),
+                'llego' => Presentar::fechaYHora($programRequest->created_at),
+                'programa_enviado' => $programRequest->program_sent_at ? Presentar::fechaYHora($programRequest->program_sent_at) : null,
+                'se_inscribio' => $programRequest->converted_at ? Presentar::fechaYHora($programRequest->converted_at) : null,
                 'desde' => $programRequest->source_url,
                 // Los tres juntos: por separado no dicen nada y ocuparían tres
                 // líneas de la ficha para responder una sola pregunta.
@@ -122,12 +135,33 @@ class SolicitudController extends Controller
                 ])->filter()->implode(' · ') ?: null,
                 'internal_notes' => $programRequest->internal_notes,
             ],
+            'notas' => $programRequest->notes->map(fn ($nota): array => [
+                'id' => $nota->id,
+                'fecha' => Presentar::fecha($nota->created_at).' - '.$nota->created_at->format('H:i:s'),
+                'autor' => $nota->user?->name,
+                'texto' => $nota->body,
+            ])->values()->all(),
             'respuestas' => self::respuestas($programRequest),
             'puede' => [
                 'gestionar' => $puedeGestionar,
                 'eliminar' => $request->user()->can('delete', $programRequest),
+                'eliminar_todo' => $request->user()->can('deleteAll', $programRequest),
             ],
+            // Lo que "Eliminar todo" borraría, para decirlo antes de confirmar.
+            'relacionado' => $request->user()->can('deleteAll', $programRequest) ? EliminarSolicitudConTodo::resumen($programRequest) : null,
         ]);
+    }
+
+    public function guardarNota(GuardarNotaRequest $request, ProgramRequest $programRequest): RedirectResponse
+    {
+        $programRequest->notes()->create([
+            'user_id' => $request->user()->getKey(),
+            'body' => $request->validated('body'),
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Nota guardada.']);
+
+        return back();
     }
 
     public function actualizarNotas(Request $request, ProgramRequest $programRequest): RedirectResponse
@@ -168,6 +202,18 @@ class SolicitudController extends Controller
         return to_route('solicitudes.index');
     }
 
+    public function destroyAll(ProgramRequest $programRequest, EliminarSolicitudConTodo $eliminar): RedirectResponse
+    {
+        Gate::authorize('deleteAll', $programRequest);
+
+        $nombre = $programRequest->nombre_completo;
+        $resultado = $eliminar($programRequest);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Solicitud de {$nombre} eliminada con {$resultado['inscripciones']} inscripción(es) y todo lo relacionado."]);
+
+        return to_route('solicitudes.index');
+    }
+
     /**
      * Derivado de las fechas, no guardado: una columna de estado que hay que
      * sincronizar con esas mismas fechas termina contradiciéndolas.
@@ -179,6 +225,7 @@ class SolicitudController extends Controller
         return [
             'value' => match (true) {
                 $solicitud->converted_at !== null => 'inscrita',
+                $solicitud->tieneNotas() => 'contactada',
                 $solicitud->program_sent_at !== null => 'enviado',
                 default => 'nueva',
             },

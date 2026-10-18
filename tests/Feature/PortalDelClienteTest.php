@@ -7,9 +7,11 @@ use App\Actions\EmitirTickets;
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Models\Establishment;
 use App\Models\Event;
 use App\Models\MagicLink;
 use App\Models\Order;
+use App\Models\OrderGroup;
 use App\Models\PayerEntity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -274,5 +276,182 @@ class PortalDelClienteTest extends TestCase
         $this->post(route('inscripcion.confirmar', ['token' => $token]))
             ->assertRedirect(route('inscripcion.portal.pago', ['token' => $token]));
         $this->assertSame(OrderStatus::Reservada, $borrador->fresh()->status);
+    }
+
+    private function conCuentaBancaria(): void
+    {
+        $this->event->update([
+            'bank_name' => 'BancoEstado', 'bank_account_type' => 'Cuenta Corriente', 'bank_account_number' => '123456789',
+            'bank_holder_name' => 'Visión Activa SpA', 'bank_holder_rut' => '76.086.428-5', 'bank_email' => 'pagos@visionactiva.cl',
+        ]);
+    }
+
+    public function test_los_datos_para_transferir_estan_en_el_menu_izquierdo_salvo_en_pago_y_con_pago_aprobado(): void
+    {
+        $this->conCuentaBancaria();
+
+        foreach (['programa', 'inscripcion', 'credenciales'] as $pestana) {
+            $this->get($this->ruta("portal.{$pestana}"))
+                ->assertOk()
+                ->assertSee('Datos para transferir')
+                ->assertSee('123456789')
+                ->assertSee('$90.000')
+                ->assertSee($this->orden->number);
+        }
+
+        // En Pago ya están en el centro, con la tarjeta "Transfiere": no se repiten.
+        $this->get($this->ruta('portal.pago'))->assertOk()->assertDontSee('Datos para transferir')->assertSee('123456789');
+
+        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->get($this->ruta('portal.programa'))->assertOk()->assertDontSee('Datos para transferir');
+    }
+
+    public function test_en_un_borrador_la_referencia_dice_que_se_genera_al_confirmar(): void
+    {
+        $this->conCuentaBancaria();
+        $this->orden->forceFill(['status' => OrderStatus::Borrador, 'number' => null])->save();
+
+        $this->get($this->ruta('portal.programa'))->assertOk()->assertSee('Se genera al confirmar');
+    }
+
+    public function test_un_borrador_incompleto_no_muestra_los_datos_para_transferir(): void
+    {
+        $this->conCuentaBancaria();
+        // Sin participantes todavía: falta lo requerido, aún no hay nada que transferir.
+        $this->orden->forceFill(['status' => OrderStatus::Borrador, 'number' => null])->save();
+        $this->orden->participants()->delete();
+
+        foreach (['programa', 'inscripcion'] as $pestana) {
+            $this->get($this->ruta("portal.{$pestana}"))->assertOk()->assertDontSee('Datos para transferir');
+        }
+    }
+
+    public function test_tus_comprobantes_lista_los_abonos_y_el_cliente_abre_su_archivo(): void
+    {
+        Storage::fake('documentos');
+        Storage::disk('documentos')->put('comprobantes/1/a.pdf', '%PDF-1.4');
+        $pago = $this->orden->payments()->create(['status' => PaymentStatus::EnValidacion, 'amount' => 30000, 'paid_on' => now()->toDateString()]);
+        $pago->proofs()->create(['disk' => 'documentos', 'path' => 'comprobantes/1/a.pdf', 'original_name' => 'a.pdf', 'mime_type' => 'application/pdf', 'size' => 8, 'hash' => 'x']);
+        $this->orden->forceFill(['payment_status' => PaymentStatus::EnValidacion])->save();
+
+        $url = $this->ruta('comprobante.ver', ['payment' => $pago->id]);
+
+        foreach (['programa', 'credenciales'] as $pestana) {
+            $this->get($this->ruta("portal.{$pestana}"))
+                ->assertOk()
+                ->assertSee('Tus comprobantes')
+                ->assertSee('$30.000')
+                ->assertSee('En revisión')
+                ->assertSee($url, escape: false);
+        }
+
+        $respuesta = $this->get($url)->assertOk();
+        $this->assertStringContainsString('inline', $respuesta->headers->get('Content-Disposition'));
+    }
+
+    public function test_el_comprobante_de_otro_conjunto_o_con_otro_token_da_404(): void
+    {
+        Storage::fake('documentos');
+        Storage::disk('documentos')->put('comprobantes/1/a.pdf', '%PDF-1.4');
+
+        $ajena = Order::create([
+            'event_id' => $this->event->id, 'responsible_name' => 'Eva', 'responsible_lastname' => 'Rojas', 'responsible_email' => 'eva@colegio.cl',
+        ]);
+        $pagoAjeno = $ajena->payments()->create(['status' => PaymentStatus::EnValidacion, 'amount' => 1000]);
+        $pagoAjeno->proofs()->create(['disk' => 'documentos', 'path' => 'comprobantes/1/a.pdf', 'original_name' => 'a.pdf', 'mime_type' => 'application/pdf', 'size' => 8, 'hash' => 'x']);
+
+        // Un pago de una orden que no es de mi conjunto.
+        $this->get($this->ruta('comprobante.ver', ['payment' => $pagoAjeno->id]))->assertNotFound();
+
+        // Con el token de la dueña de ese pago sí abre, y con el mío no.
+        [, $tokenAjeno] = MagicLink::emitir($this->event, 'eva@colegio.cl', $ajena);
+        $this->get(route('inscripcion.comprobante.ver', ['token' => $tokenAjeno, 'payment' => $pagoAjeno->id]))->assertOk();
+        $this->get(route('inscripcion.comprobante.ver', ['token' => 'inventado', 'payment' => $pagoAjeno->id]))->assertForbidden();
+    }
+
+    public function test_cada_pestana_termina_con_su_boton_de_siguiente_paso(): void
+    {
+        $this->get($this->ruta('portal.programa'))->assertSee('Siguiente: Inscripción');
+        $this->get($this->ruta('portal.inscripcion'))->assertSee('Siguiente: Pago');
+        // Pago sin aprobar y Credenciales no llevan botón.
+        $this->get($this->ruta('portal.pago'))->assertDontSee('Siguiente: Credenciales');
+        $this->get($this->ruta('portal.credenciales'))->assertDontSee('Siguiente:');
+
+        $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
+        $this->get($this->ruta('portal.pago'))->assertSee('Siguiente: Credenciales');
+    }
+
+    public function test_siguiente_pago_desde_inscripcion_confirma_un_borrador_completo(): void
+    {
+        $borrador = Order::create([
+            'event_id' => $this->event->id,
+            'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez', 'responsible_email' => 'otra@colegio.cl',
+            'payer_entity_id' => PayerEntity::create(['name' => 'Fundación'])->id,
+        ]);
+        $borrador->participants()->create(['first_name' => 'Luis', 'access_type_id' => $this->event->accessTypes()->first()->id]);
+        [, $token] = MagicLink::emitir($this->event, 'otra@colegio.cl', $borrador);
+
+        $this->get(route('inscripcion.portal.inscripcion', ['token' => $token]))
+            ->assertSee('Siguiente: Pago')
+            ->assertSee('data-enviando-texto="Confirmando…">Siguiente: Pago', escape: false);
+
+        $this->post(route('inscripcion.confirmar', ['token' => $token]))->assertRedirect();
+        $this->assertSame(OrderStatus::Reservada, $borrador->fresh()->status);
+    }
+
+    /** Dos inscripciones del MISMO colegio en un conjunto: `?colegio=` no las distingue. */
+    private function dosDelMismoColegio(): Order
+    {
+        $colegio = Establishment::factory()->create(['name' => 'Colegio Norte']);
+        $grupo = OrderGroup::paraResponsable($this->event, 'ana@colegio.cl');
+        $this->orden->establishments()->attach($colegio);
+        $this->orden->forceFill(['group_id' => $grupo->id])->save();
+
+        $segunda = Order::create([
+            'event_id' => $this->event->id, 'group_id' => $grupo->id,
+            'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez', 'responsible_email' => 'ana@colegio.cl',
+            'payer_entity_id' => $this->orden->payer_entity_id,
+        ]);
+        $segunda->establishments()->attach($colegio);
+        $segunda->participants()->create(['first_name' => 'Luis', 'access_type_id' => $this->event->accessTypes()->first()->id]);
+
+        return app(ConfirmarOrden::class)($segunda->fresh());
+    }
+
+    public function test_cada_inscripcion_del_conjunto_se_abre_por_su_identificador(): void
+    {
+        $segunda = $this->dosDelMismoColegio();
+        $this->assertNotSame($this->orden->fresh()->public_id, $segunda->public_id);
+
+        $encabezado = fn (Order $o): string => '<p style="margin:2px 0 0;font-weight:600">Inscripción '.$o->number.'</p>';
+
+        $this->get($this->ruta('portal.programa', ['inscripcion' => $segunda->public_id]))
+            ->assertOk()->assertSee($encabezado($segunda), false)->assertDontSee($encabezado($this->orden), false);
+
+        $this->get($this->ruta('portal.programa', ['inscripcion' => $this->orden->fresh()->public_id]))
+            ->assertOk()->assertSee($encabezado($this->orden), false)->assertDontSee($encabezado($segunda), false)
+            // Mismo colegio dos veces: el menú las distingue por su folio.
+            ->assertSee('Inscripción '.$segunda->number);
+    }
+
+    public function test_un_identificador_ajeno_o_inventado_cae_en_la_inscripcion_del_token(): void
+    {
+        $this->dosDelMismoColegio();
+
+        $ajena = Order::create(['event_id' => $this->event->id, 'responsible_name' => 'Eva', 'responsible_lastname' => 'Rojas', 'responsible_email' => 'eva@colegio.cl']);
+
+        foreach ([$ajena->public_id, 'inventado'] as $valor) {
+            $this->get($this->ruta('portal.programa', ['inscripcion' => $valor]))
+                ->assertOk()
+                ->assertSee('<p style="margin:2px 0 0;font-weight:600">Inscripción '.$this->orden->number.'</p>', false);
+        }
+    }
+
+    public function test_los_enlaces_viejos_con_colegio_siguen_funcionando(): void
+    {
+        $this->dosDelMismoColegio();
+        $colegio = $this->orden->fresh()->establishments->first();
+
+        $this->get($this->ruta('portal.programa', ['colegio' => $colegio->id]))->assertOk();
     }
 }

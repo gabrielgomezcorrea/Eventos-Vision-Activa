@@ -25,4 +25,9 @@ class DiscountCodePolicy
     {
         return $user->can(Permiso::GestionarDescuentos->value);
     }
+
+    public function delete(User $user): bool
+    {
+        return $user->can(Permiso::GestionarDescuentos->value);
+    }
 }

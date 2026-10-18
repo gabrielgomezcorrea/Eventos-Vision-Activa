@@ -90,4 +90,6 @@
         });
         </script>
     @endif
+
+@include('publico.portal._inscribir-mas')
 @endsection

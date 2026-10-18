@@ -6,6 +6,7 @@ use Database\Factories\ProgramRequestFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -48,6 +49,20 @@ class ProgramRequest extends Model
         return $this->belongsTo(AccessType::class);
     }
 
+    /** @return HasMany<ProgramRequestNote, $this> */
+    public function notes(): HasMany
+    {
+        return $this->hasMany(ProgramRequestNote::class)->latest('id');
+    }
+
+    /** Usa el conteo ya cargado del listado si lo hay; si no, consulta. */
+    public function tieneNotas(): bool
+    {
+        return isset($this->attributes['notes_count'])
+            ? (int) $this->attributes['notes_count'] > 0
+            : $this->notes()->exists();
+    }
+
     public function getNombreCompletoAttribute(): string
     {
         return trim($this->first_name.' '.($this->last_name ?? ''));
@@ -68,6 +83,7 @@ class ProgramRequest extends Model
     {
         return match (true) {
             $this->converted_at !== null => 'Ya se inscribió',
+            $this->tieneNotas() => 'Contactada',
             $this->program_sent_at !== null => 'Programa enviado',
             default => 'Nueva',
         };
@@ -77,6 +93,7 @@ class ProgramRequest extends Model
     {
         return match (true) {
             $this->converted_at !== null => 'success',
+            $this->tieneNotas() => 'success',
             $this->program_sent_at !== null => 'info',
             default => 'warning',
         };

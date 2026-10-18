@@ -2,14 +2,12 @@ import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
 import { Mail, Trash2 } from 'lucide-react';
 import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoController';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
-import { Campo } from '@/components/campo';
 import { Confirmar } from '@/components/confirmar';
-import { EditarSeccion } from '@/components/editar-seccion';
 import { EstadoBadge } from '@/components/estado-badge';
+import { NotasConFecha } from '@/components/notas-con-fecha';
+import type { Nota } from '@/components/notas-con-fecha';
 import { Dato, Datos, SeccionFicha } from '@/components/seccion-ficha';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 import type { Estado } from '@/types';
 
 type Props = {
@@ -32,10 +30,22 @@ type Props = {
         internal_notes: string | null;
     };
     respuestas: { pregunta: string; respuesta: string }[];
-    puede: { gestionar: boolean; eliminar: boolean };
+    notas: Nota[];
+    puede: { gestionar: boolean; eliminar: boolean; eliminar_todo: boolean };
+    relacionado: {
+        inscripciones: number;
+        participantes: number;
+        pagos: number;
+    } | null;
 };
 
-export default function SolicitudShow({ solicitud, respuestas, puede }: Props) {
+export default function SolicitudShow({
+    solicitud,
+    respuestas,
+    notas,
+    puede,
+    relacionado,
+}: Props) {
     setLayoutProps({
         breadcrumbs: [
             { title: 'Solicitudes', href: SolicitudController.index() },
@@ -97,8 +107,27 @@ export default function SolicitudShow({ solicitud, respuestas, puede }: Props) {
                         {puede.eliminar && (
                             <Confirmar
                                 titulo={`Eliminar la solicitud de ${solicitud.persona}`}
-                                descripcion="Se borra el contacto y sus respuestas. No se puede recuperar."
+                                descripcion={
+                                    puede.eliminar_todo &&
+                                    relacionado &&
+                                    relacionado.inscripciones > 0
+                                        ? `«Eliminar solicitud» borra solo el contacto y sus notas. «Limpiar solicitud» borra además ${relacionado.inscripciones} inscripción(es) con ${relacionado.participantes} participante(s) y ${relacionado.pagos} pago(s) de este correo, con sus comprobantes, facturas y credenciales, y devuelve los cupos. No se puede recuperar.`
+                                        : 'Se borra el contacto y sus respuestas. No se puede recuperar.'
+                                }
                                 textoAccion="Eliminar solicitud"
+                                accionExtra={
+                                    puede.eliminar_todo
+                                        ? {
+                                              texto: 'Limpiar solicitud',
+                                              onConfirmar: () =>
+                                                  router.delete(
+                                                      SolicitudController.destroyAll.url(
+                                                          solicitud.id,
+                                                      ),
+                                                  ),
+                                          }
+                                        : undefined
+                                }
                                 onConfirmar={() =>
                                     router.delete(
                                         SolicitudController.destroy.url(
@@ -160,7 +189,7 @@ export default function SolicitudShow({ solicitud, respuestas, puede }: Props) {
                     </SeccionFicha>
                 )}
 
-                <SeccionFicha titulo="Seguimiento">
+                <SeccionFicha titulo="Fechas">
                     <Datos>
                         <Dato etiqueta="Llegó">{solicitud.llego}</Dato>
                         <Dato etiqueta="Programa enviado">
@@ -178,53 +207,18 @@ export default function SolicitudShow({ solicitud, respuestas, puede }: Props) {
                     </Datos>
                 </SeccionFicha>
 
-                <SeccionFicha
-                    titulo="Notas internas"
-                    accion={
-                        puede.gestionar && (
-                            <EditarSeccion
-                                titulo="Notas internas"
-                                url={SolicitudController.actualizarNotas.url(
-                                    solicitud.id,
-                                )}
-                                inicial={{
-                                    internal_notes:
-                                        solicitud.internal_notes ?? '',
-                                }}
-                            >
-                                {(f) => (
-                                    <Campo
-                                        label="Lo que convenga recordar de este contacto"
-                                        htmlFor="internal_notes"
-                                        error={f.errors.internal_notes}
-                                    >
-                                        <Textarea
-                                            id="internal_notes"
-                                            rows={6}
-                                            value={f.data.internal_notes}
-                                            onChange={(e) =>
-                                                f.set(
-                                                    'internal_notes',
-                                                    e.target.value,
-                                                )
-                                            }
-                                        />
-                                    </Campo>
-                                )}
-                            </EditarSeccion>
-                        )
-                    }
-                >
-                    <p
-                        className={cn(
-                            'text-sm whitespace-pre-line',
-                            !solicitud.internal_notes &&
-                                'text-muted-foreground',
-                        )}
-                    >
-                        {solicitud.internal_notes || 'Sin notas.'}
-                    </p>
-                </SeccionFicha>
+                <NotasConFecha
+                    url={SolicitudController.guardarNota.url(solicitud.id)}
+                    notas={notas}
+                />
+
+                {solicitud.internal_notes && (
+                    <SeccionFicha titulo="Notas anteriores">
+                        <p className="text-sm whitespace-pre-line">
+                            {solicitud.internal_notes}
+                        </p>
+                    </SeccionFicha>
+                )}
             </div>
         </>
     );

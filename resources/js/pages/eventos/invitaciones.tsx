@@ -27,12 +27,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
 import type { Estado } from '@/types';
 
 type Invitacion = {
     id: number;
     email: string;
+    nombre: string | null;
     acceso: string;
     vence: string;
     estado: Estado;
@@ -49,11 +49,6 @@ type Props = {
     sugerida: string | null;
 };
 
-/** Cuántos correos hay escritos: uno por línea, o separados por coma o punto y coma. */
-function contarCorreos(texto: string): number {
-    return texto.split(/[\s,;]+/).filter(Boolean).length;
-}
-
 function NuevaInvitacion({
     eventoId,
     accesos,
@@ -67,7 +62,9 @@ function NuevaInvitacion({
 }) {
     const [abierto, setAbierto] = useState(false);
     const inicial = {
-        emails: '',
+        first_name: '',
+        last_name: '',
+        email: '',
         access_type_id: accesos[0]?.id.toString() ?? '',
         expires_on: sugerida && sugerida >= hoy ? sugerida : '',
     };
@@ -76,8 +73,7 @@ function NuevaInvitacion({
     const acceso = accesos.find(
         (a) => a.id.toString() === form.data.access_type_id,
     );
-    const cantidad = contarCorreos(form.data.emails);
-    const faltan = acceso?.disponibles != null && cantidad > acceso.disponibles;
+    const faltan = acceso?.disponibles === 0;
 
     function enviar(e: FormEvent) {
         e.preventDefault();
@@ -113,29 +109,60 @@ function NuevaInvitacion({
                     <DialogHeader>
                         <DialogTitle>Nueva invitación</DialogTitle>
                         <DialogDescription>
-                            Cada correo recibe su propio enlace, de un solo uso.
+                            La persona recibe un enlace personal, de un solo
+                            uso.
                         </DialogDescription>
                     </DialogHeader>
 
+                    <div className="grid grid-cols-2 gap-4">
+                        <Campo
+                            label="Nombre"
+                            htmlFor="invitacion-nombre"
+                            error={form.errors.first_name}
+                        >
+                            <Input
+                                id="invitacion-nombre"
+                                value={form.data.first_name}
+                                onChange={(e) =>
+                                    form.setData('first_name', e.target.value)
+                                }
+                                required
+                            />
+                        </Campo>
+                        <Campo
+                            label="Apellidos"
+                            htmlFor="invitacion-apellidos"
+                            error={form.errors.last_name}
+                        >
+                            <Input
+                                id="invitacion-apellidos"
+                                value={form.data.last_name}
+                                onChange={(e) =>
+                                    form.setData('last_name', e.target.value)
+                                }
+                                required
+                            />
+                        </Campo>
+                    </div>
+
                     <Campo
-                        label="Correos (uno por línea)"
-                        htmlFor="invitacion-correos"
-                        error={form.errors.emails}
+                        label="Correo"
+                        htmlFor="invitacion-correo"
+                        error={form.errors.email}
                     >
-                        <Textarea
-                            id="invitacion-correos"
-                            rows={5}
-                            value={form.data.emails}
+                        <Input
+                            id="invitacion-correo"
+                            type="email"
+                            value={form.data.email}
                             onChange={(e) =>
-                                form.setData('emails', e.target.value)
+                                form.setData('email', e.target.value)
                             }
-                            placeholder={'ana@colegio.cl\nbeto@colegio.cl'}
+                            placeholder="ana@colegio.cl"
                             required
                         />
                         {faltan && (
                             <p className="text-sm text-amber-700">
-                                Son {cantidad} correos y quedan{' '}
-                                {acceso?.disponibles} cupos.
+                                Este acceso no tiene cupos disponibles.
                             </p>
                         )}
                     </Campo>
@@ -185,7 +212,7 @@ function NuevaInvitacion({
                     </div>
 
                     <Button type="submit" disabled={form.processing}>
-                        {form.processing ? 'Enviando…' : 'Enviar invitaciones'}
+                        {form.processing ? 'Enviando…' : 'Enviar invitación'}
                     </Button>
                 </form>
             </DialogContent>
@@ -232,7 +259,7 @@ export default function Invitaciones({
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Correo</TableHead>
+                                    <TableHead>Invitado</TableHead>
                                     <TableHead>Acceso</TableHead>
                                     <TableHead>Válida hasta</TableHead>
                                     <TableHead>Estado</TableHead>
@@ -242,8 +269,16 @@ export default function Invitaciones({
                             <TableBody>
                                 {invitaciones.map((invitacion) => (
                                     <TableRow key={invitacion.id}>
-                                        <TableCell className="font-medium">
-                                            {invitacion.email}
+                                        <TableCell>
+                                            <span className="block font-medium">
+                                                {invitacion.nombre ??
+                                                    invitacion.email}
+                                            </span>
+                                            {invitacion.nombre && (
+                                                <span className="text-muted-foreground block text-xs">
+                                                    {invitacion.email}
+                                                </span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             {invitacion.acceso}

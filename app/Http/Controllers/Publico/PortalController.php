@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Publico\Concerns\ResuelveOrdenesDelPortal;
 use App\Models\EventAttachment;
 use App\Models\EventSession;
+use App\Models\Payment;
 use App\Support\GeneradorQr;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +31,12 @@ class PortalController extends Controller
 
     public function programa(Request $request, string $token): RedirectResponse|View
     {
-        $orden = $this->colegioElegido($this->resolverParaConsulta($token), $request);
+        $delToken = $this->resolverParaConsulta($token);
+        $orden = $this->colegioElegido($delToken, $request);
+
+        if ($redireccion = $this->aSuPropioEnlace($delToken, $orden, 'inscripcion.portal.programa')) {
+            return $redireccion;
+        }
 
         $evento = $orden->event;
         $jornadas = $evento->sessions;
@@ -44,14 +50,24 @@ class PortalController extends Controller
 
     public function inscripcion(Request $request, string $token): RedirectResponse|View
     {
-        $orden = $this->colegioElegido($this->resolverParaConsulta($token), $request);
+        $delToken = $this->resolverParaConsulta($token);
+        $orden = $this->colegioElegido($delToken, $request);
+
+        if ($redireccion = $this->aSuPropioEnlace($delToken, $orden, 'inscripcion.portal.inscripcion')) {
+            return $redireccion;
+        }
 
         return $this->vistaInscripcion($token, $orden);
     }
 
     public function pago(Request $request, string $token): RedirectResponse|View
     {
-        $orden = $this->colegioElegido($this->resolverParaConsulta($token), $request);
+        $delToken = $this->resolverParaConsulta($token);
+        $orden = $this->colegioElegido($delToken, $request);
+
+        if ($redireccion = $this->aSuPropioEnlace($delToken, $orden, 'inscripcion.portal.pago')) {
+            return $redireccion;
+        }
 
         if ($orden->esBorrador()) {
             return $this->vistaResumen($token, $orden);
@@ -62,7 +78,12 @@ class PortalController extends Controller
 
     public function credenciales(Request $request, string $token): RedirectResponse|View
     {
-        $orden = $this->colegioElegido($this->resolverParaConsulta($token), $request);
+        $delToken = $this->resolverParaConsulta($token);
+        $orden = $this->colegioElegido($delToken, $request);
+
+        if ($redireccion = $this->aSuPropioEnlace($delToken, $orden, 'inscripcion.portal.credenciales')) {
+            return $redireccion;
+        }
 
         // Sin pago aprobado no se arma ni el QR: lo que no sale del servidor
         // no se puede sacar del HTML.
@@ -91,6 +112,24 @@ class PortalController extends Controller
         return $request->boolean('ver')
             ? $disco->response($attachment->path, $attachment->original_name, ['Content-Disposition' => 'inline; filename="'.addslashes($attachment->original_name).'"'])
             : $disco->download($attachment->path, $attachment->original_name);
+    }
+
+    /**
+     * El cliente abre el último comprobante que subió para un abono. Solo los
+     * de su propio conjunto: el token manda, el id del pago no autoriza nada.
+     * No se audita: es quien lo subió viendo su propio archivo.
+     */
+    public function verComprobante(string $token, Payment $payment): StreamedResponse
+    {
+        $orden = $this->resolverParaConsulta($token);
+
+        $ordenes = $orden->group_id ? $orden->group->orders()->pluck('id') : collect([$orden->id]);
+        abort_unless($ordenes->contains($payment->order_id), 404);
+
+        $comprobante = $payment->proofs()->orderByDesc('id')->first();
+        abort_unless($comprobante?->existe(), 404);
+
+        return Storage::disk($comprobante->disk)->response($comprobante->path, $comprobante->original_name, [], 'inline');
     }
 
     /** Calendario del evento (.ics): una entrada por jornada con hora. */

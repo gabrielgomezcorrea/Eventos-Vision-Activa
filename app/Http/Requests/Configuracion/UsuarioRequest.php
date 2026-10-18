@@ -42,6 +42,8 @@ class UsuarioRequest extends FormRequest
             'roles' => [$requerido, 'array', 'min:1'],
             'roles.*' => [Rule::enum(Rol::class)],
             'is_active' => ['sometimes', 'boolean'],
+            // Al crear parten según el rol; después se editan desde la ficha.
+            ...($creando ? [] : $this->usuario()->reglasDeAvisos()),
         ];
     }
 

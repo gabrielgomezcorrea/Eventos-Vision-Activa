@@ -4,6 +4,23 @@
     al confirmar, cada colegio queda como su propia inscripción con su pago y
     su factura (App\Actions\ConfirmarConjunto).
 --}}
+@if ($orden->parent_order_id !== null)
+    {{-- Inscripción adicional: es el mismo colegio de la original. --}}
+    <div class="tarjeta" id="establecimientos">
+        <div class="titulo-bloque">
+            <h2>Establecimientos</h2>
+            <span class="chip chip-exito">Completado</span>
+        </div>
+        @foreach ($orden->establishments as $establecimiento)
+            <div class="fila-persona">
+                <div class="fila-persona-datos">
+                    <strong>{{ $establecimiento->name }}</strong>
+                    <span class="ayuda" style="margin:0">{{ collect([$establecimiento->rbd ? 'RBD '.$establecimiento->rbd : null, $establecimiento->address, $establecimiento->commune])->filter()->implode(' · ') }}</span>
+                </div>
+            </div>
+        @endforeach
+    </div>
+@else
 @php $establecimiento = $orden->establishments->first(); @endphp
 <div class="tarjeta" id="establecimientos">
     <div class="titulo-bloque">
@@ -28,7 +45,7 @@
                 </div>
                 <form method="POST"
                       action="{{ route('inscripcion.establecimientos.quitar', ['token' => $token, 'establishment' => $establecimiento]) }}"
-                      data-confirmar="¿Quitar «{{ $establecimiento->name }}» de la inscripción?">
+                      data-confirmar="¿Quitar «{{ $establecimiento->name }}» de la inscripción?{{ ($n = $orden->participants->where('establishment_id', $establecimiento->id)->count()) > 0 ? ' También se quitarán sus '.$n.' participante(s).' : '' }}">
                     @method('DELETE')
                     <button type="submit" class="btn btn-peligro">Quitar</button>
                 </form>
@@ -58,3 +75,4 @@
         </form>
     </details>
 </div>
+@endif

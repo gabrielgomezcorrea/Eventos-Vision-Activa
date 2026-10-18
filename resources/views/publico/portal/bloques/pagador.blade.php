@@ -1,3 +1,22 @@
+@if ($orden->parent_order_id !== null)
+    {{-- Inscripción adicional: es la misma entidad pagadora de la original, y
+         editarla cambiaría su factura. --}}
+    @php $entidad = $orden->payerEntity; @endphp
+    <div class="tarjeta" id="pagador">
+        <div class="titulo-bloque">
+            <h2>Entidad pagadora</h2>
+            <span class="chip chip-exito">Completado</span>
+        </div>
+        <table>
+            <tbody>
+                <tr><td style="width:38%;color:var(--texto-suave)">Nombre o razón social</td><td>{{ $entidad?->name ?? '-' }}</td></tr>
+                <tr><td style="color:var(--texto-suave)">RUT</td><td>{{ $entidad?->rut ?? '-' }}</td></tr>
+                <tr><td style="color:var(--texto-suave)">Dirección</td><td>{{ collect([$entidad?->address, $entidad?->commune])->filter()->implode(', ') ?: '-' }}</td></tr>
+                <tr><td style="color:var(--texto-suave)">Correo de facturación</td><td>{{ $entidad?->billing_email ?? '-' }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+@else
     <form method="POST" action="{{ route('inscripcion.pagador.guardar', ['token' => $token]) }}" novalidate>
         <div class="tarjeta" id="pagador">
 
@@ -23,3 +42,4 @@
             </div>
         </div>
     </form>
+@endif

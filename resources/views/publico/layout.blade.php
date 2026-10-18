@@ -24,7 +24,8 @@
            Los pasos del recorrido siguen en 820: son una columna de formulario. */
         .envoltura.ancha{max-width:1040px}
         .columnas{display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start}
-        .lado{position:sticky;top:24px;display:flex;flex-direction:column;gap:14px}
+        /* Sin sticky: con varias cajas la columna es más alta que la pantalla y lo de abajo quedaba inalcanzable. */
+        .lado{display:flex;flex-direction:column;gap:14px}
         .lado-caja{background:var(--superficie);border:1px solid var(--borde);border-radius:12px;padding:16px}
         .lado-titulo{margin:0 0 10px;font-size:.78rem;text-transform:uppercase;
                      letter-spacing:.03em;color:var(--texto-suave);font-weight:600}
@@ -36,6 +37,13 @@
         .lado-item-nombre{display:block;font-weight:600;font-size:.9rem;line-height:1.3}
         .lado-item-estado{display:block;font-size:.78rem;color:var(--texto-suave);margin-top:2px}
         .lado-item.activo .lado-item-nombre{color:var(--primario)}
+        /* Datos bancarios en la columna angosta: etiqueta arriba y valor abajo, para que un correo largo no se salga de la caja. */
+        .tabla-apilada,.tabla-apilada tbody{display:block}
+        .tabla-apilada tr{display:block;padding:7px 0;border-bottom:1px solid #EDF0F3}
+        .tabla-apilada tr:last-child{border-bottom:0}
+        .tabla-apilada td{display:block;padding:0;border:0;width:auto!important}
+        .tabla-apilada td:first-child{font-size:.75rem}
+        .tabla-apilada td:last-child{overflow-wrap:anywhere;word-break:break-word}
         .lado-nota{margin:10px 0 0;font-size:.78rem;color:var(--texto-suave)}
         /* En el celular el menú va arriba, no al costado: el contenido manda. */
         @media(max-width:820px){
@@ -160,6 +168,9 @@
              border:0;border-radius:8px;cursor:pointer;text-decoration:none;text-align:center}
         .btn-primario{background:var(--primario);color:#fff}
         .btn-primario:hover{background:var(--primario-oscuro)}
+        /* Siguiente paso: amarillo con texto negro, para que no se confunda con las acciones azules. */
+        .btn-siguiente{background:#FACC15;color:#000}
+        .acciones-derecha{justify-content:flex-end}
         .btn-secundario{background:#fff;color:var(--texto);border:1px solid var(--borde)}
         .btn-peligro{background:transparent;color:var(--error);border:1px solid var(--borde);padding:6px 12px;font-size:.83rem}
         .btn:disabled,.btn[disabled]{opacity:.62;cursor:not-allowed}

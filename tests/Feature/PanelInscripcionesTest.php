@@ -10,6 +10,7 @@ use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
+use App\Mail\AvisoComprobantePorRevisar;
 use App\Mail\CredencialParticipante;
 use App\Mail\FacturaEmitida;
 use App\Models\Establishment;
@@ -127,6 +128,31 @@ class PanelInscripcionesTest extends TestCase
                 ->where('puede.verCredenciales', true));
     }
 
+    public function test_el_listado_muestra_la_entidad_pagadora_o_el_establecimiento(): void
+    {
+        $this->actingAs($this->usuario(Rol::Coordinacion));
+
+        $conEstablecimiento = Order::create([
+            'event_id' => $this->orden->event_id,
+            'responsible_name' => 'Luis',
+            'responsible_lastname' => 'Soto',
+            'responsible_email' => 'luis@colegio.cl',
+        ]);
+        $conEstablecimiento->establishments()->attach(Establishment::create(['name' => 'Colegio Norte'])->id);
+        Order::create([
+            'event_id' => $this->orden->event_id,
+            'responsible_name' => 'Eva',
+            'responsible_lastname' => 'Rojas',
+            'responsible_email' => 'eva@colegio.cl',
+        ]);
+
+        $this->get(route('inscripciones.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('ordenes.data', fn ($filas) => collect($filas)->pluck('entidad')->sort()->values()->all()
+                    === collect(['Colegio Norte', 'Fundación Educar', null])->sort()->values()->all()));
+    }
+
     public function test_la_ficha_de_un_colegio_muestra_a_sus_hermanas_del_conjunto(): void
     {
         $grupo = OrderGroup::create([
@@ -194,6 +220,17 @@ class PanelInscripcionesTest extends TestCase
         $this->assertSame(PaymentStatus::EnValidacion, $this->orden->fresh()->payment_status);
     }
 
+    public function test_el_comprobante_cargado_desde_el_panel_no_avisa(): void
+    {
+        $this->usuario(Rol::Contabilidad)->forceFill(['notify_payment_proofs' => true])->save();
+
+        $this->actingAs($this->usuario(Rol::Coordinacion))
+            ->post(route('inscripciones.comprobante', $this->orden), $this->comprobante())
+            ->assertSessionHasNoErrors();
+
+        Mail::assertNotQueued(AvisoComprobantePorRevisar::class);
+    }
+
     public function test_acreditacion_no_carga_comprobantes(): void
     {
         $this->actingAs($this->usuario(Rol::Acreditacion))
@@ -237,6 +274,31 @@ class PanelInscripcionesTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(ParticipantStatus::Registrado, $this->participante->fresh()->status);
+    }
+
+    public function test_contabilidad_y_coordinacion_dejan_notas_con_fecha_y_autor_y_acreditacion_no(): void
+    {
+        $conta = $this->usuario(Rol::Contabilidad);
+
+        $this->actingAs($this->usuario(Rol::Acreditacion))
+            ->post(route('inscripciones.notas.store', $this->orden), ['body' => 'Hola'])
+            ->assertForbidden();
+
+        $this->actingAs($conta)
+            ->post(route('inscripciones.notas.store', $this->orden), ['body' => '  Llamé al colegio por el saldo  '])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($this->usuario(Rol::Coordinacion))
+            ->post(route('inscripciones.notas.store', $this->orden), ['body' => 'x'])
+            ->assertSessionHasErrors(['body' => 'Escribe la nota (al menos 2 caracteres).']);
+
+        $this->assertSame(1, $this->orden->notes()->count());
+        $this->assertSame($conta->id, $this->orden->notes()->first()->user_id);
+
+        $this->get(route('inscripciones.show', $this->orden))
+            ->assertInertia(fn (Assert $p) => $p
+                ->has('orden.notas', 1)
+                ->where('orden.notas.0.texto', 'Llamé al colegio por el saldo')
+                ->where('orden.notas.0.autor', $conta->name));
     }
 
     public function test_cancelar_exige_motivo_y_devuelve_los_cupos(): void
@@ -448,7 +510,7 @@ class PanelInscripcionesTest extends TestCase
         $this->orden->refresh();
     }
 
-    public function test_administracion_registra_un_invitado_sin_costo_que_toma_cupo_y_recibe_credencial(): void
+    public function test_coordinacion_registra_un_invitado_sin_costo_que_toma_cupo_y_recibe_credencial(): void
     {
         $datos = [
             'event_id' => $this->orden->event_id,
@@ -458,13 +520,13 @@ class PanelInscripcionesTest extends TestCase
             'access_type_id' => $this->orden->participants()->first()->access_type_id,
         ];
 
-        $this->actingAs($this->usuario(Rol::Coordinacion))
+        $this->actingAs($this->usuario(Rol::Contabilidad))
             ->post(route('inscripciones.invitado'), $datos)
             ->assertForbidden();
 
         $cuposAntes = $this->orden->event->sessions()->sum('reserved_seats');
 
-        $this->actingAs($this->usuario(Rol::Administrador))
+        $this->actingAs($this->usuario(Rol::Coordinacion))
             ->post(route('inscripciones.invitado'), $datos)
             ->assertSessionHasNoErrors();
 

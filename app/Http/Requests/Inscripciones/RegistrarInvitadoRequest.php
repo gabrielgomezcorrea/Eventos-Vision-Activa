@@ -19,7 +19,7 @@ class RegistrarInvitadoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can(Permiso::VerCredenciales->value) ?? false;
+        return $this->user()?->can(Permiso::GestionarInvitaciones->value) ?? false;
     }
 
     protected function prepareForValidation(): void

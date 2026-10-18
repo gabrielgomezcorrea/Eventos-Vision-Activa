@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Asocia un código de descuento a un borrador. Todavía no consume usos: eso
- * ocurre al confirmar, con un UPDATE condicional (`DiscountCode::tomarUsos`).
+ * ocurre al confirmar, con un UPDATE condicional (`DiscountCode::tomarPersona`).
  *
  * Los intentos fallidos se limitan por inscripción: con el alfabeto de los
  * códigos, adivinar uno vigente es inviable si no se pueden probar miles.
@@ -38,7 +38,7 @@ class AplicarCodigoDeDescuento
 
         $motivo = $codigo === null
             ? 'Este código no es válido. Revisa que esté bien escrito.'
-            : $codigo->impedimento(max(1, $borrador->participantesVigentes()->count()));
+            : $codigo->impedimentoPara($borrador);
 
         if ($motivo !== null) {
             RateLimiter::hit($llave, self::BLOQUEO_SEGUNDOS);

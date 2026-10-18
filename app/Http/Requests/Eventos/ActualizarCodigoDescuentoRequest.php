@@ -4,6 +4,7 @@ namespace App\Http\Requests\Eventos;
 
 use App\Models\DiscountCode;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Lo que se puede cambiar de un código ya creado: el tope, la fecha y si sirve.
@@ -23,8 +24,9 @@ class ActualizarCodigoDescuentoRequest extends FormRequest
         $codigo = $this->route('discountCode');
 
         return [
-            // Bajar el tope por debajo de lo ya usado dejaría un código "sobrepasado".
-            'max_people' => ['sometimes', 'required', 'integer', 'min:'.max(1, $codigo->used_people), 'max:99'],
+            // Bajar el tope por debajo de quienes ya lo usaron dejaría un código "sobrepasado".
+            'max_people' => ['sometimes', 'required', 'integer', 'min:'.max(1, $codigo->usosPorPersona()->count()), 'max:99'],
+            'uses_per_person' => ['sometimes', 'required', Rule::in(array_keys(DiscountCode::USOS_POR_PERSONA))],
             'expires_on' => ['sometimes', 'required', 'date', 'after_or_equal:today'],
             'is_active' => ['sometimes', 'required', 'boolean'],
         ];
@@ -44,7 +46,8 @@ class ActualizarCodigoDescuentoRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'max_people' => 'máximo de personas',
+            'max_people' => 'personas que pueden usarlo',
+            'uses_per_person' => 'usos por persona',
             'expires_on' => 'fecha de vencimiento',
         ];
     }

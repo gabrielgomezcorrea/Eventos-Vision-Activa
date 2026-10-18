@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Eventos;
 
-use App\Enums\OrderStatus;
 use App\Enums\TipoDescuento;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Eventos\ActualizarCodigoDescuentoRequest;
@@ -10,9 +9,9 @@ use App\Http\Requests\Eventos\CodigoDescuentoRequest;
 use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\Order;
-use App\Models\Participant;
 use App\Support\Auditor;
 use App\Support\CodigoDeDescuento;
+use App\Support\Presentar;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
@@ -20,8 +19,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Códigos de descuento del evento. Nunca se borran: uno usado dejaría órdenes
- * apuntando a nada, así que se desactivan.
+ * Códigos de descuento del evento. Uno que alguien ya usó no se borra (sus
+ * inscripciones lo nombran): se desactiva. Uno que nadie usó sí se elimina.
  */
 class CodigoDescuentoController extends Controller
 {
@@ -31,50 +30,53 @@ class CodigoDescuentoController extends Controller
 
         $codigos = $event->discountCodes()->latest('id')->get();
 
-        // Solo las inscripciones que hoy tienen los usos tomados: una vencida o
-        // cancelada los devolvió, y un borrador todavía no los consume.
-        $ordenes = Order::query()
-            ->whereIn('discount_code_id', $codigos->pluck('id'))
-            ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada])
-            ->with('participantesVigentes.establishment')
-            ->orderBy('id')
-            ->get()
-            ->groupBy('discount_code_id');
-
         return Inertia::render('eventos/codigos', [
             'evento' => ['id' => $event->id, 'name' => $event->name],
-            'codigos' => $codigos->map(fn (DiscountCode $codigo): array => [
-                'personas' => $ordenes->get($codigo->id, collect())->flatMap(
-                    fn (Order $orden) => $orden->participantesVigentes->map(fn (Participant $p): array => [
-                        'id' => $p->id,
-                        'nombre' => $p->nombre_completo,
-                        'rut' => $p->rut,
-                        'email' => $p->email,
-                        'colegio' => $p->establishment?->name,
-                        'folio' => $orden->number,
-                        'orden_id' => $orden->id,
-                    ])
-                )->values()->all(),
-                'id' => $codigo->id,
-                'code' => $codigo->formateado(),
-                'type' => $codigo->type->value,
-                'value' => $codigo->value,
-                'etiqueta' => $codigo->etiqueta(),
-                'max_people' => $codigo->max_people,
-                'used_people' => $codigo->used_people,
-                'expires_on' => $codigo->expires_at->format('Y-m-d'),
-                'vence' => $codigo->expires_at->format('d-m-Y'),
-                'is_active' => $codigo->is_active,
-                'estado' => self::estado($codigo),
-            ])->values()->all(),
+            'codigos' => $codigos->map(function (DiscountCode $codigo): array {
+                // Una fila por persona (correo del solicitante), con todo lo que inscribió con el código.
+                $personas = $codigo->usosPorPersona()->map(function ($ordenes, string $correo): array {
+                    $primera = $ordenes->first();
+
+                    return [
+                        'correo' => $correo,
+                        'nombre' => $primera->responsableNombreCompleto(),
+                        'primer_uso' => $primera->confirmed_at ? Presentar::fechaYHora($primera->confirmed_at) : null,
+                        'inscripciones' => $ordenes->map(fn (Order $orden): array => [
+                            'orden_id' => $orden->id,
+                            'folio' => $orden->number,
+                            'colegio' => $orden->nombreDelColegio(),
+                        ])->values()->all(),
+                    ];
+                })->values();
+
+                return [
+                    'personas' => $personas->all(),
+                    'usado_por' => $personas->count(),
+                    'id' => $codigo->id,
+                    'code' => $codigo->formateado(),
+                    'type' => $codigo->type->value,
+                    'value' => $codigo->value,
+                    'etiqueta' => $codigo->etiqueta(),
+                    'max_people' => $codigo->max_people,
+                    'expires_on' => $codigo->expires_at->format('Y-m-d'),
+                    'vence' => $codigo->expires_at->format('d-m-Y'),
+                    'is_active' => $codigo->is_active,
+                    'uses_per_person' => $codigo->uses_per_person,
+                    'usos_texto' => DiscountCode::USOS_POR_PERSONA[$codigo->uses_per_person] ?? '',
+                    'estado' => self::estado($codigo),
+                ];
+            })->values()->all(),
             // Cada carga trae uno nuevo: el modal abre con un código ya listo.
             'sugerido' => CodigoDeDescuento::formatear(CodigoDeDescuento::generar()),
             'hoy' => now()->format('Y-m-d'),
-            'opciones' => ['tiposDescuento' => [
-                'full' => 'Descuento completo',
-                TipoDescuento::Porcentaje->value => 'Porcentaje',
-                TipoDescuento::Monto->value => 'Monto fijo',
-            ]],
+            'opciones' => [
+                'tiposDescuento' => [
+                    'full' => 'Descuento completo',
+                    TipoDescuento::Porcentaje->value => 'Porcentaje',
+                    TipoDescuento::Monto->value => 'Monto fijo',
+                ],
+                'usosPorPersona' => DiscountCode::USOS_POR_PERSONA,
+            ],
         ]);
     }
 
@@ -106,6 +108,7 @@ class CodigoDescuentoController extends Controller
             'type' => $request->validated('type'),
             'value' => $request->validated('value'),
             'max_people' => $request->validated('max_people'),
+            'uses_per_person' => $request->validated('uses_per_person'),
             'expires_at' => Carbon::parse($request->validated('expires_on'))->endOfDay(),
             'created_by' => $request->user()->getKey(),
         ]);
@@ -139,6 +142,31 @@ class CodigoDescuentoController extends Controller
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cambios guardados.']);
+
+        return back();
+    }
+
+    public function destroy(Event $event, DiscountCode $discountCode): RedirectResponse
+    {
+        Gate::authorize('delete', DiscountCode::class);
+
+        if ($discountCode->usosPorPersona()->isNotEmpty()) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => 'Este código ya lo usó alguien: no se puede eliminar. Desactívalo para que nadie más lo use.']);
+
+            return back();
+        }
+
+        $codigo = $discountCode->formateado();
+        // Un borrador que lo tenía puesto queda sin código (la columna se limpia sola).
+        $discountCode->delete();
+
+        Auditor::registrar(
+            sobre: $event,
+            accion: 'codigo_descuento.eliminado',
+            propiedades: ['codigo' => $codigo],
+        );
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Código {$codigo} eliminado."]);
 
         return back();
     }

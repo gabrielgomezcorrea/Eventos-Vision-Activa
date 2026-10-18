@@ -4,10 +4,12 @@ import {
     ClipboardList,
     Inbox,
     LayoutGrid,
+    ListChecks,
     QrCode,
 } from 'lucide-react';
 import { dashboard } from '@/routes';
 import { inicio as acreditacion } from '@/routes/acreditacion';
+import { index as acreditaciones } from '@/routes/acreditaciones';
 import { index as comprobantes } from '@/routes/comprobantes';
 import { index as eventos } from '@/routes/eventos';
 import { index as inscripciones } from '@/routes/inscripciones';
@@ -44,6 +46,12 @@ export const mainNavItems: NavItem[] = [
         href: comprobantes(),
         icon: Banknote,
         permiso: 'ver_comprobantes',
+    },
+    {
+        title: 'Acreditación',
+        href: acreditaciones(),
+        icon: ListChecks,
+        permiso: 'ver_reporte_acreditacion',
     },
     // En la puerta del evento se escanea sin perder el panel que se venía usando.
     {

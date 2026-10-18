@@ -62,6 +62,7 @@ class TicketController extends Controller
         return redirect()->route('inscripcion.portal.credenciales', [
             'token' => $token,
             'colegio' => $establishment?->id,
+            'inscripcion' => request()->query('inscripcion'),
         ]);
     }
 

@@ -22,6 +22,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inscripciones\CancelarOrdenRequest;
 use App\Http\Requests\Inscripciones\CargarComprobanteRequest;
 use App\Http\Requests\Inscripciones\CorregirParticipanteRequest;
+use App\Http\Requests\Inscripciones\GuardarNotaRequest;
 use App\Http\Requests\Inscripciones\ReemplazarParticipanteRequest;
 use App\Http\Requests\Inscripciones\RegistrarFacturaRequest;
 use App\Http\Requests\Inscripciones\RegistrarInvitadoRequest;
@@ -71,6 +72,7 @@ class InscripcionController extends Controller
 
         $ordenes = Order::query()
             ->withCount('participantesVigentes as participantes')
+            ->with(['payerEntity:id,name', 'establishments:id,name'])
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where(
                 fn (Builder $o) => $o->where('number', 'like', "%{$buscar}%")
                     ->orWhere('responsible_name', 'like', "%{$buscar}%")
@@ -95,6 +97,7 @@ class InscripcionController extends Controller
             ->through(fn (Order $orden): array => [
                 'id' => $orden->id,
                 'numero' => $orden->number,
+                'entidad' => $orden->payerEntity?->name ?? $orden->establishments->first()?->name,
                 'responsable' => $orden->responsableNombreCompleto(),
                 'correo' => $orden->responsible_email,
                 'total' => $orden->total,
@@ -116,9 +119,9 @@ class InscripcionController extends Controller
             'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
             'estados' => collect(OrderStatus::cases())->mapWithKeys(fn (OrderStatus $s): array => [$s->value => $s->label()])->all(),
             'pagos' => collect(PaymentStatus::cases())->mapWithKeys(fn (PaymentStatus $s): array => [$s->value => $s->label()])->all(),
-            // Invitados sin costo: solo Administración, y solo para eventos con
+            // Invitados sin costo: Administración y Coordinación, y solo para eventos con
             // accesos activos, que es lo que define el cupo que van a ocupar.
-            'invitados' => $request->user()->can(Permiso::VerCredenciales->value)
+            'invitados' => $request->user()->can(Permiso::GestionarInvitaciones->value)
                 ? [
                     'cargos' => $eventosAbiertos->mapWithKeys(fn (Event $e): array => [$e->id => $e->cargosDeParticipante()])->all(),
                     'accesos' => $eventosAbiertos
@@ -203,6 +206,12 @@ class InscripcionController extends Controller
                 'descuento' => $order->discount_amount,
                 'descuento_etiqueta' => $order->discount_label,
                 'internal_notes' => $order->internal_notes,
+                'notas' => $order->notes()->with('user')->get()->map(fn ($nota): array => [
+                    'id' => $nota->id,
+                    'fecha' => Presentar::fecha($nota->created_at).' - '.$nota->created_at->format('H:i:s'),
+                    'autor' => $nota->user?->name,
+                    'texto' => $nota->body,
+                ])->values()->all(),
                 'responsable' => [
                     'nombre' => $order->responsableNombreCompleto(),
                     'cargo' => $order->responsible_position,
@@ -329,6 +338,18 @@ class InscripcionController extends Controller
                 'hoy' => now()->format('Y-m-d'),
             ],
         ]);
+    }
+
+    public function guardarNota(GuardarNotaRequest $request, Order $order): RedirectResponse
+    {
+        $order->notes()->create([
+            'user_id' => $request->user()->getKey(),
+            'body' => $request->validated('body'),
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Nota guardada.']);
+
+        return back();
     }
 
     public function actualizarNotas(Request $request, Order $order): RedirectResponse

@@ -19,6 +19,8 @@ type Props = {
     onConfirmar: () => void;
     /** Falso para confirmar algo que no borra: el botón deja de ser rojo. */
     destructivo?: boolean;
+    /** Segunda salida, en negro, para lo más drástico (por ejemplo "Limpiar solicitud"). */
+    accionExtra?: { texto: string; onConfirmar: () => void };
     children: ReactNode;
 };
 
@@ -29,6 +31,7 @@ export function Confirmar({
     textoAccion,
     onConfirmar,
     destructivo = true,
+    accionExtra,
     children,
 }: Props) {
     const [abierto, setAbierto] = useState(false);
@@ -52,6 +55,17 @@ export function Confirmar({
                     >
                         {textoAccion}
                     </Button>
+                    {accionExtra && (
+                        <Button
+                            className="bg-black text-white hover:bg-black/80"
+                            onClick={() => {
+                                accionExtra.onConfirmar();
+                                setAbierto(false);
+                            }}
+                        >
+                            {accionExtra.texto}
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

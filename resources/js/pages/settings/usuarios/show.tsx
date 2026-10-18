@@ -3,6 +3,8 @@ import { ArrowLeft, KeyRound, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import UsuarioController from '@/actions/App/Http/Controllers/Configuracion/UsuarioController';
+import { ListaDeAvisos } from '@/components/avisos-por-correo';
+import type { Aviso } from '@/components/avisos-por-correo';
 import { Campo } from '@/components/campo';
 import { Confirmar } from '@/components/confirmar';
 import { EditarSeccion } from '@/components/editar-seccion';
@@ -34,6 +36,7 @@ type Props = {
         etiquetas: string[];
         activo: boolean;
         creado: string | null;
+        avisos: Aviso[];
     };
     soyYo: boolean;
     puedeEliminar: boolean;
@@ -165,6 +168,52 @@ function EditarAcceso({
                 )}
                 <InputError message={form.errors.is_active} />
             </div>
+        </Panel>
+    );
+}
+
+function EditarAvisos({ usuario }: { usuario: Props['usuario'] }) {
+    const [abierto, setAbierto] = useState(false);
+    const inicial = Object.fromEntries(
+        usuario.avisos.map((a) => [a.campo, a.activo]),
+    );
+    const form = useForm<Record<string, boolean>>(inicial);
+
+    function guardar(e: FormEvent) {
+        e.preventDefault();
+        form.patch(UsuarioController.update.url(usuario.id), {
+            preserveScroll: true,
+            onSuccess: () => setAbierto(false),
+        });
+    }
+
+    return (
+        <Panel
+            titulo="Avisos por correo"
+            trigger={
+                <Button variant="ghost" size="icon" aria-label="Editar avisos">
+                    <Pencil />
+                </Button>
+            }
+            abierto={abierto}
+            onOpenChange={(valor) => {
+                setAbierto(valor);
+
+                if (valor) {
+                    form.setData(inicial);
+                    form.clearErrors();
+                }
+            }}
+            onSubmit={guardar}
+            procesando={form.processing}
+        >
+            <ListaDeAvisos
+                avisos={usuario.avisos}
+                valores={form.data}
+                onChange={(campo, activo) => form.setData(campo, activo)}
+                errores={form.errors}
+                prefijo="usuario"
+            />
         </Panel>
     );
 }
@@ -344,6 +393,24 @@ export default function Usuario({
                         </Dato>
                     </Datos>
                 </SeccionFicha>
+
+                {usuario.avisos.length > 0 && (
+                    <SeccionFicha
+                        titulo="Avisos por correo"
+                        accion={<EditarAvisos usuario={usuario} />}
+                    >
+                        <Datos>
+                            {usuario.avisos.map((aviso) => (
+                                <Dato
+                                    key={aviso.campo}
+                                    etiqueta={aviso.etiqueta}
+                                >
+                                    {aviso.activo ? 'Sí' : 'No'}
+                                </Dato>
+                            ))}
+                        </Datos>
+                    </SeccionFicha>
+                )}
             </div>
         </>
     );

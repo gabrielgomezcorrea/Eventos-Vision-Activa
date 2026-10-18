@@ -181,6 +181,7 @@ class EventoController extends Controller
                 'editar' => $usuario->can('update', $event),
                 'eliminar' => $usuario->can('delete', $event),
                 'descuentos' => $usuario->can('viewAny', DiscountCode::class),
+                'invitaciones' => $usuario->can('viewAny', Invitation::class),
             ],
         ]);
     }

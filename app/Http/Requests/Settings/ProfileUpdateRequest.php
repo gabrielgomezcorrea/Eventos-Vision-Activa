@@ -17,6 +17,9 @@ class ProfileUpdateRequest extends FormRequest
      */
     public function rules(): array
     {
-        return $this->profileRules($this->user()->id);
+        // Nombre y correo, o las casillas de avisos: cada bloque manda lo suyo.
+        $perfil = array_map(fn (array $reglas): array => ['sometimes', ...$reglas], $this->profileRules($this->user()->id));
+
+        return [...$perfil, ...$this->user()->reglasDeAvisos()];
     }
 }

@@ -4,17 +4,20 @@ namespace App\Http\Requests\Eventos;
 
 use App\Models\Event;
 use App\Models\Invitation;
-use App\Support\Texto;
+use App\Support\ReglasDeContacto;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class InvitacionRequest extends FormRequest
 {
-    public const MAXIMO_POR_ENVIO = 50;
-
     public function authorize(): bool
     {
         return $this->user()?->can('create', Invitation::class) ?? false;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge(ReglasDeContacto::limpiar($this->only(['first_name', 'last_name', 'email'])));
     }
 
     /** @return array<string, array<int, mixed>> */
@@ -24,17 +27,24 @@ class InvitacionRequest extends FormRequest
         $evento = $this->route('event');
 
         return [
-            'emails' => ['required', 'string', 'max:5000'],
+            'first_name' => ReglasDeContacto::nombres(),
+            'last_name' => ReglasDeContacto::apellidos(),
+            'email' => ReglasDeContacto::correo(),
             'access_type_id' => ['required', Rule::in($evento->accessTypes()->where('is_active', true)->pluck('id')->all())],
             'expires_on' => ['required', 'date', 'after_or_equal:today'],
         ];
     }
 
     /** @return array<string, string> */
+    public function attributes(): array
+    {
+        return ['first_name' => 'nombre', 'last_name' => 'apellidos', 'email' => 'correo'];
+    }
+
+    /** @return array<string, string> */
     public function messages(): array
     {
         return [
-            'emails.required' => 'Escribe al menos un correo.',
             'access_type_id.required' => 'Elige el acceso de la invitación.',
             'access_type_id.in' => 'Elige un acceso disponible.',
             'expires_on.required' => 'Indica hasta qué fecha vale la invitación.',
@@ -43,41 +53,22 @@ class InvitacionRequest extends FormRequest
     }
 
     /**
-     * Un correo por línea, separados también por coma o punto y coma. Sin
-     * repetidos y en minúsculas.
+     * Datos de la persona ya normalizados, listos para guardar.
      *
-     * @return list<string>
+     * @return array{first_name: string, last_name: string, email: string}
      */
-    public function correos(): array
+    public function persona(): array
     {
-        $partes = preg_split('/[\s,;]+/', (string) $this->input('emails'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $datos = ReglasDeContacto::normalizar($this->only(['first_name', 'last_name', 'email']), [
+            'first_name' => 'nombre',
+            'last_name' => 'nombre',
+            'email' => 'correo',
+        ]);
 
-        return array_values(array_unique(array_map(fn (string $c): string => (string) Texto::correo($c), $partes)));
-    }
-
-    /** Los que no parecen un correo, para marcarlos sin perder lo escrito. @return list<string> */
-    public function correosInvalidos(): array
-    {
-        return array_values(array_filter(
-            $this->correos(),
-            fn (string $correo): bool => filter_var($correo, FILTER_VALIDATE_EMAIL) === false,
-        ));
-    }
-
-    public function after(): array
-    {
         return [
-            function ($validator): void {
-                if ($this->correos() === []) {
-                    return;
-                }
-
-                if (count($this->correos()) > self::MAXIMO_POR_ENVIO) {
-                    $validator->errors()->add('emails', 'Son demasiados: envía hasta '.self::MAXIMO_POR_ENVIO.' por vez.');
-                } elseif ($this->correosInvalidos() !== []) {
-                    $validator->errors()->add('emails', 'Revisa estos correos: '.implode(', ', $this->correosInvalidos()).'.');
-                }
-            },
+            'first_name' => (string) $datos['first_name'],
+            'last_name' => (string) $datos['last_name'],
+            'email' => (string) $datos['email'],
         ];
     }
 }

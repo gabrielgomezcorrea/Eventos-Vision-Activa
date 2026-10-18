@@ -3,7 +3,7 @@
 
 # {{ $event->name }}
 
-Hola,
+Hola{{ $invitacion->first_name ? ' '.$invitacion->first_name : '' }},
 
 Te invitamos a participar en el **{{ $event->name }}**@if ($event->starts_on), el {{ $event->starts_on->translatedFormat('d \d\e F \d\e Y') }}@endif.
 Tu entrada no tiene costo: completa tus datos desde el enlace y te enviaremos tu credencial.

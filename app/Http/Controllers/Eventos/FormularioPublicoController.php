@@ -49,7 +49,6 @@ class FormularioPublicoController extends Controller
                     'nombre' => $a->original_name,
                     'peso' => $a->tamanoLegible(),
                 ])->values()->all(),
-                'max_adjuntos' => EventAttachment::MAXIMO,
                 'max_mb' => EventAttachment::MAX_MB,
                 'participant_positions' => $event->participant_positions ?? ProgramFormField::CARGOS_PARTICIPANTE,
             ],
@@ -119,6 +118,10 @@ class FormularioPublicoController extends Controller
         $disco = config('filesystems.private_disk');
         $archivo = $request->file('programa');
 
+        // Un solo programa viaja en el correo: subir otro reemplaza al anterior
+        // (registro y archivo), para que no se acumulen adjuntos que pesen de más.
+        $anterior = $event->attachments()->latest('id')->first();
+
         $event->attachments()->create([
             'disk' => $disco,
             'path' => $archivo->store('programas/'.$event->getKey(), $disco),
@@ -128,7 +131,12 @@ class FormularioPublicoController extends Controller
             'size' => $archivo->getSize(),
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Archivo cargado. Se adjunta al correo con el programa.']);
+        if ($anterior !== null) {
+            Storage::disk($anterior->disk)->delete($anterior->path);
+            $anterior->delete();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Programa cargado. Se adjunta al correo que reciben quienes lo piden.']);
 
         return back();
     }

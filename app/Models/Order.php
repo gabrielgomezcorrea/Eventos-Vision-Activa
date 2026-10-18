@@ -8,6 +8,7 @@ use App\Enums\OrderKind;
 use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
+use App\Support\DescuentoDeCodigo;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * Orden de inscripción. Es la entidad central: conecta responsable, entidad
@@ -52,6 +54,14 @@ class Order extends Model
         'total' => 0,
     ];
 
+    protected static function booted(): void
+    {
+        // Identificador para elegir la inscripción dentro de su conjunto.
+        static::creating(function (Order $orden): void {
+            $orden->public_id ??= (string) Str::ulid();
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -67,6 +77,18 @@ class Order extends Model
             'reminder_sent_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
+    }
+
+    /** @return HasMany<OrderNote, $this> */
+    public function notes(): HasMany
+    {
+        return $this->hasMany(OrderNote::class)->latest('id');
+    }
+
+    /** @return BelongsTo<Order, $this> */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_order_id');
     }
 
     /** @return BelongsTo<Event, $this> */
@@ -159,6 +181,17 @@ class Order extends Model
      * Abonos aprobados. Los colegios pagan en partes, con semanas de por medio,
      * así que lo pagado es la suma y no el último comprobante.
      */
+    /**
+     * Un abono observado o rechazado que el cliente ya volvió a enviar queda
+     * como historia: sigue en la base y en el panel, pero el cliente no debe ver
+     * "Observado" junto a un pago aprobado por lo mismo.
+     */
+    public function abonoReemplazado(Payment $abono): bool
+    {
+        return in_array($abono->status, [PaymentStatus::Observado, PaymentStatus::Rechazado], true)
+            && $this->payments->contains(fn (Payment $otro) => $otro->id > $abono->id);
+    }
+
     public function pagado(): int
     {
         return (int) $this->payments()->where('status', PaymentStatus::Aprobado)->sum('amount');
@@ -299,6 +332,8 @@ class Order extends Model
                     ->where('event_id', $this->event_id)
                     ->where('id', '!=', $this->getKey())
                     ->whereNotNull('discount_code_id')
+                    // Con el mismo código no se juntan descuentos: es el mismo.
+                    ->when($this->discount_code_id !== null, fn ($o) => $o->where('discount_code_id', '!=', $this->discount_code_id))
                     ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada]))
                 ->select('rut'))
             ->get();
@@ -311,17 +346,12 @@ class Order extends Model
     }
 
     /**
-     * Descuento del código sobre un borrador. Se calcula por colegio, igual que
-     * al confirmar (cada colegio nace como su propia orden): un monto fijo se
-     * aplica a cada uno y nunca deja un subtotal negativo.
+     * Descuento del código sobre un borrador: sobre el total del recorrido,
+     * con el monto fijo una sola vez aunque traiga varios colegios.
      */
     private function descuentoDelCodigo(): int
     {
-        return (int) $this->participantesVigentes
-            ->groupBy('establishment_id')
-            ->sum(fn ($grupo): int => $this->discountCode->calcular(
-                (int) $grupo->sum(fn (Participant $p) => $p->accessType?->precioVigente() ?? 0)
-            ));
+        return DescuentoDeCodigo::para($this->discountCode, $this, $this->calcularSubtotal());
     }
 
     /** Cómo se le explica el descuento al cliente: el código usado o el tramo por cantidad. */
@@ -389,6 +419,14 @@ class Order extends Model
         }
 
         return $this->reserved_until->isPast();
+    }
+
+    /** El colegio como lo nombra el equipo: el primer establecimiento o, si no hay, la entidad pagadora. */
+    public function nombreDelColegio(): ?string
+    {
+        $establecimiento = $this->establishments->first();
+
+        return $establecimiento !== null ? $establecimiento->name : $this->payerEntity?->name;
     }
 
     /**

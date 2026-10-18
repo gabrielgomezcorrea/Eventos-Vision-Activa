@@ -11,6 +11,7 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentReviewAction;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
+use App\Mail\AvisoInscripcionConfirmada;
 use App\Mail\ConjuntoConfirmado;
 use App\Mail\OrdenConfirmada;
 use App\Models\AccessType;
@@ -129,6 +130,48 @@ class RecorridoConVariosColegiosTest extends TestCase
         ]);
 
         return [$sanJose, $losRobles, $bellavista];
+    }
+
+    public function test_un_conjunto_de_dos_colegios_manda_un_solo_aviso_con_los_dos_folios(): void
+    {
+        $this->usuarioConRol(Rol::Coordinacion, ['notify_confirmed_orders' => true]);
+        $this->agregarDosColegiosConUnParticipanteCadaUno();
+
+        $this->post($this->ruta('confirmar'));
+
+        $folios = Order::pluck('number')->all();
+        $this->assertCount(2, $folios);
+
+        Mail::assertQueued(AvisoInscripcionConfirmada::class, 1);
+        Mail::assertQueued(AvisoInscripcionConfirmada::class, function (AvisoInscripcionConfirmada $m) use ($folios): bool {
+            $html = $m->render();
+
+            return str_contains($m->envelope()->subject, '2 colegios')
+                && str_contains($html, $folios[0]) && str_contains($html, $folios[1])
+                && str_contains($html, 'San José') && str_contains($html, 'Robles');
+        });
+    }
+
+    public function test_con_varios_colegios_los_participantes_se_listan_separados_por_colegio(): void
+    {
+        $this->agregarDosColegiosConUnParticipanteCadaUno();
+
+        $this->get($this->ruta('portal.inscripcion'))
+            ->assertOk()
+            ->assertSeeInOrder(['Colegio San José · 1 participante', 'Carlos Rojas', 'Colegio los Robles · 1 participante', 'Marta Soto']);
+    }
+
+    public function test_con_un_solo_colegio_los_participantes_siguen_en_una_lista(): void
+    {
+        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca']);
+        $sanJose = $this->borrador->fresh()->establishments->first();
+        $this->post($this->ruta('participantes.agregar'), [
+            'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Inspector General',
+            'email' => 'carlos@colegio.cl', 'rut' => '11.111.111-1', 'access_type_id' => $this->acceso->id,
+            'establishment_id' => $sanJose->id,
+        ]);
+
+        $this->get($this->ruta('portal.inscripcion'))->assertOk()->assertSee('Carlos Rojas')->assertDontSee('· 1 participante');
     }
 
     public function test_dos_colegios_generan_dos_ordenes_en_el_mismo_conjunto(): void
@@ -306,15 +349,15 @@ class RecorridoConVariosColegiosTest extends TestCase
 
         $respuesta->assertSee('Colegio San José')
             ->assertSee('Colegio los Robles')
-            ->assertSee('Ver las credenciales')
+            ->assertSee('Siguiente: Credenciales')
             ->assertSee('Debe $90.000')
-            ->assertDontSee(route('inscripcion.comprobante', ['token' => $this->token, 'establishment' => $losRobles->establishments->sole()->id]), escape: false);
+            ->assertDontSee(route('inscripcion.comprobante', ['token' => $this->token, 'inscripcion' => $losRobles->public_id]), escape: false);
 
         // Al elegir el otro colegio en el menú, aparece su formulario de pago.
         $this->get($this->ruta('portal.pago', ['colegio' => $losRobles->establishments->sole()->id]))
             ->assertOk()
-            ->assertSee(route('inscripcion.comprobante', ['token' => $this->token, 'establishment' => $losRobles->establishments->sole()->id]), escape: false)
-            ->assertDontSee('Ver las credenciales');
+            ->assertSee(route('inscripcion.comprobante', ['token' => $this->token, 'inscripcion' => $losRobles->public_id]), escape: false)
+            ->assertDontSee('Siguiente: Credenciales');
     }
 
     public function test_el_menu_no_muestra_colegios_de_otro_conjunto(): void

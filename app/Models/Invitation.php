@@ -17,6 +17,8 @@ use Illuminate\Support\Str;
  * @property int $event_id
  * @property int $access_type_id
  * @property string $email
+ * @property string|null $first_name
+ * @property string|null $last_name
  * @property Carbon $expires_at
  * @property Carbon|null $used_at
  * @property Carbon|null $revoked_at
@@ -60,7 +62,7 @@ class Invitation extends Model
      *
      * @return array{0: self, 1: string}
      */
-    public static function emitir(Event $event, AccessType $acceso, string $email, \DateTimeInterface $venceEl, ?User $creador = null): array
+    public static function emitir(Event $event, AccessType $acceso, string $email, \DateTimeInterface $venceEl, ?User $creador = null, ?string $nombre = null, ?string $apellidos = null): array
     {
         $token = Str::random(64);
 
@@ -68,6 +70,8 @@ class Invitation extends Model
             'event_id' => $event->getKey(),
             'access_type_id' => $acceso->getKey(),
             'email' => mb_strtolower(trim($email)),
+            'first_name' => $nombre,
+            'last_name' => $apellidos,
             'token_hash' => self::hash($token),
             'expires_at' => $venceEl,
             'created_by' => $creador?->getKey(),
@@ -85,6 +89,14 @@ class Invitation extends Model
     public static function hash(string $token): string
     {
         return hash('sha256', $token);
+    }
+
+    /** Nombre y apellidos tal como los escribió quien invitó; vacío en las invitaciones antiguas. */
+    public function nombreCompleto(): ?string
+    {
+        $nombre = trim("{$this->first_name} {$this->last_name}");
+
+        return $nombre === '' ? null : $nombre;
     }
 
     /** Sigue esperando a que la persona se inscriba. */

@@ -32,6 +32,7 @@ class InvitacionController extends Controller
             'invitaciones' => $event->invitations()->with('accessType')->latest('id')->get()->map(fn (Invitation $i): array => [
                 'id' => $i->id,
                 'email' => $i->email,
+                'nombre' => $i->nombreCompleto(),
                 'acceso' => $i->accessType->name,
                 'vence' => $i->expires_at->format('d-m-Y'),
                 'estado' => ['value' => $i->estado(), 'label' => $i->estadoEtiqueta(), 'color' => match ($i->estado()) {
@@ -58,28 +59,28 @@ class InvitacionController extends Controller
         $acceso = $event->accessTypes()->findOrFail($request->validated('access_type_id'));
         $vence = Carbon::parse($request->validated('expires_on'))->endOfDay();
 
+        $persona = $request->persona();
+
         // Quien ya tiene una invitación pendiente no recibe otra: serían dos entradas gratis.
-        $pendientes = $event->invitations()->get()->filter->estaPendiente()->pluck('email');
-        $nuevos = array_values(array_diff($request->correos(), $pendientes->all()));
-        $repetidos = array_values(array_intersect($request->correos(), $pendientes->all()));
+        $yaTiene = $event->invitations()->where('email', $persona['email'])->get()->contains(fn (Invitation $i): bool => $i->estaPendiente());
 
-        foreach ($nuevos as $correo) {
-            [$invitacion, $token] = Invitation::emitir($event, $acceso, $correo, $vence, $request->user());
+        if ($yaTiene) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => "{$persona['email']} ya tiene una invitación pendiente."]);
 
-            Auditor::registrar(
-                sobre: $invitacion,
-                accion: 'invitacion.creada',
-                propiedades: ['evento' => $event->name, 'correo' => $correo, 'acceso' => $acceso->name],
-            );
-
-            Mail::to($correo)->queue(new InvitacionAlEvento($invitacion, route('publico.invitacion', ['token' => $token])));
+            return back();
         }
 
-        Inertia::flash('toast', [
-            'type' => 'success',
-            'message' => count($nuevos).' invitación(es) enviada(s).'
-                .($repetidos === [] ? '' : ' Ya tenían una pendiente: '.implode(', ', $repetidos).'.'),
-        ]);
+        [$invitacion, $token] = Invitation::emitir($event, $acceso, $persona['email'], $vence, $request->user(), $persona['first_name'], $persona['last_name']);
+
+        Auditor::registrar(
+            sobre: $invitacion,
+            accion: 'invitacion.creada',
+            propiedades: ['evento' => $event->name, 'correo' => $persona['email'], 'acceso' => $acceso->name],
+        );
+
+        Mail::to($persona['email'])->queue(new InvitacionAlEvento($invitacion, route('publico.invitacion', ['token' => $token])));
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Invitación enviada a '.$persona['email'].'.']);
 
         return back();
     }

@@ -42,9 +42,9 @@ class CancelarOrden
 
             $fresca->load('participantesVigentes.accessType.sessions');
             $this->cupos->devolver($fresca->consumoDeCupos());
-            $fresca->discountCode?->devolverUsos($fresca->participantesVigentes->count());
-
             $fresca->forceFill(['status' => OrderStatus::Cancelada, 'cancelled_at' => now()])->save();
+            // Libera el cupo de la persona solo si ya no tiene otra inscripción viva con el código.
+            $fresca->discountCode?->recalcularUsos();
 
             Auditor::registrar(
                 sobre: $fresca,

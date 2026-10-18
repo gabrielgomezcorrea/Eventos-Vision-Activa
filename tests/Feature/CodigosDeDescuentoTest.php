@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Enums\OrderStatus;
 use App\Enums\Rol;
 use App\Models\DiscountCode;
 use App\Models\Event;
+use App\Models\Order;
 use App\Support\CodigoDeDescuento;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -20,6 +22,7 @@ class CodigosDeDescuentoTest extends TestCase
             'type' => 'percent',
             'value' => '20',
             'max_people' => '10',
+            'uses_per_person' => 'unlimited',
             'expires_on' => now()->addWeek()->format('Y-m-d'),
             ...$cambios,
         ];
@@ -155,14 +158,55 @@ class CodigosDeDescuentoTest extends TestCase
         $this->assertSame(0, DiscountCode::count());
     }
 
+    public function test_se_elige_cuantas_veces_lo_usa_cada_persona(): void
+    {
+        $evento = Event::factory()->create();
+        $this->actingAs($this->usuarioConRol(Rol::Administrador));
+
+        $this->post(route('eventos.codigos.store', $evento), $this->datos(['uses_per_person' => 'cualquiera']))
+            ->assertSessionHasErrors('uses_per_person');
+
+        $this->post(route('eventos.codigos.store', $evento), $this->datos(['uses_per_person' => 'once']))
+            ->assertSessionHasNoErrors();
+        $codigo = DiscountCode::sole();
+        $this->assertSame('once', $codigo->uses_per_person);
+
+        $this->patch(route('eventos.codigos.update', [$evento, $codigo]), ['uses_per_person' => 'unlimited'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('unlimited', $codigo->refresh()->uses_per_person);
+    }
+
+    public function test_un_codigo_que_nadie_uso_se_elimina_y_uno_usado_no(): void
+    {
+        $evento = Event::factory()->create();
+        $libre = DiscountCode::factory()->create(['event_id' => $evento->id]);
+        $usado = DiscountCode::factory()->create(['event_id' => $evento->id]);
+        Order::factory()->create(['event_id' => $evento->id, 'discount_code_id' => $usado->id, 'status' => OrderStatus::Reservada]);
+
+        $this->actingAs($this->usuarioConRol(Rol::Coordinacion))
+            ->delete(route('eventos.codigos.destroy', [$evento, $libre]))
+            ->assertForbidden();
+
+        $this->actingAs($this->usuarioConRol(Rol::Administrador));
+        $this->delete(route('eventos.codigos.destroy', [$evento, $libre]))->assertRedirect();
+        $this->delete(route('eventos.codigos.destroy', [$evento, $usado]))->assertRedirect();
+
+        $this->assertNull(DiscountCode::find($libre->id));
+        $this->assertNotNull(DiscountCode::find($usado->id), 'Uno que alguien ya usó solo se desactiva.');
+    }
+
     public function test_no_se_puede_bajar_el_tope_por_debajo_de_lo_usado(): void
     {
         $evento = Event::factory()->create();
-        $codigo = DiscountCode::factory()->create(['event_id' => $evento->id, 'max_people' => 10, 'used_people' => 6]);
+        $codigo = DiscountCode::factory()->create(['event_id' => $evento->id, 'max_people' => 10]);
+        // Dos personas distintas ya lo usaron: el tope no baja de 2.
+        foreach (['juan@colegio.cl', 'maria@colegio.cl'] as $correo) {
+            Order::factory()->create(['event_id' => $evento->id, 'discount_code_id' => $codigo->id, 'status' => OrderStatus::Reservada, 'responsible_email' => $correo]);
+        }
         $admin = $this->usuarioConRol(Rol::Administrador);
 
         $this->actingAs($admin)
-            ->patch(route('eventos.codigos.update', [$evento, $codigo]), ['max_people' => '5'])
+            ->patch(route('eventos.codigos.update', [$evento, $codigo]), ['max_people' => '1'])
             ->assertSessionHasErrors('max_people');
 
         $this->actingAs($admin)

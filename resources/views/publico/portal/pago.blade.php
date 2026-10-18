@@ -13,9 +13,8 @@
     $borrador = $orden->esBorrador();
     $faltantes = $faltantes ?? [];
     $parametros = $varios
-        ? ['token' => $token, 'establishment' => $orden->establishments->first()?->id]
+        ? ['token' => $token, 'inscripcion' => $orden->public_id]
         : ['token' => $token];
-    $colegioActual = $orden->establishments->first()?->id;
     $pago = $orden->pagoVigente();
     $observacion = $pago?->reviews->firstWhere('action', \App\Enums\PaymentReviewAction::Observar);
     $aprobado = $orden->payment_status->liberaCredenciales();
@@ -95,9 +94,6 @@
     <div class="tarjeta" style="border-color:#BFE0C6">
         <h2>Pago confirmado</h2>
         <p class="sub" style="margin:0">Tus cupos quedan asegurados. Las credenciales están en la pestaña Credenciales.</p>
-        <div class="acciones">
-            <a class="btn btn-primario" href="{{ route('inscripcion.portal.credenciales', ['token' => $token] + ($varios ? ['colegio' => $colegioActual] : [])) }}">Ver las credenciales</a>
-        </div>
     </div>
 @endif
 
@@ -119,16 +115,7 @@
         </p>
 
         @if ($event->bank_account_number)
-            <table>
-                <tbody>
-                    <tr><td style="width:38%;color:var(--texto-suave)">Titular</td><td>{{ $event->bank_holder_name }}</td></tr>
-                    <tr><td style="color:var(--texto-suave)">RUT</td><td>{{ $event->bank_holder_rut }}</td></tr>
-                    <tr><td style="color:var(--texto-suave)">Banco</td><td>{{ $event->bank_name }}</td></tr>
-                    <tr><td style="color:var(--texto-suave)">Tipo de cuenta</td><td>{{ $event->bank_account_type }}</td></tr>
-                    <tr><td style="color:var(--texto-suave)">N° de cuenta</td><td>{{ $event->bank_account_number }}</td></tr>
-                    <tr><td style="color:var(--texto-suave)">Referencia</td><td><strong>{{ $orden->number ?? '-' }}</strong></td></tr>
-                </tbody>
-            </table>
+            @include('publico.portal._datos-bancarios', ['referencia' => $orden->number ?? '-'])
             <p class="ayuda" style="margin-top:10px">Indica el número de inscripción en el mensaje de la transferencia.</p>
         @else
             <div class="vacio">Nos pondremos en contacto contigo con los datos para la transferencia.</div>
@@ -141,13 +128,23 @@
         <form method="POST" action="{{ $admiteComprobante ? route('inscripcion.comprobante', $parametros) : '#' }}"
               enctype="multipart/form-data" novalidate id="comprobante" data-validar-comprobante data-saldo="{{ $borrador ? 0 : $orden->saldo() }}">
             <h3 class="paso">2. Sube el comprobante{{ $deColegio }}</h3>
+            @php
+                // Con un comprobante en revisión no hay nada que llenar: se muestra
+                // cuál está en revisión y el formulario vuelve cuando Contabilidad lo revisa.
+                $enRevision = ! $borrador && ! $admiteComprobante && $orden->tieneAbonoEnRevision();
+                $abonoEnRevision = $enRevision ? $orden->payments->firstWhere('status', \App\Enums\PaymentStatus::EnValidacion) : null;
+            @endphp
+            @if ($enRevision)
+                <div class="aviso aviso-info">
+                    <strong>Ya hay un comprobante en revisión.</strong> Te avisaremos cuando Contabilidad lo revise.
+                    @if ($abonoEnRevision)
+                        <br>Monto enviado: ${{ number_format($abonoEnRevision->amount, 0, ',', '.') }} ·
+                        <a href="{{ route('inscripcion.comprobante.ver', ['token' => $token, 'payment' => $abonoEnRevision->id]) }}" target="_blank" rel="noopener">Ver</a>
+                    @endif
+                </div>
+            @else
             <p class="sub">Aceptamos PDF o imagen, hasta 10 MB.</p>
-            @if (! $borrador && ! $admiteComprobante && $orden->tieneAbonoEnRevision())
-                <div class="aviso aviso-info"><strong>Ya hay un comprobante en revisión.</strong> Podrás enviar otro cuando Contabilidad lo revise.</div>
-            @endif
 
-            {{-- Con un comprobante ya en revisión los campos se ven pero no se
-                 llenan: escribir algo que no se puede enviar es trabajo perdido. --}}
             <fieldset @disabled(! $borrador && ! $admiteComprobante) style="border:0;margin:0;padding:0;min-width:0">
                 <div class="rejilla">
                     <div>
@@ -160,9 +157,9 @@
                         @else
                             <div class="ayuda">
                                 @if (! $borrador && $orden->pagado() > 0)
-                                    Saldo pendiente: ${{ number_format($orden->saldo(), 0, ',', '.') }}. Puedes pagarlo en partes.
+                                    Saldo pendiente: ${{ number_format($orden->saldo(), 0, ',', '.') }}.
                                 @else
-                                    Total de la inscripción: {{ $sinParticipantes ? '$ -' : '$'.number_format($total, 0, ',', '.') }}. Puedes pagarlo en partes.
+                                    Total de la inscripción: {{ $sinParticipantes ? '$ -' : '$'.number_format($total, 0, ',', '.') }}.
                                 @endif
                             </div>
                         @endif
@@ -243,9 +240,8 @@
                     <button type="submit" class="btn btn-primario" @disabled(! $admiteComprobante)
                             data-enviando-texto="Enviando comprobante…">Enviar comprobante</button>
                 @endif
-
-
             </div>
+            @endif
 
             @if ($errorDeConfirmacion ?? null)
                 <div class="aviso aviso-error" style="margin-top:14px">
@@ -273,7 +269,7 @@
                     <tr>
                         <td>{{ $abono->created_at->translatedFormat('d \d\e F, H:i') }}</td>
                         <td>${{ number_format($abono->amount, 0, ',', '.') }}</td>
-                        <td>{{ $abono->status->label() }}</td>
+                        <td>{{ $orden->abonoReemplazado($abono) ? 'Reemplazado por un comprobante nuevo' : $abono->status->label() }}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -333,6 +329,8 @@
     lo marca ahí mismo sin recargar, y el archivo elegido sigue elegido. El
     servidor valida igual; esto solo evita perder el archivo por un descuido.
 --}}
+@include('publico.portal._inscribir-mas')
+
 <script>
 (function () {
     var form = document.querySelector('[data-validar-comprobante]');

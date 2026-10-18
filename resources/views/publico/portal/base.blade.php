@@ -10,12 +10,19 @@
 
 @section('contenido')
     @php
-        $colegioActual = $orden->establishments->first()?->id;
-        // El colegio viaja en la URL solo cuando hay varios: con uno no hay nada que elegir.
+        // La inscripción viaja en la URL solo cuando hay varias: con una no hay nada que elegir.
         $enlace = fn (string $nombre, array $extra = []): string => route(
             'inscripcion.portal.'.$nombre,
-            ['token' => $token] + ($varios && $colegioActual ? ['colegio' => $colegioActual] : []) + $extra,
+            ['token' => $token] + ($varios ? ['inscripcion' => $orden->public_id] : []) + $extra,
         );
+        // Un borrador se presenta como inscripción nueva: "Borrador" es
+        // palabra del sistema. Su insignia dice si ya se puede confirmar.
+        $listaParaConfirmar = $orden->esBorrador() && app(\App\Actions\ConfirmarOrden::class)->faltantes($orden) === [];
+        // Dos inscripciones del mismo colegio se distinguen por su folio en el menú.
+        $colegiosRepetidos = $colegios
+            ->groupBy(fn ($c) => $c->establishments->first()?->id)
+            ->filter(fn ($grupo) => $grupo->count() > 1)
+            ->keys();
         $pestanas = ['programa' => 'Programa', 'inscripcion' => 'Inscripción', 'pago' => 'Pago', 'credenciales' => 'Credenciales'];
     @endphp
 
@@ -28,10 +35,13 @@
                         @foreach ($colegios as $colegio)
                             @php $esActual = $colegio->is($orden); @endphp
                             <li>
-                                <a href="{{ route('inscripcion.portal.'.$pestana, ['token' => $token, 'colegio' => $colegio->establishments->first()?->id]) }}"
+                                <a href="{{ route('inscripcion.portal.'.$pestana, ['token' => $token, 'inscripcion' => $colegio->public_id]) }}"
                                    @class(['lado-item', 'activo' => $esActual])
                                    @if ($esActual) aria-current="page" @endif>
                                     <span class="lado-item-nombre">{{ $colegio->establishments->first()?->name ?: 'Establecimiento' }}</span>
+                                    @if ($colegiosRepetidos->contains($colegio->establishments->first()?->id))
+                                        <span class="lado-item-estado">{{ $colegio->esBorrador() ? 'Nueva, sin confirmar' : 'Inscripción '.$colegio->number }}</span>
+                                    @endif
                                     {{-- El estado del pago de cada colegio, a la vista: quien envió
                                          un comprobante lo ve aquí sin entrar a buscarlo. --}}
                                     @php
@@ -62,22 +72,64 @@
                 </div>
             @endif
 
+            {{-- Código de descuento: arriba y a la vista mientras se completa la
+                 inscripción; con todo completo se oculta. --}}
+            @if ($orden->esBorrador() && ! $listaParaConfirmar && $orden->kind !== \App\Enums\OrderKind::Invitado)
+                @include('publico.portal._codigo-lado')
+            @endif
+
+            {{-- Los comprobantes que subió este colegio, con enlace para abrirlos. --}}
+            @if ($orden->payments->isNotEmpty())
+                <div class="lado-caja">
+                    <p class="lado-titulo">Tus comprobantes</p>
+                    @foreach ($orden->payments as $abono)
+                        @php
+                            [$textoAbono, $claseAbono] = $orden->abonoReemplazado($abono) ? ['Reemplazado', ''] : match ($abono->status) {
+                                \App\Enums\PaymentStatus::Aprobado => ['Aprobado', 'chip-exito'],
+                                \App\Enums\PaymentStatus::Rechazado => ['Rechazado', 'chip-error'],
+                                \App\Enums\PaymentStatus::Observado => ['Observado', 'chip-aviso'],
+                                default => ['En revisión', ''],
+                            };
+                        @endphp
+                        <p style="margin:0 0 8px;font-size:.9rem">
+                            <strong>${{ number_format($abono->amount, 0, ',', '.') }}</strong>
+                            <span class="chip {{ $claseAbono }}">{{ $textoAbono }}</span>
+                            <a href="{{ route('inscripcion.comprobante.ver', ['token' => $token, 'payment' => $abono->id]) }}" target="_blank" rel="noopener">Ver</a>
+                        </p>
+                    @endforeach
+                </div>
+            @endif
+
             {{-- A quién llamar: siempre a la vista, no al fondo de la página. --}}
             @if ($event->tieneContacto())
                 <div class="lado-caja">
                     <p class="lado-titulo">Contáctanos</p>
                     @include('publico._contacto', ['evento' => $event, 'plano' => true])
-                    <p class="lado-nota">Este correo no se responde.</p>
+                </div>
+            @endif
+
+            {{-- Dónde transferir, siempre a la vista mientras falte pagar. En
+                 la pestaña Pago no se dibuja: su tarjeta "1. Transfiere" ya
+                 trae estos datos en el centro. --}}
+            @php
+                // Recién cuando la inscripción está completa: antes no hay monto ni
+                // nada que transferir todavía.
+                $debeTransferir = $listaParaConfirmar
+                    || ($orden->status === \App\Enums\OrderStatus::Reservada && ! $orden->payment_status->liberaCredenciales());
+            @endphp
+            @if ($debeTransferir && $pestana !== 'pago' && $event->bank_account_number)
+                <div class="lado-caja">
+                    <p class="lado-titulo">Datos para transferir</p>
+                    @include('publico.portal._datos-bancarios', [
+                        'apilado' => true,
+                        'monto' => $orden->esBorrador() ? $orden->calcularTotal() : ($orden->pagado() > 0 ? $orden->saldo() : (int) $orden->total),
+                        'referencia' => $orden->number ?? 'Se genera al confirmar',
+                    ])
                 </div>
             @endif
         </nav>
 
         <div class="principal">
-            @php
-                // Un borrador se presenta como inscripción nueva: "Borrador" es
-                // palabra del sistema. Su insignia dice si ya se puede confirmar.
-                $listaParaConfirmar = $orden->esBorrador() && app(\App\Actions\ConfirmarOrden::class)->faltantes($orden) === [];
-            @endphp
             <nav class="pestanas" aria-label="Secciones de tu inscripción">
                 @foreach ($pestanas as $clave => $etiqueta)
                     @if ($clave === 'pago' && $listaParaConfirmar)
@@ -127,6 +179,25 @@
             </div>
 
             @yield('pestana')
+
+            {{-- Siguiente paso: nunca queda sin saber qué sigue. Las pestañas
+                 siguen libres; esto es solo el camino más corto. --}}
+            @if ($pestana === 'programa')
+                <div class="acciones acciones-derecha"><a class="btn btn-siguiente" href="{{ $enlace('inscripcion') }}">Siguiente: Inscripción</a></div>
+            @elseif ($pestana === 'inscripcion')
+                <div class="acciones acciones-derecha">
+                    @if ($listaParaConfirmar)
+                        {{-- Pasar a Pago confirma, igual que la pestaña: es un POST. --}}
+                        <form method="POST" action="{{ route('inscripcion.confirmar', ['token' => $token]) }}">
+                            <button type="submit" class="btn btn-siguiente" data-enviando-texto="Confirmando…">Siguiente: Pago</button>
+                        </form>
+                    @else
+                        <a class="btn btn-siguiente" href="{{ $enlace('pago') }}">Siguiente: Pago</a>
+                    @endif
+                </div>
+            @elseif ($pestana === 'pago' && ! $orden->esBorrador() && $orden->payment_status->liberaCredenciales())
+                <div class="acciones acciones-derecha"><a class="btn btn-siguiente" href="{{ $enlace('credenciales') }}">Siguiente: Credenciales</a></div>
+            @endif
         </div>
     </div>
 @endsection

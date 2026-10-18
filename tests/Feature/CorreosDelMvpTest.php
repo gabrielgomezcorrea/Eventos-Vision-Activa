@@ -232,4 +232,20 @@ class CorreosDelMvpTest extends TestCase
         $this->assertStringContainsString('no es transferible', $html);
         $this->assertSame(['Programa.pdf'], array_map(fn ($adjunto) => $adjunto->as, $correo->attachments()));
     }
+
+    public function test_el_correo_del_programa_adjunta_solo_el_mas_reciente_y_solo_si_pesa_5_mb_o_menos(): void
+    {
+        Storage::fake('documentos');
+        Storage::disk('documentos')->put('programas/viejo.pdf', '%PDF-1.4');
+        Storage::disk('documentos')->put('programas/nuevo.pdf', '%PDF-1.4');
+        $this->event->attachments()->create(['disk' => 'documentos', 'path' => 'programas/viejo.pdf', 'original_name' => 'Viejo.pdf', 'mime_type' => 'application/pdf', 'size' => 8]);
+        $nuevo = $this->event->attachments()->create(['disk' => 'documentos', 'path' => 'programas/nuevo.pdf', 'original_name' => 'Nuevo.pdf', 'mime_type' => 'application/pdf', 'size' => 8]);
+        $solicitud = ProgramRequest::factory()->for($this->event)->create();
+
+        $this->assertSame(['Nuevo.pdf'], array_map(fn ($a) => $a->as, (new ProgramaDelEvento($solicitud))->attachments()));
+
+        // Si el más reciente pesa de más, el correo sale igual, sin adjunto.
+        $nuevo->update(['size' => 5 * 1024 * 1024 + 1]);
+        $this->assertSame([], (new ProgramaDelEvento($solicitud->fresh()))->attachments());
+    }
 }

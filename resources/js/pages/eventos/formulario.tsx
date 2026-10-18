@@ -65,7 +65,6 @@ type Props = {
         contacto: Contacto;
         program_email_intro: string | null;
         adjuntos: { id: number; nombre: string; peso: string }[];
-        max_adjuntos: number;
         max_mb: number;
         participant_positions: string[];
     };
@@ -363,20 +362,16 @@ function PonerEnLaWeb({ embeber }: { embeber: Props['embeber'] }) {
 function Adjuntos({
     eventoId,
     adjuntos,
-    maximo,
     maxMb,
 }: {
     eventoId: number;
     adjuntos: { id: number; nombre: string; peso: string }[];
-    maximo: number;
     maxMb: number;
 }) {
     const entrada = useRef<HTMLInputElement>(null);
     const [subiendo, setSubiendo] = useState(false);
     const [errorLocal, setErrorLocal] = useState<string | null>(null);
     const { errors } = usePage().props;
-
-    const lleno = adjuntos.length >= maximo;
 
     function subir(archivo: File | undefined) {
         setErrorLocal(null);
@@ -387,14 +382,6 @@ function Adjuntos({
 
         // Se avisa antes de subir: descubrir el límite después de esperar la
         // subida de un archivo pesado es la peor forma de enterarse.
-        if (lleno) {
-            setErrorLocal(
-                `Ya hay ${maximo} archivos. Quita uno antes de subir otro.`,
-            );
-
-            return;
-        }
-
         if (!archivo.name.toLowerCase().endsWith('.pdf')) {
             setErrorLocal('El programa debe ser un PDF.');
 
@@ -427,7 +414,7 @@ function Adjuntos({
 
     return (
         <div className="grid gap-2">
-            <Label htmlFor="programa">Adjuntos</Label>
+            <Label htmlFor="programa">Programa</Label>
 
             {adjuntos.length > 0 && (
                 <ul className="divide-y rounded-lg border">
@@ -471,21 +458,31 @@ function Adjuntos({
                 </ul>
             )}
 
-            {lleno ? (
-                <p className="text-muted-foreground text-xs">
-                    No se pueden subir más archivos. Quita uno para poder subir
-                    otro.
-                </p>
-            ) : (
-                <Input
-                    ref={entrada}
-                    id="programa"
-                    type="file"
-                    accept=".pdf,application/pdf"
+            <input
+                ref={entrada}
+                id="programa"
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                disabled={subiendo}
+                onChange={(e) => subir(e.target.files?.[0])}
+            />
+            <div className="flex items-center gap-3">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     disabled={subiendo}
-                    onChange={(e) => subir(e.target.files?.[0])}
-                />
-            )}
+                    onClick={() => entrada.current?.click()}
+                >
+                    {adjuntos.length > 0
+                        ? 'Reemplazar programa'
+                        : 'Subir programa'}
+                </Button>
+                <span className="text-muted-foreground text-xs">
+                    PDF, máximo {maxMb} MB
+                </span>
+            </div>
 
             {subiendo && (
                 <p className="text-muted-foreground text-xs">Subiendo…</p>
@@ -1003,7 +1000,6 @@ export default function FormularioPublico({
                                 <Adjuntos
                                     eventoId={evento.id}
                                     adjuntos={evento.adjuntos}
-                                    maximo={evento.max_adjuntos}
                                     maxMb={evento.max_mb}
                                 />
                                 {/* Texto de entrada del correo con el programa.

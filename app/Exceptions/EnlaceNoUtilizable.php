@@ -62,6 +62,17 @@ class EnlaceNoUtilizable extends Exception
         );
     }
 
+    /** No se pueden sumar personas a esta inscripción (vencida, de invitado, evento cerrado…). */
+    public static function inscripcionAdicionalNoDisponible(string $motivo, string $token): self
+    {
+        return new self(
+            'No se puede inscribir a más personas desde aquí',
+            $motivo.' Si necesitas sumar gente, escríbenos.',
+            route('inscripcion.estado', ['token' => $token]),
+            'Ver mi inscripción',
+        );
+    }
+
     /** El enlace sirve, pero la inscripción ya salió de la etapa editable. */
     public static function ordenNoEditable(string $token): self
     {

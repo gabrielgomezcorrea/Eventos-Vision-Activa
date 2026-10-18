@@ -56,6 +56,12 @@ trait ResuelveOrdenesDelPortal
      */
     private function colegioElegido(Order $delToken, Request $request): Order
     {
+        // `?inscripcion=` elige la inscripción exacta; sirve cuando dos del
+        // conjunto son del mismo colegio y `?colegio=` no las distingue.
+        if (($porIdentificador = $this->inscripcionDelConjunto($delToken, $request->query('inscripcion'))) !== null) {
+            return $porIdentificador;
+        }
+
         $elegido = $request->integer('colegio');
 
         if ($elegido === 0) {
@@ -69,6 +75,43 @@ trait ResuelveOrdenesDelPortal
     }
 
     /**
+     * Un borrador de inscripción adicional se edita con su PROPIO enlace: las
+     * acciones del formulario (participantes, confirmar) actúan sobre la orden
+     * del token, y con el de la original editarían la ya pagada. Si se mira
+     * con otro token, se entra de nuevo con uno propio.
+     */
+    private function aSuPropioEnlace(Order $delToken, Order $elegida, string $ruta): ?RedirectResponse
+    {
+        if (! $elegida->esBorrador() || $elegida->is($delToken)) {
+            return null;
+        }
+
+        [, $token] = MagicLink::emitir($elegida->event, $elegida->responsible_email, $elegida);
+
+        return redirect()->route($ruta, ['token' => $token, 'inscripcion' => $elegida->public_id]);
+    }
+
+    /**
+     * La inscripción con ese `public_id` si es del conjunto del token; si no
+     * (otro conjunto, un valor inventado), nada: se sigue con la del token.
+     * El identificador solo elige, nunca autoriza.
+     */
+    private function inscripcionDelConjunto(Order $delToken, mixed $publicId): ?Order
+    {
+        if (! is_string($publicId) || $publicId === '') {
+            return null;
+        }
+
+        if ($delToken->public_id === $publicId) {
+            return $delToken;
+        }
+
+        $orden = $delToken->group?->orders()->where('public_id', $publicId)->first();
+
+        return $orden?->load(self::RELACIONES_DEL_PORTAL);
+    }
+
+    /**
      * Orden objetivo de una acción dentro del conjunto: la del token si no se
      * indica colegio, o la del colegio indicado si pertenece al mismo conjunto
      * que el token. El colegio nunca autoriza por sí solo: siempre se verifica
@@ -77,6 +120,10 @@ trait ResuelveOrdenesDelPortal
      */
     private function ordenDelConjunto(Order $delToken, ?Establishment $establishment): Order
     {
+        if (($porIdentificador = $this->inscripcionDelConjunto($delToken, request()->input('inscripcion'))) !== null) {
+            return $porIdentificador;
+        }
+
         if ($establishment === null) {
             return $delToken;
         }

@@ -5,6 +5,8 @@ import type { FormEvent } from 'react';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
 import { Campo } from '@/components/campo';
 import { EstadoBadge } from '@/components/estado-badge';
+import { tonoVencimiento } from '@/lib/vencimiento';
+import type { Vencimiento } from '@/lib/vencimiento';
 import { Panel } from '@/pages/inscripciones/show';
 import { NativeSelect } from '@/components/native-select';
 import { Paginacion } from '@/components/paginacion';
@@ -21,11 +23,10 @@ import {
 import { cn } from '@/lib/utils';
 import type { Estado, Paginado } from '@/types';
 
-export type Vencimiento = { tono: string; nota: string | null } | null;
-
 type OrdenFila = {
     id: number;
     numero: string | null;
+    entidad: string | null;
     responsable: string | null;
     correo: string | null;
     total: number;
@@ -57,12 +58,6 @@ type Props = {
 };
 
 const clp = (valor: number): string => `$${valor.toLocaleString('es-CL')}`;
-
-export const tonoVencimiento: Record<string, string> = {
-    info: 'text-sky-700 dark:text-sky-400',
-    warning: 'text-amber-700 dark:text-amber-400',
-    danger: 'text-red-700 dark:text-red-400',
-};
 
 /** Invitado sin costo: ocupa cupo y recibe su credencial al guardar. */
 function NuevoInvitado({
@@ -413,7 +408,7 @@ export default function InscripcionesIndex({
                                 <TableHead className="pl-5">
                                     N° inscripción
                                 </TableHead>
-                                <TableHead>Responsable</TableHead>
+                                <TableHead>Entidad pagadora</TableHead>
                                 <TableHead className="text-right">
                                     Total
                                 </TableHead>
@@ -459,11 +454,17 @@ export default function InscripcionesIndex({
                                         </Link>
                                     </TableCell>
                                     <TableCell>
-                                        <span className="block max-w-56 truncate">
-                                            {orden.responsable}
-                                        </span>
+                                        {orden.entidad ? (
+                                            <span className="block max-w-56 truncate">
+                                                {orden.entidad}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted-foreground block max-w-56 truncate">
+                                                Sin entidad pagadora
+                                            </span>
+                                        )}
                                         <span className="text-muted-foreground block max-w-56 truncate text-xs">
-                                            {orden.correo}
+                                            {orden.responsable}
                                         </span>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
