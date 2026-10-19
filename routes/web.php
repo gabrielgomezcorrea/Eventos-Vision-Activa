@@ -59,6 +59,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('eventos/{event}/formulario', [FormularioPublicoController::class, 'edit'])->name('eventos.formulario');
     Route::put('eventos/{event}/formulario', [FormularioPublicoController::class, 'update'])->name('eventos.formulario.update');
     Route::post('eventos/{event}/programa', [FormularioPublicoController::class, 'subirPrograma'])->name('eventos.programa.store');
+    Route::get('eventos/{event}/programa/{attachment}', [FormularioPublicoController::class, 'descargarPrograma'])
+        ->scopeBindings()
+        ->name('eventos.programa.download');
     Route::delete('eventos/{event}/programa/{attachment}', [FormularioPublicoController::class, 'quitarPrograma'])
         ->scopeBindings()
         ->name('eventos.programa.destroy');

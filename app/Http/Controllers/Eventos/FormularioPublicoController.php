@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * El formulario público de un evento, en su propia pantalla.
@@ -139,6 +140,14 @@ class FormularioPublicoController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Programa cargado. Se adjunta al correo que reciben quienes lo piden.']);
 
         return back();
+    }
+
+    public function descargarPrograma(Event $event, EventAttachment $attachment): StreamedResponse
+    {
+        Gate::authorize('update', $event);
+        abort_unless($attachment->existe(), 404);
+
+        return Storage::disk($attachment->disk)->download($attachment->path, $attachment->original_name);
     }
 
     public function quitarPrograma(Event $event, EventAttachment $attachment): RedirectResponse

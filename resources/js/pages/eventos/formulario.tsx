@@ -424,9 +424,15 @@ function Adjuntos({
                             className="flex items-center gap-2 px-3 py-2 text-sm"
                         >
                             <FileText className="text-muted-foreground size-4 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate">
+                            <a
+                                href={FormularioPublicoController.descargarPrograma.url(
+                                    { event: eventoId, attachment: archivo.id },
+                                )}
+                                className="min-w-0 flex-1 truncate hover:underline"
+                                title="Descargar"
+                            >
                                 {archivo.nombre}
-                            </span>
+                            </a>
                             <span className="text-muted-foreground text-xs">
                                 {archivo.peso}
                             </span>

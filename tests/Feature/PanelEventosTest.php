@@ -307,6 +307,28 @@ class PanelEventosTest extends TestCase
         $this->assertCount(1, Storage::disk(config('filesystems.private_disk'))->allFiles('programas'));
     }
 
+    public function test_el_programa_subido_se_descarga_solo_con_permiso_y_desde_su_evento(): void
+    {
+        Storage::fake(config('filesystems.private_disk'));
+        $evento = $this->evento();
+        $this->actingAs($this->usuario(Rol::Administrador));
+        $this->post(route('eventos.programa.store', $evento), [
+            'programa' => UploadedFile::fake()->create('programa.pdf', 50, 'application/pdf'),
+        ]);
+        $archivo = $evento->attachments()->sole();
+
+        $this->get(route('eventos.programa.download', [$evento, $archivo]))
+            ->assertOk()
+            ->assertHeader('content-disposition', 'attachment; filename=programa.pdf');
+
+        // Con el id de otro evento, 404: el archivo no sale por un evento ajeno.
+        $this->get(route('eventos.programa.download', [$this->evento(['slug' => 'otro']), $archivo]))->assertNotFound();
+
+        $this->actingAs($this->usuario(Rol::Contabilidad))
+            ->get(route('eventos.programa.download', [$evento, $archivo]))
+            ->assertForbidden();
+    }
+
     public function test_un_evento_nuevo_parte_con_el_contacto_por_defecto(): void
     {
         $this->actingAs($this->usuario(Rol::Administrador))
