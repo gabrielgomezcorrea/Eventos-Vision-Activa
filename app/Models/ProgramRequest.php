@@ -34,6 +34,7 @@ class ProgramRequest extends Model
             'marketing_consented_at' => 'datetime',
             'program_sent_at' => 'datetime',
             'converted_at' => 'datetime',
+            'program_sent_count' => 'integer',
         ];
     }
 
@@ -47,6 +48,19 @@ class ProgramRequest extends Model
     public function accessType(): BelongsTo
     {
         return $this->belongsTo(AccessType::class);
+    }
+
+    /** Deja constancia de un envío del programa: la fecha y el contador. */
+    public function registrarEnvioDelPrograma(): void
+    {
+        $this->forceFill(['program_sent_at' => now()])->save();
+        $this->increment('program_sent_count');
+    }
+
+    /** @return HasMany<Order, $this> */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 
     /** @return HasMany<ProgramRequestNote, $this> */

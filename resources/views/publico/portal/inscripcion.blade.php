@@ -37,6 +37,7 @@
                     <div>
                         <label for="corregir_correo">Correo electrónico</label>
                         <input type="email" id="corregir_correo" value="{{ $orden->responsible_email }}" disabled>
+                        <div class="ayuda">Para cambiar el correo, escríbenos.</div>
                     </div>
                     @include('publico.inscripcion._campo', ['valores' => $valoresResp, 'errores' => $erroresResp, 'prefijo' => 'corregir_', 'campo' => 'responsible_phone', 'etiqueta' => 'Teléfono', 'tipoCampo' => 'tel', 'placeholder' => '56912345678', 'autocomplete' => 'tel'])
                     <div>

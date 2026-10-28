@@ -40,10 +40,12 @@ Gracias por tu interés en **{{ $event->name }}**.@if ($event->attachments->isNo
 4. Cuando validamos el pago, recibes las credenciales con código QR de tus participantes.
 
 <x-mail::button :url="$enlace">
-Inscribirme
+Continuar con la inscripción
 </x-mail::button>
 
-Este botón te lleva directo a tu inscripción. Puedes retomarla cuando quieras desde este mismo correo.
+**O puedes copiar el siguiente enlace a la persona encargada de realizar el proceso:**
+
+{{ $enlace }}
 
 @include('mail._contacto', ['evento' => $event])
 

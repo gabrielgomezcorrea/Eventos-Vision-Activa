@@ -57,6 +57,7 @@ class IniciarInscripcionAdicional
                 'payer_entity_id' => $origen->payer_entity_id,
                 // Hereda el código: es la misma persona ampliando su compra.
                 'discount_code_id' => $origen->discount_code_id,
+                'discount_code_email' => $origen->discount_code_email,
             ]);
             $nueva->establishments()->sync($origen->establishments->modelKeys());
 
@@ -116,6 +117,7 @@ class IniciarInscripcionAdicional
                 'responsible_phone' => $origen->responsible_phone,
                 // Hereda el código: es la misma persona ampliando su compra.
                 'discount_code_id' => $origen->discount_code_id,
+                'discount_code_email' => $origen->discount_code_email,
             ]);
 
             Auditor::registrar(

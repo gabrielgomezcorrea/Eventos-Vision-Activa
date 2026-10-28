@@ -1,5 +1,6 @@
 import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
 import { Mail, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoController';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
 import { Confirmar } from '@/components/confirmar';
@@ -8,6 +9,14 @@ import { NotasConFecha } from '@/components/notas-con-fecha';
 import type { Nota } from '@/components/notas-con-fecha';
 import { Dato, Datos, SeccionFicha } from '@/components/seccion-ficha';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import type { Estado } from '@/types';
 
 type Props = {
@@ -46,6 +55,8 @@ export default function SolicitudShow({
     puede,
     relacionado,
 }: Props) {
+    const [segundaConfirmacion, setSegundaConfirmacion] = useState(false);
+
     setLayoutProps({
         breadcrumbs: [
             { title: 'Solicitudes', href: SolicitudController.index() },
@@ -120,11 +131,7 @@ export default function SolicitudShow({
                                         ? {
                                               texto: 'Limpiar solicitud',
                                               onConfirmar: () =>
-                                                  router.delete(
-                                                      SolicitudController.destroyAll.url(
-                                                          solicitud.id,
-                                                      ),
-                                                  ),
+                                                  setSegundaConfirmacion(true),
                                           }
                                         : undefined
                                 }
@@ -143,6 +150,42 @@ export default function SolicitudShow({
                             </Confirmar>
                         )}
                     </div>
+                    <Dialog
+                        open={segundaConfirmacion}
+                        onOpenChange={setSegundaConfirmacion}
+                    >
+                        <DialogContent>
+                            <DialogTitle>
+                                ¿Seguro? Esto no se puede deshacer
+                            </DialogTitle>
+                            <DialogDescription>
+                                Se eliminará todo lo relacionado con este correo
+                                en el evento: inscripciones, participantes,
+                                pagos, comprobantes, credenciales, enlaces e
+                                invitaciones.
+                            </DialogDescription>
+                            <DialogFooter className="gap-2">
+                                <DialogClose asChild>
+                                    <Button variant="secondary">
+                                        Cancelar
+                                    </Button>
+                                </DialogClose>
+                                <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                        router.delete(
+                                            SolicitudController.destroyAll.url(
+                                                solicitud.id,
+                                            ),
+                                        );
+                                        setSegundaConfirmacion(false);
+                                    }}
+                                >
+                                    Sí, eliminar todo
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </header>
 
                 <SeccionFicha titulo="Quién la envió">

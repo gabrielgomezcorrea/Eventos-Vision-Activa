@@ -90,7 +90,7 @@ class FlujoDeInscripcionTest extends TestCase
         $orden = Order::sole();
 
         $this->assertSame(OrderStatus::Borrador, $orden->status);
-        $this->assertSame('ana@colegio.cl', $orden->responsible_email);
+        $this->assertSame('', $orden->responsible_email, 'El responsable lo llena quien hace el trámite.');
         $this->assertNull($orden->number, 'El folio solo se asigna al confirmar.');
     }
 
@@ -154,6 +154,7 @@ class FlujoDeInscripcionTest extends TestCase
 
         // 1. Responsable
         $this->post(route('inscripcion.responsable.guardar', ['token' => $token]), [
+            'responsible_email' => 'ana@colegio.cl',
             'responsible_name' => 'Ana',
             'responsible_lastname' => 'Pérez',
             'responsible_position' => 'Otro',

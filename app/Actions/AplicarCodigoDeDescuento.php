@@ -22,8 +22,14 @@ class AplicarCodigoDeDescuento
     public const BLOQUEO_SEGUNDOS = 600;
 
     /** @throws CodigoNoAplicable */
-    public function __invoke(Order $borrador, string $ingresado): DiscountCode
+    public function __invoke(Order $borrador, string $ingresado, ?string $correoDelEnlace = null): DiscountCode
     {
+        // La persona del código es el responsable; si aún no lo completó, quien
+        // abrió el enlace (el solicitante). Se fija antes de revisar el código:
+        // "una sola vez" y el tope cuentan por ella.
+        $persona = mb_strtolower(trim(filled($borrador->responsible_email) ? $borrador->responsible_email : (string) $correoDelEnlace));
+        $borrador->discount_code_email = $persona;
+
         $llave = 'codigo-de-descuento:'.$borrador->getKey();
 
         if (RateLimiter::tooManyAttempts($llave, self::INTENTOS)) {
@@ -55,7 +61,10 @@ class AplicarCodigoDeDescuento
 
         RateLimiter::clear($llave);
 
-        $borrador->forceFill(['discount_code_id' => $codigo->getKey()])->save();
+        $borrador->forceFill([
+            'discount_code_id' => $codigo->getKey(),
+            'discount_code_email' => $persona,
+        ])->save();
 
         return $codigo;
     }

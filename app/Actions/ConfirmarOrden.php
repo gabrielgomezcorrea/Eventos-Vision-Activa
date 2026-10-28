@@ -136,7 +136,9 @@ class ConfirmarOrden
         // solo, sin que Coordinación tenga que hacerlo a mano.
         ProgramRequest::query()
             ->where('event_id', $orden->event_id)
-            ->where('email', mb_strtolower($orden->responsible_email))
+            ->where(fn ($consulta) => $consulta
+                ->where('email', mb_strtolower($orden->responsible_email))
+                ->when($orden->program_request_id, fn ($c, $id) => $c->orWhere('id', $id)))
             ->whereNull('converted_at')
             ->update(['converted_at' => now()]);
 
@@ -201,7 +203,7 @@ class ConfirmarOrden
     {
         $faltantes = [];
 
-        if (blank($orden->responsible_name) || blank($orden->responsible_lastname)) {
+        if (blank($orden->responsible_name) || blank($orden->responsible_lastname) || blank($orden->responsible_email)) {
             $faltantes[] = ['bloque' => 'responsable', 'mensaje' => 'Falta registrar al responsable de la inscripción.'];
         }
 

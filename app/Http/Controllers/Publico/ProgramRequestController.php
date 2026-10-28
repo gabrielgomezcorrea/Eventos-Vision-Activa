@@ -105,13 +105,13 @@ class ProgramRequestController extends Controller
 
         Mail::to($solicitud->email)->queue(new ProgramaDelEvento(
             $solicitud,
-            app(EmitirEnlaceDeAcceso::class)->urlDeAcceso($event, $solicitud->email),
+            app(EmitirEnlaceDeAcceso::class)->urlDeAcceso($solicitud),
         ));
 
         // Queda la fecha para que Coordinación vea a quién ya se le mandó el
         // programa y a quién no. Sin esto, el listado no distingue una solicitud
         // recién llegada de una que ya tuvo respuesta.
-        $solicitud->update(['program_sent_at' => now()]);
+        $solicitud->registrarEnvioDelPrograma();
 
         foreach (DestinatariosDeAvisos::para('notify_program_requests') as $destinatario) {
             Mail::to($destinatario)->queue(new AvisoNuevaSolicitud($solicitud));

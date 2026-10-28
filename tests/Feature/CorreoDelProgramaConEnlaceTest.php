@@ -61,7 +61,7 @@ class CorreoDelProgramaConEnlaceTest extends TestCase
         ))->render());
     }
 
-    public function test_el_enlace_del_correo_abre_la_inscripcion_con_los_datos_precargados(): void
+    public function test_el_enlace_del_correo_abre_la_inscripcion_con_el_responsable_vacio_y_la_solicitud_unida(): void
     {
         $this->post("/f/{$this->event->slug}", $this->datos());
 
@@ -75,12 +75,12 @@ class CorreoDelProgramaConEnlaceTest extends TestCase
         $this->get($url)->assertRedirect();
         $orden = Order::sole();
 
-        $this->assertSame('Ana', $orden->responsible_name);
-        $this->assertSame('Pérez', $orden->responsible_lastname);
-        $this->assertSame('Directivo', $orden->responsible_position);
-        $this->assertSame('56912345678', $orden->responsible_phone);
-        $this->assertSame('Colegio San José', $orden->responsible_institution);
-        $this->assertSame('ana@colegio.cl', $orden->responsible_email);
+        // El solicitante no es necesariamente el responsable: el bloque nace
+        // vacío y la solicitud queda unida por detrás.
+        $this->assertSame('', $orden->responsible_name);
+        $this->assertNull($orden->responsible_lastname);
+        $this->assertSame('', $orden->responsible_email);
+        $this->assertSame(ProgramRequest::sole()->id, $orden->program_request_id);
     }
 
     public function test_con_una_inscripcion_viva_el_enlace_la_retoma(): void
@@ -128,5 +128,19 @@ class CorreoDelProgramaConEnlaceTest extends TestCase
         app(ConfirmarOrden::class)($orden->fresh());
 
         $this->assertNotNull($solicitud->fresh()->converted_at);
+    }
+
+    public function test_el_correo_del_programa_trae_el_boton_y_el_enlace_como_texto(): void
+    {
+        $this->post("/f/{$this->event->slug}", $this->datos());
+        $solicitud = ProgramRequest::sole();
+
+        $url = 'https://eventos.test/i/acceso/abc123';
+        $html = (new ProgramaDelEvento($solicitud, $url))->render();
+
+        $this->assertStringContainsString('Continuar con la inscripción', $html);
+        $this->assertStringContainsString('O puedes copiar el siguiente enlace a la persona encargada de realizar el proceso:', $html);
+        $this->assertSame(2, substr_count($html, $url), 'El botón y el texto plano.');
+        $this->assertStringNotContainsString('Este botón te lleva directo', $html);
     }
 }

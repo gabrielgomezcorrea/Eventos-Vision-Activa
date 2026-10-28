@@ -15,6 +15,7 @@ use App\Models\PayerEntity;
 use App\Models\Payment;
 use App\Models\ProgramRequest;
 use App\Support\Auditor;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -47,12 +48,24 @@ class EliminarSolicitudConTodo
         ];
     }
 
-    /** @return Collection<int, Order> */
+    /**
+     * Lo que salió de esta solicitud, aunque el responsable haya cambiado de
+     * correo, más lo de su correo. Nunca lo que salió de la solicitud de otra
+     * persona: el correo del responsable es editable y alguien pudo poner este.
+     *
+     * @return Collection<int, Order>
+     */
     private static function ordenes(ProgramRequest $solicitud): Collection
     {
+        $correo = mb_strtolower(trim($solicitud->email));
+
         return Order::query()
             ->where('event_id', $solicitud->event_id)
-            ->where('responsible_email', mb_strtolower(trim($solicitud->email)))
+            ->where(fn (Builder $q) => $q
+                ->where('program_request_id', $solicitud->getKey())
+                ->orWhere(fn (Builder $porCorreo) => $porCorreo
+                    ->where('responsible_email', $correo)
+                    ->whereDoesntHave('programRequest', fn ($otra) => $otra->where('email', '!=', $correo))))
             ->get();
     }
 
@@ -95,7 +108,10 @@ class EliminarSolicitudConTodo
                 ->orWhere(fn ($p) => $p->where('auditable_type', (new Participant)->getMorphClass())->whereIn('auditable_id', Participant::whereIn('order_id', $ids)->pluck('id')))
             )->delete();
 
-            MagicLink::query()->where(fn ($q) => $q->whereIn('order_id', $ids)->orWhereIn('order_group_id', $grupos))->delete();
+            MagicLink::query()->where(fn ($q) => $q
+                ->whereIn('order_id', $ids)
+                ->orWhereIn('order_group_id', $grupos)
+                ->orWhere('program_request_id', $solicitud->id))->delete();
             Invitation::query()->where('event_id', $solicitud->event_id)->where('email', mb_strtolower(trim($solicitud->email)))->delete();
 
             // Participantes, pagos, comprobantes, facturas, credenciales y acreditaciones caen en cascada.

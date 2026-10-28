@@ -92,6 +92,29 @@ class Event extends Model
     }
 
     /**
+     * Cuándo termina el evento: la última jornada con fecha; sin ellas, el día
+     * de inicio. Nulo si el evento no tiene fechas.
+     */
+    public function finDelEvento(): ?CarbonInterface
+    {
+        $fin = $this->sessions
+            ->map(fn (EventSession $jornada) => $jornada->ends_at ?? $jornada->starts_at)
+            ->filter()
+            ->max();
+
+        return $fin ?? $this->starts_on?->copy()->endOfDay();
+    }
+
+    /**
+     * Hasta cuándo sirven los enlaces del cliente: una semana después del
+     * evento, para que nadie pierda su enlace mientras el evento sigue andando.
+     */
+    public function cierreDeEnlaces(): ?CarbonInterface
+    {
+        return $this->finDelEvento()?->copy()->addDays(7)->endOfDay();
+    }
+
+    /**
      * Si hay a quién escribirle o llamar. Sin esto, el bloque de contacto sale
      * como una caja con título y nada adentro.
      */

@@ -9,6 +9,7 @@ use App\Models\MagicLink;
 use App\Models\Order;
 use App\Models\OrderGroup;
 use App\Models\ProgramRequest;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
@@ -29,17 +30,23 @@ class EmitirEnlaceDeAcceso
             return false;
         }
 
+        // Si ese correo pidió el programa, el enlace es siempre el mismo de la
+        // solicitud: quien cambió de responsable no abre un segundo borrador.
+        $solicitud = $nuevaInscripcion ? null : $this->solicitudDe($event, $email);
+
         // Con dos o más colegios vigentes en el mismo conjunto, el correo es
         // uno solo con el enlace del conjunto: no uno por colegio.
         if (! $nuevaInscripcion) {
             $colegios = $this->colegiosVigentesDe($event, $email);
 
             if ($colegios !== null) {
-                [, $token] = MagicLink::emitirParaGrupo($event, $email, $colegios->first()->group);
+                $url = $solicitud
+                    ? $this->urlDeAcceso($solicitud)
+                    : route('inscripcion.acceso', ['token' => MagicLink::emitirParaGrupo($event, $email, $colegios->first()->group)[1]]);
 
                 Mail::to($email)->queue(new EnlaceDeAcceso(
                     event: $event,
-                    url: route('inscripcion.acceso', ['token' => $token]),
+                    url: $url,
                     nombre: $this->nombreDe($event, $email, $colegios->first()),
                     colegios: $colegios,
                 ));
@@ -59,11 +66,13 @@ class EmitirEnlaceDeAcceso
             $orden->forceFill(['group_id' => OrderGroup::paraResponsable($event, $email)->getKey()])->save();
         }
 
-        [$link, $token] = MagicLink::emitir($event, $email, $orden);
+        $url = $solicitud
+            ? $this->urlDeAcceso($solicitud)
+            : route('inscripcion.acceso', ['token' => MagicLink::emitir($event, $email, $orden)[1]]);
 
         Mail::to($email)->queue(new EnlaceDeAcceso(
             event: $event,
-            url: route('inscripcion.acceso', ['token' => $token]),
+            url: $url,
             numeroDeOrden: $orden?->number,
             nombre: $this->nombreDe($event, $email, $orden),
         ));
@@ -72,22 +81,32 @@ class EmitirEnlaceDeAcceso
     }
 
     /**
-     * URL de acceso para quien ya pidió el programa: emite el enlace y lo
-     * devuelve sin mandar correo. Va dentro del correo del programa, que ya
-     * pasó por el honeypot, el tiempo mínimo y el tope por correo del
-     * formulario, así que aquí no se suma el límite de `__invoke`.
+     * URL de acceso de una solicitud: siempre la misma para ese correo en ese
+     * evento, así el directivo puede reenviarla o pasarla sin duplicar
+     * borradores ni cortar el enlace de nadie. No manda correo ni suma el
+     * límite de `__invoke`: va dentro del correo del programa, que ya pasó por
+     * el honeypot, el tiempo mínimo y el tope por correo del formulario.
      *
-     * Si el correo ya tiene inscripción viva retoma esa; si no, el enlace queda
-     * sin orden y el borrador nace al hacer clic (`InscripcionController::acceso`).
+     * Reutiliza el enlace guardado; si no hay uno vigente (o su inscripción
+     * quedó cancelada o vencida) emite otro sin revocar el anterior. Si el
+     * correo ya tiene inscripción viva retoma esa; si no, el enlace queda sin
+     * orden y el borrador nace al hacer clic (`InscripcionController::acceso`).
      */
-    public function urlDeAcceso(Event $event, string $email): string
+    public function urlDeAcceso(ProgramRequest $solicitud): string
     {
-        $email = mb_strtolower(trim($email));
+        $event = $solicitud->event;
+        $email = mb_strtolower(trim($solicitud->email));
+
+        $guardado = $this->enlaceGuardadoDe($event, $email);
+
+        if ($guardado !== null) {
+            return route('inscripcion.acceso', ['token' => $guardado->token_encrypted]);
+        }
 
         $colegios = $this->colegiosVigentesDe($event, $email);
 
         if ($colegios !== null) {
-            [, $token] = MagicLink::emitirParaGrupo($event, $email, $colegios->first()->group);
+            [, $token] = MagicLink::emitirParaGrupo($event, $email, $colegios->first()->group, $solicitud);
         } else {
             $orden = $this->ordenVigenteDe($event, $email);
 
@@ -95,10 +114,67 @@ class EmitirEnlaceDeAcceso
                 $orden->forceFill(['group_id' => OrderGroup::paraResponsable($event, $email)->getKey()])->save();
             }
 
-            [, $token] = MagicLink::emitir($event, $email, $orden);
+            [, $token] = MagicLink::emitir($event, $email, $orden, $solicitud);
         }
 
         return route('inscripcion.acceso', ['token' => $token]);
+    }
+
+    /** Solicitud más reciente de ese correo en el evento. */
+    private function solicitudDe(Event $event, string $email): ?ProgramRequest
+    {
+        return ProgramRequest::query()
+            ->where('event_id', $event->getKey())
+            ->where('email', $email)
+            ->latest('id')
+            ->first();
+    }
+
+    /**
+     * Enlace de programa ya emitido para este correo que todavía sirve: vigente
+     * y sin inscripción, o con alguna inscripción que no esté cancelada ni vencida.
+     */
+    private function enlaceGuardadoDe(Event $event, string $email): ?MagicLink
+    {
+        $muertas = [OrderStatus::Cancelada->value, OrderStatus::Vencida->value];
+
+        // Con una inscripción viva (un colegio o un conjunto) el enlace debe
+        // llevar a esa; uno que apunta a otra orden no sirve de atajo.
+        $colegios = $this->colegiosVigentesDe($event, $email);
+        $viva = $colegios === null ? $this->ordenVigenteDe($event, $email) : null;
+
+        return MagicLink::query()
+            ->where('event_id', $event->getKey())
+            ->where('email', $email)
+            ->whereNotNull('program_request_id')
+            ->whereNotNull('token_encrypted')
+            ->whereNull('revoked_at')
+            ->with('event.sessions')
+            ->latest('id')
+            ->get()
+            ->first(function (MagicLink $link) use ($muertas, $colegios, $viva): bool {
+                if (! $link->estaVigente()) {
+                    return false;
+                }
+
+                if ($colegios !== null) {
+                    return $link->order_group_id !== null && $link->order_group_id === $colegios->first()->group_id;
+                }
+
+                if ($viva !== null) {
+                    return $link->order_id === $viva->getKey()
+                        || ($link->order_group_id !== null && $link->order_group_id === $viva->group_id);
+                }
+
+                $estados = match (true) {
+                    $link->order_id !== null => Order::query()->whereKey($link->order_id)->pluck('status'),
+                    $link->order_group_id !== null => Order::query()->where('group_id', $link->order_group_id)->pluck('status'),
+                    default => collect(),
+                };
+
+                return $estados->isEmpty()
+                    || $estados->contains(fn ($estado) => ! in_array($estado instanceof OrderStatus ? $estado->value : $estado, $muertas, true));
+            });
     }
 
     /**
@@ -109,7 +185,11 @@ class EmitirEnlaceDeAcceso
     {
         return Order::query()
             ->where('event_id', $event->getKey())
-            ->where('responsible_email', $email)
+            // Un borrador con el responsable aún vacío es de quien tiene su enlace.
+            ->where(fn ($q) => $q
+                ->where('responsible_email', $email)
+                ->orWhere(fn ($vacio) => $vacio->where('responsible_email', '')->whereHas('magicLinks', fn ($l) => $l->where('email', $email))))
+            ->tap(fn ($consulta) => self::conEnlaceDe($consulta, $email))
             ->whereIn('status', [OrderStatus::Borrador->value, OrderStatus::Reservada->value])
             ->latest('id')
             ->first();
@@ -127,6 +207,7 @@ class EmitirEnlaceDeAcceso
         $vigentes = Order::query()
             ->where('event_id', $event->getKey())
             ->where('responsible_email', $email)
+            ->tap(fn ($consulta) => self::conEnlaceDe($consulta, $email))
             ->whereNotNull('group_id')
             ->whereIn('status', [OrderStatus::Borrador->value, OrderStatus::Reservada->value])
             ->with('establishments', 'group')
@@ -136,6 +217,24 @@ class EmitirEnlaceDeAcceso
             ->first();
 
         return $vigentes !== null && $vigentes->count() > 1 ? $vigentes : null;
+    }
+
+    /**
+     * Deja fuera las inscripciones cuyos enlaces son todos de otro correo: su
+     * responsable escribió este correo a mano, y sin esto quien pide su enlace
+     * recibiría el de una inscripción ajena. Las que nunca tuvieron enlace
+     * (las crea el panel) se retoman como siempre.
+     *
+     * @param  Builder<Order>  $consulta
+     */
+    private static function conEnlaceDe(Builder $consulta, string $email): void
+    {
+        $consulta->where(fn ($q) => $q
+            ->whereHas('magicLinks', fn ($l) => $l->where('email', $email))
+            ->orWhereHas('group.magicLinks', fn ($l) => $l->where('email', $email))
+            ->orWhere(fn ($sinEnlaces) => $sinEnlaces
+                ->whereDoesntHave('magicLinks')
+                ->whereDoesntHave('group.magicLinks')));
     }
 
     /**

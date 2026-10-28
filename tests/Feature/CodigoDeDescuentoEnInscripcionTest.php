@@ -310,12 +310,12 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         $codigo = $this->codigo(['max_people' => 1]);
 
         $ana = $this->borradorDe('ana@colegio.cl', 5);
-        $ana->forceFill(['discount_code_id' => $codigo->id])->save();
+        $ana->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'ana@colegio.cl'])->save();
         app(ConfirmarOrden::class)($ana->fresh());
         $this->assertSame(1, $codigo->refresh()->used_people);
 
         $beto = $this->borradorDe('beto@colegio.cl');
-        $beto->forceFill(['discount_code_id' => $codigo->id])->save();
+        $beto->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'beto@colegio.cl'])->save();
 
         $this->expectException(OrdenNoConfirmable::class);
         app(ConfirmarOrden::class)($beto->fresh());
@@ -326,7 +326,7 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         $codigo = $this->codigo(['value' => 20, 'max_people' => 1, 'uses_per_person' => 'unlimited']);
 
         $primera = $this->borradorDe('ana@colegio.cl');
-        $primera->forceFill(['discount_code_id' => $codigo->id])->save();
+        $primera->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'ana@colegio.cl'])->save();
         app(ConfirmarOrden::class)($primera->fresh());
 
         $segunda = $this->borradorDe('ana@colegio.cl');
@@ -342,7 +342,7 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         $codigo = $this->codigo(['uses_per_person' => 'once']);
 
         $primera = $this->borradorDe('ana@colegio.cl');
-        $primera->forceFill(['discount_code_id' => $codigo->id])->save();
+        $primera->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'ana@colegio.cl'])->save();
         app(ConfirmarOrden::class)($primera->fresh());
 
         $segunda = $this->borradorDe('ana@colegio.cl');
@@ -364,7 +364,7 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
                 $orden->participants()->create(['first_name' => 'P', 'last_name' => "{$colegio->id}-{$i}", 'access_type_id' => $this->acceso->id, 'establishment_id' => $colegio->id]);
             }
         }
-        $orden->forceFill(['discount_code_id' => $codigo->id, 'group_id' => OrderGroup::paraResponsable($this->evento, 'ana@colegio.cl')->id])->save();
+        $orden->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'ana@colegio.cl', 'group_id' => OrderGroup::paraResponsable($this->evento, 'ana@colegio.cl')->id])->save();
 
         // En el borrador, una sola vez sobre el total: 400.000 - 40.000.
         $this->assertSame(40000, $orden->fresh()->calcularDescuento());
@@ -382,7 +382,7 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         foreach ([['percent', 20, 20000], ['amount', 30000, 0]] as [$tipo, $valor, $esperado]) {
             $codigo = $this->codigo(['type' => $tipo, 'value' => $valor]);
             $original = $this->borradorDe('ana'.$tipo.'@colegio.cl', 1);
-            $original->forceFill(['discount_code_id' => $codigo->id, 'group_id' => OrderGroup::paraResponsable($this->evento, 'ana'.$tipo.'@colegio.cl')->id])->save();
+            $original->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'ana'.$tipo.'@colegio.cl', 'group_id' => OrderGroup::paraResponsable($this->evento, 'ana'.$tipo.'@colegio.cl')->id])->save();
             $original = app(ConfirmarOrden::class)($original->fresh());
 
             $adicional = app(IniciarInscripcionAdicional::class)($original);
@@ -393,5 +393,23 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
             $this->assertSame($esperado, (int) $confirmada->discount_amount, "Tipo {$tipo}");
             $this->assertSame(1, $codigo->refresh()->used_people, 'Sigue siendo la misma persona.');
         }
+    }
+
+    public function test_una_sola_vez_sigue_valiendo_aunque_cambie_el_correo_del_responsable(): void
+    {
+        $codigo = $this->codigo(['uses_per_person' => 'once']);
+
+        $primera = $this->borradorDe('ana@colegio.cl');
+        $primera->forceFill(['discount_code_id' => $codigo->id, 'discount_code_email' => 'ana@colegio.cl'])->save();
+        app(ConfirmarOrden::class)($primera->fresh());
+
+        // El responsable pasa a otra persona: el código sigue siendo de Ana.
+        $primera->fresh()->forceFill(['responsible_email' => 'bea@colegio.cl'])->save();
+
+        $segunda = $this->borradorDe('ana@colegio.cl');
+        $segunda->forceFill(['payer_entity_id' => null])->save();
+        $this->aplicar($segunda, $codigo->code)->assertOk()->assertSee('una sola vez');
+
+        $this->assertNull($segunda->fresh()->discount_code_id);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Exceptions;
 
 use App\Enums\EventStatus;
 use App\Models\Event;
+use App\Models\MagicLink;
 use Exception;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -38,6 +39,25 @@ class EnlaceNoUtilizable extends Exception
             'Pedir un enlace nuevo',
             $event,
         );
+    }
+
+    /** El evento terminó hace más de una semana: sus enlaces ya no abren nada. */
+    public static function eventoTerminado(Event $event): self
+    {
+        return new self(
+            'Este evento ya terminó',
+            'Las inscripciones de este evento están cerradas. Si necesitas algo, escríbenos.',
+            evento: $event,
+        );
+    }
+
+    /** El error correcto para un token que no resolvió: evento terminado o enlace vencido. */
+    public static function paraToken(string $token): self
+    {
+        $evento = MagicLink::porToken($token)?->event;
+        $cierre = $evento?->cierreDeEnlaces();
+
+        return $evento && $cierre?->isPast() ? self::eventoTerminado($evento) : self::vencido($evento);
     }
 
     /** La invitación no existe, ya se usó, venció o fue anulada: no se dice cuál, no se revela quién fue invitado. */

@@ -7,6 +7,8 @@ use App\Enums\Rol;
 use App\Mail\AvisoNuevaSolicitud;
 use App\Models\Event;
 use App\Models\ProgramRequest;
+use App\Models\User;
+use Database\Seeders\CuentasDePruebaSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -70,5 +72,14 @@ class AvisosInternosTest extends TestCase
 
         $this->assertSame(0, ProgramRequest::count());
         Mail::assertNotQueued(AvisoNuevaSolicitud::class);
+    }
+
+    public function test_las_cuentas_de_prueba_parten_con_los_avisos_de_su_rol(): void
+    {
+        $this->seed(CuentasDePruebaSeeder::class);
+
+        $this->assertTrue(User::where('email', 'contabilidad@test.cl')->value('notify_payment_proofs'));
+        $this->assertTrue(User::where('email', 'coordinacion@test.cl')->value('notify_program_requests'));
+        $this->assertFalse(User::where('email', 'acreditacion@test.cl')->value('notify_payment_proofs'));
     }
 }

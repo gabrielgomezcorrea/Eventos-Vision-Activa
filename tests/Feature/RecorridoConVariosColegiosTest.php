@@ -55,7 +55,7 @@ class RecorridoConVariosColegiosTest extends TestCase
         $this->borrador = Order::sole();
 
         $this->post($this->ruta('responsable.guardar'), [
-            'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez', 'responsible_position' => 'Otro',
+            'responsible_email' => 'ana@colegio.cl', 'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez', 'responsible_position' => 'Otro',
             'responsible_position_otro' => 'Directora', 'responsible_phone' => '56912345678',
             'responsible_institution' => 'Sostenedor Los Andes', 'kind' => OrderKind::Institucional->value,
         ]);

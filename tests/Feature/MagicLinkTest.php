@@ -136,4 +136,55 @@ class MagicLinkTest extends TestCase
         $this->assertSame(1, $link->fresh()->uses);
         $this->assertNotNull($link->fresh()->last_used_at);
     }
+
+    private function eventoQueTerminoHace(int $dias): Event
+    {
+        $evento = Event::create([
+            'name' => 'Seminario pasado', 'slug' => 'seminario-pasado', 'status' => EventStatus::Publicado,
+            'starts_on' => now()->subDays($dias)->toDateString(),
+        ]);
+        $evento->sessions()->create([
+            'name' => 'J1', 'position' => 1, 'capacity' => 5,
+            'starts_at' => now()->subDays($dias)->setTime(9, 0), 'ends_at' => now()->subDays($dias)->setTime(13, 0),
+        ]);
+
+        return $evento;
+    }
+
+    public function test_un_enlace_viejo_de_un_evento_futuro_sigue_entrando(): void
+    {
+        $this->event->update(['starts_on' => now()->addMonth()->toDateString()]);
+        [$link, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
+        $link->forceFill(['expires_at' => now()->subDays(30)])->save();
+
+        $this->assertTrue($link->is(MagicLink::resolver($token)));
+    }
+
+    public function test_un_enlace_de_un_evento_terminado_hace_ocho_dias_muestra_el_cierre(): void
+    {
+        $evento = $this->eventoQueTerminoHace(8);
+        [, $token] = MagicLink::emitir($evento, 'ana@colegio.cl');
+
+        $this->get(route('inscripcion.acceso', ['token' => $token]))
+            ->assertForbidden()
+            ->assertSee('Este evento ya terminó')
+            ->assertSee('Las inscripciones de este evento están cerradas.');
+    }
+
+    public function test_un_enlace_de_un_evento_terminado_hace_seis_dias_todavia_entra(): void
+    {
+        $evento = $this->eventoQueTerminoHace(6);
+        [$link, $token] = MagicLink::emitir($evento, 'ana@colegio.cl');
+
+        $this->assertTrue($link->is(MagicLink::resolver($token)));
+    }
+
+    public function test_un_evento_sin_fechas_vence_por_el_tiempo_del_enlace(): void
+    {
+        [$link, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
+        $this->assertTrue($link->is(MagicLink::resolver($token)));
+
+        $link->forceFill(['expires_at' => now()->subMinute()])->save();
+        $this->assertNull(MagicLink::resolver($token));
+    }
 }

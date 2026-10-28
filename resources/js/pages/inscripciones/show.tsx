@@ -1258,7 +1258,46 @@ export default function InscripcionShow({
                 </SeccionFicha>
 
                 <div className="grid gap-6 lg:grid-cols-2">
-                    <SeccionFicha titulo="Responsable">
+                    <SeccionFicha
+                        titulo="Responsable"
+                        accion={
+                            puede.reemplazar && (
+                                <EditarSeccion
+                                    titulo="Corregir el correo del responsable"
+                                    url={InscripcionController.corregirCorreoDelResponsable.url(
+                                        orden.id,
+                                    )}
+                                    inicial={{
+                                        responsible_email:
+                                            orden.responsable.correo ?? '',
+                                    }}
+                                >
+                                    {(f) => (
+                                        <Campo
+                                            label="Correo electrónico"
+                                            htmlFor="r-responsible_email"
+                                            error={f.errors.responsible_email}
+                                        >
+                                            <Input
+                                                id="r-responsible_email"
+                                                type="email"
+                                                inputMode="email"
+                                                autoComplete="email"
+                                                required
+                                                value={f.data.responsible_email}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'responsible_email',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                    )}
+                                </EditarSeccion>
+                            )
+                        }
+                    >
                         <Datos>
                             <Dato etiqueta="Nombre completo">
                                 {orden.responsable.nombre}

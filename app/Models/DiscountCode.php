@@ -88,7 +88,7 @@ class DiscountCode extends Model
             ->with('establishments')
             ->orderBy('confirmed_at')
             ->get()
-            ->groupBy(fn (Order $orden): string => mb_strtolower($orden->responsible_email));
+            ->groupBy(fn (Order $orden): string => self::personaDe($orden));
     }
 
     /** El código como se lee y se dicta: XXXX-XXXX. */
@@ -145,7 +145,7 @@ class DiscountCode extends Model
             return 'Este código venció el '.$this->expires_at->format('d-m-Y').'.';
         }
 
-        $previas = $this->inscripcionesVivasDe($orden->responsible_email, $orden);
+        $previas = $this->inscripcionesVivasDe(self::personaDe($orden), $orden);
 
         if ($this->uses_per_person === 'once' && $previas->contains(fn (Order $o): bool => $orden->group_id === null || $o->group_id !== $orden->group_id)) {
             return 'Este código es de una sola vez y ya lo usaste en la inscripción '.$previas->first()->number.'.';
@@ -165,7 +165,7 @@ class DiscountCode extends Model
      */
     public function tomarPersona(Order $orden, bool $ignorarVigencia = false): bool
     {
-        if ($this->inscripcionesVivasDe($orden->responsible_email, $orden)->isNotEmpty()) {
+        if ($this->inscripcionesVivasDe(self::personaDe($orden), $orden)->isNotEmpty()) {
             return true;
         }
 
@@ -183,9 +183,19 @@ class DiscountCode extends Model
             ->where('discount_code_id', $this->getKey())
             ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada])
             ->distinct()
-            ->count(DB::raw('lower(responsible_email)'));
+            ->count('discount_code_email');
 
         $this->forceFill(['used_people' => $personas])->save();
+    }
+
+    /**
+     * La persona que usa el código: quien lo aplicó, no el responsable de hoy
+     * (el responsable puede cambiar de correo). Sin código aplicado todavía,
+     * es quien lo está aplicando ahora.
+     */
+    private static function personaDe(Order $orden): string
+    {
+        return $orden->discount_code_email ?? mb_strtolower(trim($orden->responsible_email));
     }
 
     /** @return \Illuminate\Database\Eloquent\Collection<int, Order> */
@@ -193,7 +203,7 @@ class DiscountCode extends Model
     {
         return Order::query()
             ->where('discount_code_id', $this->getKey())
-            ->where('responsible_email', mb_strtolower(trim($correo)))
+            ->where('discount_code_email', mb_strtolower(trim($correo)))
             ->whereKeyNot($excepto->getKey())
             ->whereIn('status', [OrderStatus::Reservada, OrderStatus::Finalizada])
             ->orderBy('id')

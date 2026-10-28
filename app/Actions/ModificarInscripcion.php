@@ -196,18 +196,16 @@ class ModificarInscripcion
             $antes = array_intersect_key($fresca->getOriginal(), $fresca->getDirty());
             $despues = $fresca->getDirty();
 
-            if ($despues === []) {
-                return;
+            if ($despues !== []) {
+                $fresca->save();
+
+                Auditor::registrar(
+                    sobre: $fresca,
+                    accion: 'orden.responsable_corregido_por_cliente',
+                    propiedades: ['antes' => $antes, 'despues' => $despues],
+                    actorLabel: $fresca->responsible_email,
+                );
             }
-
-            $fresca->save();
-
-            Auditor::registrar(
-                sobre: $fresca,
-                accion: 'orden.responsable_corregido_por_cliente',
-                propiedades: ['antes' => $antes, 'despues' => $despues],
-                actorLabel: $fresca->responsible_email,
-            );
         });
     }
 

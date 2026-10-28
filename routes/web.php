@@ -109,6 +109,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('inscripciones/{order}/participantes/{participant}/reemplazar', [InscripcionController::class, 'reemplazar'])
         ->scopeBindings()
         ->name('inscripciones.reemplazar');
+    Route::patch('inscripciones/{order}/responsable/correo', [InscripcionController::class, 'corregirCorreoDelResponsable'])
+        ->name('inscripciones.responsable.correo');
     Route::patch('inscripciones/{order}/participantes/{participant}', [InscripcionController::class, 'corregirParticipante'])
         ->scopeBindings()
         ->name('inscripciones.participantes.corregir');

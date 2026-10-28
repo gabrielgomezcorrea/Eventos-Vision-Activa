@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Inscripciones;
 
+use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\CancelarOrden;
 use App\Actions\ReactivarReserva;
 use App\Actions\ReemplazarParticipante;
@@ -21,6 +22,7 @@ use App\Exceptions\ReemplazoNoPermitido;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inscripciones\CancelarOrdenRequest;
 use App\Http\Requests\Inscripciones\CargarComprobanteRequest;
+use App\Http\Requests\Inscripciones\CorregirCorreoDelResponsableRequest;
 use App\Http\Requests\Inscripciones\CorregirParticipanteRequest;
 use App\Http\Requests\Inscripciones\GuardarNotaRequest;
 use App\Http\Requests\Inscripciones\ReemplazarParticipanteRequest;
@@ -544,6 +546,15 @@ class InscripcionController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Datos de '.$participant->nombre_completo.' corregidos.']);
+
+        return back();
+    }
+
+    public function corregirCorreoDelResponsable(CorregirCorreoDelResponsableRequest $request, Order $order, CambiarCorreoDelResponsable $cambiar): RedirectResponse
+    {
+        $cambiar($order, $request->correo());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Correo del responsable corregido: ahora es '.$order->responsible_email.'.']);
 
         return back();
     }

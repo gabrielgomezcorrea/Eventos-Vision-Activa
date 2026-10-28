@@ -7,6 +7,7 @@ use App\Enums\EventStatus;
 use App\Enums\OrderKind;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Models\DiscountCode;
 use App\Models\Establishment;
 use App\Models\Event;
 use App\Models\EventSession;
@@ -224,7 +225,7 @@ class InscripcionAdicionalTest extends TestCase
 
     public function test_otro_establecimiento_crea_un_borrador_del_conjunto_sin_colegio_ni_pagador_y_con_el_codigo(): void
     {
-        $codigo = \App\Models\DiscountCode::factory()->create(['event_id' => $this->event->id]);
+        $codigo = DiscountCode::factory()->create(['event_id' => $this->event->id]);
         $this->original->forceFill(['discount_code_id' => $codigo->id])->save();
 
         $url = $this->post(route('inscripcion.otro-establecimiento', ['token' => $this->token]))->assertRedirect()->headers->get('Location');

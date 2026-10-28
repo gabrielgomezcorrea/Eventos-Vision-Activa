@@ -306,14 +306,14 @@ class CambiosDelClienteTest extends TestCase
         $this->assertSame(0, $this->asientos($this->jornada2));
     }
 
-    public function test_el_responsable_corrige_su_telefono_con_un_abono(): void
+    public function test_el_responsable_corrige_su_telefono_con_un_abono_pero_no_su_correo(): void
     {
         $this->conAbono();
 
         $this->patch($this->ruta('responsable.corregir'), [
             'responsible_name' => 'Ana María', 'responsible_lastname' => 'Pérez',
             'responsible_position' => 'Directivo', 'responsible_phone' => '56987654321',
-            // El correo no se puede cambiar: identifica el enlace.
+            // Tras confirmar el correo queda fijo: lo corrige el panel.
             'responsible_email' => 'otra@colegio.cl',
         ])->assertRedirect();
 

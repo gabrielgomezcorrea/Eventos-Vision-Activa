@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -12,9 +11,10 @@ use Illuminate\Support\Str;
 /**
  * Enlace seguro con el que el cliente accede a su inscripción sin contraseña.
  *
- * Solo se guarda el hash del token. El token en claro se genera una vez, viaja
- * en el correo y no vuelve a existir en el sistema: ni siquiera un usuario con
- * acceso a la base de datos puede reconstruir un enlace ajeno.
+ * Se busca siempre por el hash del token. El token en claro viaja en el
+ * correo; solo los enlaces de una solicitud lo guardan además cifrado
+ * (`token_encrypted`, con la clave de la app) para poder reenviar siempre el
+ * mismo enlace. Sin esa clave la base no permite reconstruir un enlace ajeno.
  *
  * @property Carbon $expires_at
  * @property Carbon|null $last_used_at
@@ -35,6 +35,7 @@ class MagicLink extends Model
             'last_used_at' => 'datetime',
             'revoked_at' => 'datetime',
             'uses' => 'integer',
+            'token_encrypted' => 'encrypted',
         ];
     }
 
@@ -42,6 +43,12 @@ class MagicLink extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /** @return BelongsTo<ProgramRequest, $this> */
+    public function programRequest(): BelongsTo
+    {
+        return $this->belongsTo(ProgramRequest::class);
     }
 
     /** @return BelongsTo<Event, $this> */
@@ -66,21 +73,9 @@ class MagicLink extends Model
      *
      * @return array{0: self, 1: string}
      */
-    public static function emitir(Event $event, string $email, ?Order $order = null): array
+    public static function emitir(Event $event, string $email, ?Order $order = null, ?ProgramRequest $solicitud = null): array
     {
-        $token = Str::random(self::BYTES * 2);
-
-        $link = self::create([
-            'event_id' => $event->getKey(),
-            'order_id' => $order?->getKey(),
-            'email' => mb_strtolower(trim($email)),
-            'token_hash' => self::hash($token),
-            'expires_at' => now()->addMinutes(config('magic_links.ttl_minutes')),
-            'uses' => 0,
-            'created_ip' => Request::ip(),
-        ]);
-
-        return [$link, $token];
+        return self::crear($event, $email, ['order_id' => $order?->getKey()], $solicitud);
     }
 
     /**
@@ -89,16 +84,30 @@ class MagicLink extends Model
      *
      * @return array{0: self, 1: string}
      */
-    public static function emitirParaGrupo(Event $event, string $email, OrderGroup $group): array
+    public static function emitirParaGrupo(Event $event, string $email, OrderGroup $group, ?ProgramRequest $solicitud = null): array
+    {
+        return self::crear($event, $email, ['order_group_id' => $group->getKey()], $solicitud);
+    }
+
+    /**
+     * Con solicitud, el token también se guarda cifrado para poder reenviar
+     * siempre el mismo enlace (el hash sigue siendo lo único que se busca).
+     *
+     * @param  array<string, int|null>  $destino
+     * @return array{0: self, 1: string}
+     */
+    private static function crear(Event $event, string $email, array $destino, ?ProgramRequest $solicitud): array
     {
         $token = Str::random(self::BYTES * 2);
 
         $link = self::create([
             'event_id' => $event->getKey(),
-            'order_group_id' => $group->getKey(),
+            ...$destino,
+            'program_request_id' => $solicitud?->getKey(),
+            'token_encrypted' => $solicitud ? $token : null,
             'email' => mb_strtolower(trim($email)),
             'token_hash' => self::hash($token),
-            'expires_at' => now()->addMinutes(config('magic_links.ttl_minutes')),
+            'expires_at' => $event->cierreDeEnlaces() ?? now()->addMinutes(config('magic_links.ttl_minutes')),
             'uses' => 0,
             'created_ip' => Request::ip(),
         ]);
@@ -109,10 +118,13 @@ class MagicLink extends Model
     /** Busca un enlace utilizable a partir del token en claro. */
     public static function resolver(string $token): ?self
     {
-        return self::query()
+        $link = self::query()
             ->where('token_hash', self::hash($token))
-            ->utilizables()
+            ->whereNull('revoked_at')
+            ->with('event.sessions')
             ->first();
+
+        return $link?->estaVigente() ? $link : null;
     }
 
     /**
@@ -126,17 +138,18 @@ class MagicLink extends Model
     }
 
     /**
-     * @param  Builder<self>  $query
-     * @return Builder<self>
+     * Con el evento con fechas manda su cierre (una semana después de que
+     * termina); sin fechas, el vencimiento propio del enlace.
      */
-    public function scopeUtilizables(Builder $query): Builder
-    {
-        return $query->whereNull('revoked_at')->where('expires_at', '>', now());
-    }
-
     public function estaVigente(): bool
     {
-        return $this->revoked_at === null && $this->expires_at->isFuture();
+        if ($this->revoked_at !== null) {
+            return false;
+        }
+
+        $cierre = $this->event?->cierreDeEnlaces();
+
+        return $cierre ? $cierre->isFuture() : $this->expires_at->isFuture();
     }
 
     public function registrarUso(): void

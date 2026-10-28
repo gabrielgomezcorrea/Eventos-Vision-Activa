@@ -50,6 +50,7 @@ class ConfirmacionWebTest extends TestCase
         $this->orden = Order::sole();
 
         $this->orden->update([
+            'responsible_email' => 'ana@colegio.cl',
             'responsible_name' => 'Ana',
             'responsible_lastname' => 'Pérez',
             'payer_entity_id' => PayerEntity::create(['name' => 'Fundación Educar'])->id,

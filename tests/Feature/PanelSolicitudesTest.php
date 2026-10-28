@@ -239,4 +239,18 @@ class PanelSolicitudesTest extends TestCase
         $this->assertNotNull(ProgramRequest::find($this->solicitud->id));
         $this->assertNotNull(Order::find($orden->id));
     }
+
+    public function test_limpiar_no_borra_la_inscripcion_de_otra_solicitud_que_puso_este_correo(): void
+    {
+        $evento = $this->solicitud->event;
+        $otra = ProgramRequest::create(['event_id' => $evento->id, 'first_name' => 'Luis', 'last_name' => 'Soto', 'email' => 'luis@colegio.cl', 'consented_at' => now()]);
+        $ajena = Order::create(['event_id' => $evento->id, 'program_request_id' => $otra->id, 'responsible_email' => 'marta@colegio.cl', 'responsible_name' => 'Luis']);
+        $propia = Order::create(['event_id' => $evento->id, 'program_request_id' => $this->solicitud->id, 'responsible_email' => 'nuevo@colegio.cl', 'responsible_name' => 'Marta']);
+
+        $this->actingAs($this->usuario(Rol::Administrador))
+            ->delete(route('solicitudes.destroy_all', $this->solicitud));
+
+        $this->assertNotNull($ajena->fresh());
+        $this->assertNull($propia->fresh());
+    }
 }

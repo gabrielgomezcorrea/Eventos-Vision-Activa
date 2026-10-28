@@ -52,7 +52,7 @@ class TicketController extends Controller
         $link = MagicLink::resolver($token);
 
         if ($link === null || ($link->order === null && $link->order_group_id === null)) {
-            throw EnlaceNoUtilizable::vencido(MagicLink::porToken($token)?->event);
+            throw EnlaceNoUtilizable::paraToken($token);
         }
 
         $delEnlace = $link->order ?? $link->group->orders()->oldest('id')->firstOrFail();

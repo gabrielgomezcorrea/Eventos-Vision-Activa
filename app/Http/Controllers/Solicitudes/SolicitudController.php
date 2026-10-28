@@ -182,9 +182,9 @@ class SolicitudController extends Controller
 
         Mail::to($programRequest->email)->queue(new ProgramaDelEvento(
             $programRequest,
-            app(EmitirEnlaceDeAcceso::class)->urlDeAcceso($programRequest->event, $programRequest->email),
+            app(EmitirEnlaceDeAcceso::class)->urlDeAcceso($programRequest),
         ));
-        $programRequest->update(['program_sent_at' => now()]);
+        $programRequest->registrarEnvioDelPrograma();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Correo en camino a '.$programRequest->email.'.']);
 

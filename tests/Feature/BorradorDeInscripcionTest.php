@@ -48,7 +48,7 @@ class BorradorDeInscripcionTest extends TestCase
     public function test_los_datos_se_guardan_como_borrador_y_se_recuperan(): void
     {
         $this->post($this->ruta('responsable.guardar'), [
-            'responsible_name' => 'Ana',
+            'responsible_email' => 'ana@colegio.cl', 'responsible_name' => 'Ana',
             'responsible_lastname' => 'Pérez',
             'responsible_position' => 'Otro',
             'responsible_position_otro' => 'Directora',
@@ -114,7 +114,7 @@ class BorradorDeInscripcionTest extends TestCase
     public function test_el_responsable_puede_agregarse_como_participante(): void
     {
         $this->post($this->ruta('responsable.guardar'), [
-            'responsible_name' => 'Ana',
+            'responsible_email' => 'ana@colegio.cl', 'responsible_name' => 'Ana',
             'responsible_lastname' => 'Pérez',
             'responsible_position' => 'Otro',
             'responsible_position_otro' => 'Directora',
@@ -226,7 +226,7 @@ class BorradorDeInscripcionTest extends TestCase
 
         // The responsible keeps their buyer position when joining as participant.
         $this->post($this->ruta('responsable.guardar'), [
-            'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez', 'responsible_position' => 'Directivo',
+            'responsible_email' => 'ana@colegio.cl', 'responsible_name' => 'Ana', 'responsible_lastname' => 'Pérez', 'responsible_position' => 'Directivo',
             'responsible_phone' => '56912345678', 'kind' => OrderKind::Particular->value,
         ]);
         $this->post($this->ruta('participantes.responsable'), ['rut' => '22.222.222-2', 'access_type_id' => $this->acceso->id])

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Publico;
 
 use App\Actions\AplicarCodigoDeDescuento;
+use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\ConfirmarConjunto;
 use App\Actions\ConfirmarOrden;
 use App\Actions\EmitirEnlaceDeAcceso;
@@ -40,6 +41,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -106,7 +108,7 @@ class InscripcionController extends Controller
         $link = MagicLink::resolver($token);
 
         if (! $link) {
-            throw EnlaceNoUtilizable::vencido(MagicLink::porToken($token)?->event);
+            throw EnlaceNoUtilizable::paraToken($token);
         }
 
         $link->registrarUso();
@@ -120,27 +122,40 @@ class InscripcionController extends Controller
         }
 
         if (! $link->order) {
-            // Quien pidió el programa ya dio estos datos: llega con ellos escritos.
-            $solicitud = ProgramRequest::query()
-                ->where('event_id', $link->event_id)
-                ->where('email', $link->email)
-                ->latest('id')
-                ->first();
+            // Dos personas abriendo el mismo enlace a la vez no crean dos
+            // borradores: se relee el enlace bajo candado y, si ya tiene
+            // orden, se usa esa.
+            DB::transaction(function () use ($link): void {
+                $bloqueado = MagicLink::query()->whereKey($link->getKey())->lockForUpdate()->firstOrFail();
 
-            $orden = Order::create([
-                'event_id' => $link->event_id,
-                'responsible_email' => $link->email,
-                'responsible_name' => $solicitud?->first_name ?? '',
-                'responsible_lastname' => $solicitud?->last_name,
-                'responsible_position' => $solicitud?->position,
-                'responsible_phone' => $solicitud?->phone,
-                'responsible_institution' => $solicitud?->institution,
-                'kind' => OrderKind::Institucional,
-            ]);
+                if ($bloqueado->order_id !== null) {
+                    return;
+                }
 
-            $link->forceFill(['order_id' => $orden->getKey()])->save();
+                // Quien pidió el programa (solicitante) no es necesariamente
+                // quien hace el trámite (responsable): el bloque Responsable
+                // nace vacío y lo llena quien abre el enlace, aunque sea el
+                // mismo. El solicitante queda unido por detrás. Los enlaces
+                // viejos, sin solicitud, la buscan por correo.
+                $solicitud = $link->programRequest
+                    ?? ProgramRequest::query()
+                        ->where('event_id', $link->event_id)
+                        ->where('email', $link->email)
+                        ->latest('id')
+                        ->first();
 
-            Auditor::registrar($orden, 'orden.borrador_creado', actorLabel: $link->email);
+                $orden = Order::create([
+                    'event_id' => $link->event_id,
+                    'program_request_id' => $solicitud?->getKey(),
+                    'responsible_email' => '',
+                    'responsible_name' => '',
+                    'kind' => OrderKind::Institucional,
+                ]);
+
+                $link->forceFill(['order_id' => $orden->getKey()])->save();
+
+                Auditor::registrar($orden, 'orden.borrador_creado', actorLabel: $link->email);
+            });
         }
 
         return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
@@ -168,6 +183,7 @@ class InscripcionController extends Controller
             'responsible_lastname' => ReglasDeContacto::apellidos(),
             'responsible_position' => ReglasDeContacto::cargo(),
             'responsible_position_otro' => ReglasDeContacto::cargoOtro('responsible_position'),
+            'responsible_email' => ReglasDeContacto::correo(),
             'responsible_phone' => ReglasDeContacto::telefono(),
             'responsible_institution' => ReglasDeContacto::establecimiento(! $particular),
             'kind' => ['required', Rule::in(array_map(fn (OrderKind $tipo) => $tipo->value, OrderKind::elegiblesPorElCliente()))],
@@ -176,6 +192,7 @@ class InscripcionController extends Controller
             'responsible_lastname' => 'apellidos',
             'responsible_position' => 'cargo',
             'responsible_position_otro' => 'cargo',
+            'responsible_email' => 'correo',
             'responsible_phone' => 'teléfono',
             'responsible_institution' => 'institución',
             'kind' => 'tipo de inscripción',
@@ -185,13 +202,23 @@ class InscripcionController extends Controller
             return $this->vistaInscripcion($token, $orden, 'responsable', $request->all(), $validator->errors());
         }
 
-        $orden->update(ReglasDeContacto::normalizar($validator->validated(), [
+        $datos = ReglasDeContacto::normalizar($validator->validated(), [
             'responsible_name' => 'nombre',
             'responsible_lastname' => 'nombre',
             'responsible_position' => 'cargo',
+            'responsible_email' => 'correo',
             'responsible_phone' => 'telefono',
             'responsible_institution' => 'nombre',
-        ]));
+        ]);
+
+        // El correo no va en el `update`: cambia en todo el conjunto, con auditoría.
+        $correo = $datos['responsible_email'];
+        unset($datos['responsible_email']);
+
+        DB::transaction(function () use ($orden, $datos, $correo): void {
+            $orden->update($datos);
+            app(CambiarCorreoDelResponsable::class)($orden, $correo, $orden->responsible_email ?: $correo);
+        });
 
         return $this->aBloque($token, 'responsable');
     }
@@ -479,7 +506,10 @@ class InscripcionController extends Controller
         return $this->aBloque($token, 'participantes');
     }
 
-    /** Corrige nombre y contacto del responsable; el correo y el tipo quedan fijos. */
+    /**
+     * Corrige nombre y contacto del responsable. El correo y el tipo quedan
+     * fijos: tras confirmar, el correo lo corrige el panel.
+     */
     public function corregirResponsable(Request $request, string $token, ModificarInscripcion $modificar): RedirectResponse|Renderable
     {
         [$orden] = $this->resolverParaCambio($token, soloDatos: true);
@@ -544,10 +574,10 @@ class InscripcionController extends Controller
 
     public function aplicarCodigo(AplicarCodigoDeDescuento $aplicar, Request $request, string $token): RedirectResponse|Renderable
     {
-        [$orden] = $this->resolver($token);
+        [$orden, $link] = $this->resolver($token);
 
         try {
-            $aplicar($orden, (string) $request->input('codigo'));
+            $aplicar($orden, (string) $request->input('codigo'), $link->email);
         } catch (CodigoNoAplicable $e) {
             return $this->vistaInscripcion($token, $orden, extra: [
                 'errorDeCodigo' => $e->getMessage(),
@@ -562,21 +592,22 @@ class InscripcionController extends Controller
     {
         [$orden] = $this->resolver($token);
 
-        $orden->forceFill(['discount_code_id' => null])->save();
+        $orden->forceFill(['discount_code_id' => null, 'discount_code_email' => null])->save();
 
         return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
     }
 
     public function confirmar(ConfirmarOrden $confirmar, ConfirmarConjunto $confirmarConjunto, string $token): RedirectResponse|Renderable
     {
-        [$orden] = $this->resolver($token);
+        [$orden, $link] = $this->resolver($token);
 
         // Siempre queda en un conjunto, aunque termine con una sola orden: así
         // no hay dos caminos distintos en el código para "un colegio" y
-        // "varios colegios".
+        // "varios colegios". Se busca por el correo del enlace, no por el del
+        // responsable: ese se edita y no debe meterla en el conjunto de otro.
         if ($orden->group_id === null) {
             $orden->forceFill([
-                'group_id' => OrderGroup::paraResponsable($orden->event, $orden->responsible_email)->getKey(),
+                'group_id' => OrderGroup::paraResponsable($orden->event, $link->email)->getKey(),
             ])->save();
         }
 
@@ -788,7 +819,7 @@ class InscripcionController extends Controller
         $link = MagicLink::resolver($token);
 
         if ($link === null || $link->order === null) {
-            throw EnlaceNoUtilizable::vencido(MagicLink::porToken($token)?->event);
+            throw EnlaceNoUtilizable::paraToken($token);
         }
 
         $nivel = $link->order->nivelDeCambioDelCliente();
@@ -813,7 +844,7 @@ class InscripcionController extends Controller
         $link = MagicLink::resolver($token);
 
         if ($link === null || $link->order === null) {
-            throw EnlaceNoUtilizable::vencido(MagicLink::porToken($token)?->event);
+            throw EnlaceNoUtilizable::paraToken($token);
         }
 
         if (! $link->order->puedeEditarlaElCliente()) {

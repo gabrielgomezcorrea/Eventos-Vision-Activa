@@ -29,7 +29,11 @@
 
             <div>
                 <label for="responsible_email">Correo electrónico</label>
-                <input type="email" id="responsible_email" value="{{ $orden->responsible_email }}" disabled>
+                <input type="email" id="responsible_email" name="responsible_email" value="{{ $valores['responsible_email'] ?? $orden->responsible_email }}"
+                       autocomplete="email" inputmode="email" @if ($errores->has('responsible_email')) aria-invalid="true" @endif>
+                @if ($errores->has('responsible_email'))
+                    <div class="error-campo">{{ $errores->first('responsible_email') }}</div>
+                @endif
             </div>
             @include('publico.inscripcion._campo', ['campo' => 'responsible_phone', 'etiqueta' => 'Teléfono', 'tipoCampo' => 'tel', 'placeholder' => '56912345678', 'autocomplete' => 'tel'])
 

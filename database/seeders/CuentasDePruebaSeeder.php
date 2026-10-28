@@ -35,6 +35,8 @@ class CuentasDePruebaSeeder extends Seeder
                     'name' => $nombres[$rol->value],
                     'password' => $correo,
                     'is_active' => true,
+                    // Los avisos de cada rol, igual que al crear un usuario en el panel.
+                    ...array_fill_keys($rol->avisosPorDefecto(), true),
                 ],
             );
 

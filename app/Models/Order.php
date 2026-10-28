@@ -91,6 +91,12 @@ class Order extends Model
         return $this->belongsTo(self::class, 'parent_order_id');
     }
 
+    /** @return BelongsTo<ProgramRequest, $this> */
+    public function programRequest(): BelongsTo
+    {
+        return $this->belongsTo(ProgramRequest::class);
+    }
+
     /** @return BelongsTo<Event, $this> */
     public function event(): BelongsTo
     {
