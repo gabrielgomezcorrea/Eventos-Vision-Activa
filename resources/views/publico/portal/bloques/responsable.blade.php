@@ -3,13 +3,14 @@
     <div class="tarjeta" id="responsable">
         <p class="etiqueta-seccion">Datos de inscripción</p>
         <div class="titulo-bloque">
-            <h2>Información del responsable</h2>
+            <h2>Contacto responsable de la inscripción</h2>
             @if (filled($orden->responsible_name) && filled($orden->responsible_lastname))
                 <span class="chip chip-exito">Completado</span>
             @else
                 <span class="chip chip-error">Requerido</span>
             @endif
         </div>
+        <p class="sub">Persona con quien coordinaremos la inscripción y cualquier antecedente pendiente. No necesariamente corresponde a quien asistirá.</p>
         @if (request('guardado') === 'responsable' && $errores->isEmpty())
             <div class="aviso aviso-exito" role="status">Cambios guardados.</div>
         @endif
@@ -37,7 +38,6 @@
             </div>
             @include('publico.inscripcion._campo', ['campo' => 'responsible_phone', 'etiqueta' => 'Teléfono', 'tipoCampo' => 'tel', 'placeholder' => '56912345678', 'autocomplete' => 'tel'])
 
-            @include('publico.inscripcion._campo', ['campo' => 'responsible_institution', 'etiqueta' => 'Establecimiento', 'autocomplete' => 'organization', 'opcional' => ($valores['kind'] ?? '') === \App\Enums\OrderKind::Particular->value])
             @include('publico.inscripcion._cargo', ['campo' => 'responsible_position'])
         </div>
 

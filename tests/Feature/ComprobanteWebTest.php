@@ -184,28 +184,25 @@ class ComprobanteWebTest extends TestCase
     {
         $this->post($this->ruta('comprobante'), [
             'amount' => 90000,
-            'paid_on' => now()->toDateString(),
-            'bank_name' => 'Banco de Chile',
-            'payer_rut' => '76.086.428-1',  // dígito verificador incorrecto
+            'paid_on' => now()->addWeek()->toDateString(),
             'proof' => UploadedFile::fake()->create('c.pdf', 50, 'application/pdf'),
         ])
             ->assertOk()
-            ->assertSee('dígito verificador')
-            ->assertSee('value="Banco de Chile"', escape: false);
+            ->assertSee('no puede ser futura')
+            ->assertSee('value="90000"', escape: false);
     }
 
-    public function test_normaliza_el_rut_del_pagador(): void
+    public function test_acepta_el_comprobante_con_solo_monto_fecha_y_archivo(): void
     {
         $this->post($this->ruta('comprobante'), [
             'amount' => 90000,
             'paid_on' => now()->toDateString(),
-            'bank_name' => 'BancoEstado',
-            'payer_name' => 'Fundación Educar',
-            'payer_rut' => '76.086.428-5',
             'proof' => UploadedFile::fake()->create('c.pdf', 50, 'application/pdf'),
         ])->assertRedirect($this->ruta('portal.pago', ['comprobante' => 'recibido']));
 
-        $this->assertSame('76086428-5', $this->orden->fresh()->pagoVigente()->payer_rut);
+        $pago = $this->orden->fresh()->pagoVigente();
+        $this->assertSame(PaymentStatus::EnValidacion, $pago->status);
+        $this->assertNull($pago->payer_rut);
     }
 
     public function test_un_token_ajeno_no_permite_subir_comprobantes(): void

@@ -174,7 +174,7 @@ class InscripcionAdicionalTest extends TestCase
         $colegio = $nueva->establishments->first();
 
         $this->post(route('inscripcion.pagador.guardar', ['token' => $propio]), ['name' => 'Otra', 'rut' => '76.086.428-5'])->assertForbidden();
-        $this->post(route('inscripcion.establecimientos.agregar', ['token' => $propio]), ['name' => 'Colegio Otro', 'address' => 'x', 'commune' => 'Talca'])->assertForbidden();
+        $this->post(route('inscripcion.establecimientos.agregar', ['token' => $propio]), ['name' => 'Colegio Otro', 'region' => 'Maule'])->assertForbidden();
         $this->delete(route('inscripcion.establecimientos.quitar', ['token' => $propio, 'establishment' => $colegio->id]))->assertForbidden();
 
         $this->assertSame('Fundación', $this->original->fresh()->payerEntity->name);
@@ -241,7 +241,7 @@ class InscripcionAdicionalTest extends TestCase
 
         // A diferencia de la adicional, aquí sí se agrega colegio y pagador.
         $propio = $this->tokenDe($url);
-        $this->post(route('inscripcion.establecimientos.agregar', ['token' => $propio]), ['name' => 'Colegio Sur', 'rbd' => '54321', 'address' => 'Calle 1', 'commune' => 'Ñuñoa'])->assertRedirect();
+        $this->post(route('inscripcion.establecimientos.agregar', ['token' => $propio]), ['name' => 'Colegio Sur', 'rbd' => '54321', 'region' => 'Maule'])->assertRedirect();
         $this->post(route('inscripcion.pagador.guardar', ['token' => $propio]), ['name' => 'Otra Fundación', 'rut' => '76.086.428-5', 'address' => 'Av. Grecia 1234', 'commune' => 'Ñuñoa', 'billing_email' => 'pagos@fundacion.cl', 'phone' => '56912345678'])->assertRedirect();
         $this->assertSame(1, $nueva->establishments()->count());
         $this->assertNotNull($nueva->fresh()->payer_entity_id);

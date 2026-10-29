@@ -75,10 +75,10 @@ class RecorridoConVariosColegiosTest extends TestCase
     private function agregarDosColegiosConUnParticipanteCadaUno(): array
     {
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca',
+            'name' => 'Colegio San José', 'region' => 'Maule',
         ]);
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio Los Robles', 'address' => 'Calle 2', 'commune' => 'Talca',
+            'name' => 'Colegio Los Robles', 'region' => 'Maule',
         ]);
 
         [$sanJose, $losRobles] = $this->borrador->fresh()->establishments->pluck('id')->all();
@@ -102,13 +102,13 @@ class RecorridoConVariosColegiosTest extends TestCase
     private function agregarTresColegiosConUnParticipanteCadaUno(): array
     {
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca',
+            'name' => 'Colegio San José', 'region' => 'Maule',
         ]);
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio Los Robles', 'address' => 'Calle 2', 'commune' => 'Talca',
+            'name' => 'Colegio Los Robles', 'region' => 'Maule',
         ]);
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio Bellavista', 'address' => 'Calle 3', 'commune' => 'Talca',
+            'name' => 'Colegio Bellavista', 'region' => 'Maule',
         ]);
 
         [$sanJose, $losRobles, $bellavista] = $this->borrador->fresh()->establishments->pluck('id')->all();
@@ -163,7 +163,7 @@ class RecorridoConVariosColegiosTest extends TestCase
 
     public function test_con_un_solo_colegio_los_participantes_siguen_en_una_lista(): void
     {
-        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca']);
+        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'region' => 'Maule']);
         $sanJose = $this->borrador->fresh()->establishments->first();
         $this->post($this->ruta('participantes.agregar'), [
             'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Inspector General',
@@ -308,7 +308,7 @@ class RecorridoConVariosColegiosTest extends TestCase
     public function test_con_un_solo_colegio_no_se_crea_un_conjunto_visible_pero_la_orden_queda_agrupada(): void
     {
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca',
+            'name' => 'Colegio San José', 'region' => 'Maule',
         ]);
         $this->post($this->ruta('participantes.agregar'), [
             'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Inspector General',

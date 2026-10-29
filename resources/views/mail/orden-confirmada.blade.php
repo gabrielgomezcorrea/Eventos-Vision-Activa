@@ -13,7 +13,7 @@ Los cupos quedan reservados hasta el
 
 <x-mail::panel>
 **Número de inscripción:** {{ $orden->number }}<br>
-**Entidad pagadora:** {{ $orden->payerEntity?->name }}<br>
+**Datos de facturación:** {{ $orden->payerEntity?->name }}<br>
 **Participantes:** {{ $orden->participantesVigentes->count() }}<br>
 @if ($orden->discount_amount > 0)
 **Subtotal:** ${{ number_format($orden->subtotal, 0, ',', '.') }}<br>

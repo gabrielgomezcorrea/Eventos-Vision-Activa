@@ -258,9 +258,6 @@ class InscripcionController extends Controller
     {
         [$orden] = $this->resolver($token);
 
-        // A private enrollment may come from no institution; everything else is required.
-        $particular = $request->input('kind') === OrderKind::Particular->value;
-
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'responsible_name' => ReglasDeContacto::nombres(),
             'responsible_lastname' => ReglasDeContacto::apellidos(),
@@ -268,7 +265,6 @@ class InscripcionController extends Controller
             'responsible_position_otro' => ReglasDeContacto::cargoOtro('responsible_position'),
             'responsible_email' => ReglasDeContacto::correo(),
             'responsible_phone' => ReglasDeContacto::telefono(),
-            'responsible_institution' => ReglasDeContacto::establecimiento(! $particular),
             'kind' => ['required', Rule::in(array_map(fn (OrderKind $tipo) => $tipo->value, OrderKind::elegiblesPorElCliente()))],
         ], [], [
             'responsible_name' => 'nombre',
@@ -277,7 +273,6 @@ class InscripcionController extends Controller
             'responsible_position_otro' => 'cargo',
             'responsible_email' => 'correo',
             'responsible_phone' => 'teléfono',
-            'responsible_institution' => 'institución',
             'kind' => 'tipo de inscripción',
         ]);
 
@@ -291,7 +286,6 @@ class InscripcionController extends Controller
             'responsible_position' => 'cargo',
             'responsible_email' => 'correo',
             'responsible_phone' => 'telefono',
-            'responsible_institution' => 'nombre',
         ]);
 
         // El correo no va en el `update`: cambia en todo el conjunto, con auditoría.
@@ -329,14 +323,16 @@ class InscripcionController extends Controller
             'address' => ReglasDeContacto::texto('Av. Grecia 1234'),
             'commune' => ReglasDeContacto::comuna(),
             'billing_email' => ReglasDeContacto::correo(),
-            'phone' => ReglasDeContacto::telefono(),
+            'business_activity' => ReglasDeContacto::texto('Educación', false),
+            'billing_reference' => ['nullable', 'string', 'max:255'],
         ], [], [
             'name' => 'nombre o razón social',
             'rut' => 'RUT',
             'address' => 'dirección',
             'commune' => 'comuna',
-            'billing_email' => 'correo de facturación',
-            'phone' => 'teléfono',
+            'billing_email' => 'correo receptor de la factura',
+            'business_activity' => 'giro',
+            'billing_reference' => 'referencia administrativa',
         ]);
 
         if ($validator->fails()) {
@@ -348,7 +344,8 @@ class InscripcionController extends Controller
             'address' => 'texto',
             'commune' => 'comuna',
             'billing_email' => 'correo',
-            'phone' => 'telefono',
+            'business_activity' => 'texto',
+            'billing_reference' => 'texto',
         ]);
         $datos['rut'] = Rut::normalizar($datos['rut'] ?? null);
 
@@ -394,13 +391,15 @@ class InscripcionController extends Controller
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'name' => ReglasDeContacto::establecimiento(),
             'rbd' => ReglasDeContacto::rbd(),
-            'address' => ReglasDeContacto::texto('Av. Grecia 1234'),
-            'commune' => ReglasDeContacto::comuna(),
+            'region' => ['required', 'string', Rule::in(array_keys(config('chile')))],
+            'commune' => ReglasDeContacto::comuna(false),
         ], [
             'rbd.regex' => 'Escribe el RBD con números, como 12345-6.',
+            'region.required' => 'Elige la región del establecimiento.',
+            'region.in' => 'Elige una región de la lista.',
         ], [
             'name' => 'nombre del establecimiento',
-            'address' => 'dirección',
+            'region' => 'región',
             'commune' => 'comuna',
         ]);
 
@@ -411,7 +410,6 @@ class InscripcionController extends Controller
         $orden->establishments()->attach(Establishment::create(ReglasDeContacto::normalizar($validator->validated(), [
             'name' => 'nombre',
             'rbd' => 'texto',
-            'address' => 'texto',
             'commune' => 'comuna',
         ])));
 
@@ -793,25 +791,16 @@ class InscripcionController extends Controller
         $validator = Validator::make(['proof' => $archivo] + $request->except('proof'), [
             'amount' => ['required', 'integer', 'min:1', 'max:'.max(1, $saldo)],
             'paid_on' => ['required', 'date', 'before_or_equal:today'],
-            'bank_name' => ['required', 'string', 'max:255'],
-            'payer_name' => ['required', 'string', 'max:255'],
-            'payer_rut' => ['required', 'string', 'max:20', new RutValido],
-            'notes' => ['nullable', 'string', 'max:2000'],
-            'billing_notes' => ['nullable', 'string', 'max:2000'],
-            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
         ], [
             'proof.required' => 'Adjunta el comprobante de la transferencia.',
             'proof.mimes' => 'El comprobante debe ser un PDF o una imagen.',
-            'proof.max' => 'El archivo no puede superar los 10 MB.',
+            'proof.max' => 'El archivo no puede superar los 5 MB.',
             'paid_on.before_or_equal' => 'La fecha de transferencia no puede ser futura.',
             'amount.max' => 'El monto no puede superar el saldo pendiente de $'.number_format($saldo, 0, ',', '.').'.',
         ], [
             'amount' => 'monto',
             'paid_on' => 'fecha de transferencia',
-            'bank_name' => 'banco de origen',
-            'payer_name' => 'nombre del pagador',
-            'payer_rut' => 'RUT del pagador',
-            'billing_notes' => 'observaciones para facturación',
             'proof' => 'comprobante',
         ]);
 
@@ -829,7 +818,6 @@ class InscripcionController extends Controller
 
         $datos = $validator->validated();
         unset($datos['proof']);
-        $datos['payer_rut'] = Rut::normalizar($datos['payer_rut'] ?? null);
         $datos['reference'] = $orden->number;
 
         try {

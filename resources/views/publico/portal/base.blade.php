@@ -5,7 +5,7 @@
 --}}
 @extends('publico.layout')
 @section('titulo', 'Mi inscripción')
-@section('subtitulo', $varios ? $colegios->count().' establecimientos' : ($orden->number ? 'Inscripción '.$orden->number : 'Completa tu inscripción'))
+@section('subtitulo', $varios ? $colegios->count().' establecimientos' : ($orden->number ? 'Inscripción '.$orden->number : 'Inscripción a '.$event->name))
 @section('envoltura', 'ancha')
 
 @section('contenido')

@@ -124,7 +124,7 @@
                    border-radius:50%;background:var(--info-suave);color:var(--primario);
                    font-weight:700;font-size:.85rem;flex-shrink:0}
         .banner{display:block;width:100%;height:auto;border-radius:10px;margin-bottom:20px}
-        .cabecera{margin-bottom:20px}
+        .cabecera{margin-bottom:20px;text-align:center}
         .cabecera h1{font-size:1.3rem;margin:0 0 4px}
         .cabecera p{margin:0;color:var(--texto-suave);font-size:.9rem}
         .pasos{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 22px;padding:0;list-style:none;font-size:.82rem}
@@ -185,6 +185,12 @@
         .total{display:flex;justify-content:space-between;align-items:baseline;
                padding:14px 0;border-top:2px solid var(--borde);margin-top:8px;font-weight:600}
         .total .monto{font-size:1.35rem;color:var(--primario)}
+        .portal-banner img{cursor:zoom-in}
+        .visor{position:fixed;inset:0;z-index:50;background:rgba(15,12,25,.82);display:flex;align-items:center;justify-content:center;padding:24px}
+        .visor[hidden]{display:none}
+        .visor img{max-width:100%;max-height:100%;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);background:#fff}
+        .visor-x{position:absolute;top:14px;right:18px;width:48px;height:48px;border-radius:50%;border:0;background:#fff;color:#1F2937;
+                 font-size:2rem;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.4)}
         .chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.78rem;
               background:var(--info-suave);color:var(--primario)}
     </style>
@@ -403,6 +409,25 @@
         });
     });
 })();
+</script>
+    <div id="visor" class="visor" hidden role="dialog" aria-modal="true" aria-label="Imagen del evento">
+        <button type="button" class="visor-x" aria-label="Cerrar imagen">×</button>
+        <img src="" alt="{{ $event->name }}">
+    </div>
+<script>
+        (function () {
+            var visor = document.getElementById('visor');
+            var banner = document.querySelector('.portal-banner img');
+            if (visor && banner) {
+                var abrir = function () { visor.querySelector('img').src = banner.src; visor.hidden = false; };
+                var cerrar = function () { visor.hidden = true; };
+                banner.addEventListener('click', abrir);
+                visor.addEventListener('click', function (e) {
+                    if (e.target === visor || e.target.classList.contains('visor-x')) { cerrar(); }
+                });
+                document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cerrar(); } });
+            }
+        })();
 </script>
 </body>
 </html>

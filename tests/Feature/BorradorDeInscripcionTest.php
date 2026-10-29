@@ -93,22 +93,28 @@ class BorradorDeInscripcionTest extends TestCase
         $this->post($this->ruta('pagador.guardar'), [
             'name' => 'Fundación Educar', 'rut' => '76.086.428-5',
             'address' => 'Av. Grecia 1234', 'commune' => 'nunoa', 'billing_email' => 'Pagos@Fundacion.cl',
-            'phone' => '+56 9 1234 5678',
+            'business_activity' => 'Educación', 'billing_reference' => 'OC 4521',
         ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'pagador']));
 
         $pagador = $this->orden->fresh()->payerEntity;
         $this->assertSame('Ñuñoa', $pagador->commune);
-        $this->assertSame('56912345678', $pagador->phone);
+        $this->assertSame('Educación', $pagador->business_activity);
+        $this->assertSame('OC 4521', $pagador->billing_reference);
         $this->assertSame('pagos@fundacion.cl', $pagador->billing_email);
     }
 
-    public function test_una_comuna_fuera_de_la_lista_no_bloquea(): void
+    public function test_el_establecimiento_pide_region_y_la_guarda(): void
     {
-        $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'villa  alegre norte',
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
+        $respuesta = $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José']);
+        $respuesta->assertOk()->assertSee('Elige la región del establecimiento.')->assertSee('Colegio San José');
+        $this->assertSame(0, $this->orden->fresh()->establishments()->count());
 
-        $this->assertSame('Villa Alegre Norte', $this->orden->fresh()->establishments()->sole()->commune);
+        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'region' => 'Maule', 'commune' => 'talca'])
+            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
+
+        $colegio = $this->orden->fresh()->establishments()->sole();
+        $this->assertSame('Maule', $colegio->region);
+        $this->assertSame('Talca', $colegio->commune);
     }
 
     public function test_el_responsable_puede_agregarse_como_participante(): void
@@ -159,8 +165,8 @@ class BorradorDeInscripcionTest extends TestCase
 
     public function test_quitar_un_establecimiento_se_lleva_a_sus_participantes_y_deja_los_de_los_otros(): void
     {
-        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca']);
-        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio Norte', 'address' => 'Calle 2', 'commune' => 'Talca']);
+        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio San José', 'region' => 'Maule']);
+        $this->post($this->ruta('establecimientos.agregar'), ['name' => 'Colegio Norte', 'region' => 'Maule']);
         [$sanJose, $norte] = $this->orden->fresh()->establishments->all();
 
         foreach ([['Carlos', $sanJose], ['Marta', $norte]] as [$nombre, $colegio]) {
@@ -238,7 +244,7 @@ class BorradorDeInscripcionTest extends TestCase
     public function test_con_un_solo_establecimiento_no_se_pregunta_por_el_colegio(): void
     {
         $this->post($this->ruta('establecimientos.agregar'), [
-            'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca',
+            'name' => 'Colegio San José', 'region' => 'Maule',
         ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
 
         // Each participant belongs to that establishment without being asked.
@@ -255,7 +261,7 @@ class BorradorDeInscripcionTest extends TestCase
 
     public function test_el_borrador_acepta_mas_de_un_colegio(): void
     {
-        $datos = ['address' => 'Calle 1', 'commune' => 'Talca'];
+        $datos = ['region' => 'Maule'];
 
         $this->post($this->ruta('establecimientos.agregar'), [...$datos, 'name' => 'Colegio San José'])
             ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
@@ -271,8 +277,8 @@ class BorradorDeInscripcionTest extends TestCase
 
     public function test_con_dos_colegios_el_participante_exige_elegir_uno(): void
     {
-        $sanJose = $this->orden->establishments()->create(['name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca']);
-        $losRobles = $this->orden->establishments()->create(['name' => 'Colegio Los Robles', 'address' => 'Calle 2', 'commune' => 'Talca']);
+        $sanJose = $this->orden->establishments()->create(['name' => 'Colegio San José', 'region' => 'Maule']);
+        $losRobles = $this->orden->establishments()->create(['name' => 'Colegio Los Robles', 'region' => 'Maule']);
 
         // Sin elegir colegio, no se agrega: la orden se devuelve renderizada
         // con el error, sin sesión ni mensajes flash.

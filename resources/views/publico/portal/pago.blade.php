@@ -99,7 +99,12 @@
 
 @if ($muestraTransferencia)
     <div class="tarjeta" id="transferencia">
-        <h3 class="paso">1. Transfiere {{ ! $borrador && $orden->pagado() > 0 ? 'el saldo' : 'el total' }}{{ $deColegio }}</h3>
+        <h3 class="paso">1. Datos para transferir</h3>
+        @php $conAbonos = ! $borrador && $orden->pagado() > 0; @endphp
+        <p class="sub">
+            Transfiere {{ $conAbonos ? 'el saldo' : 'el total' }}{{ $deColegio !== '' ? ' de '.$orden->establishments->first()?->name : '' }}:
+            <strong>{{ ! $borrador ? '$'.number_format($conAbonos ? $orden->saldo() : $orden->total, 0, ',', '.') : ($sinParticipantes ? '$ -' : '$'.number_format($total, 0, ',', '.')) }}</strong>
+        </p>
         @if (! $borrador && $orden->pagado() > 0)
             <table style="margin-bottom:14px">
                 <tbody>
@@ -127,7 +132,7 @@
 
         <form method="POST" action="{{ $admiteComprobante ? route('inscripcion.comprobante', $parametros) : '#' }}"
               enctype="multipart/form-data" novalidate id="comprobante" data-validar-comprobante data-saldo="{{ $borrador ? 0 : $orden->saldo() }}">
-            <h3 class="paso">2. Sube el comprobante{{ $deColegio }}</h3>
+            <h3 class="paso">2. Sube el comprobante</h3>
             @php
                 // Con un comprobante en revisión no hay nada que llenar: se muestra
                 // cuál está en revisión y el formulario vuelve cuando Contabilidad lo revisa.
@@ -143,8 +148,6 @@
                     @endif
                 </div>
             @else
-            <p class="sub">Aceptamos PDF o imagen, hasta 10 MB.</p>
-
             <fieldset @disabled(! $borrador && ! $admiteComprobante) style="border:0;margin:0;padding:0;min-width:0">
                 <div class="rejilla">
                     <div>
@@ -176,34 +179,6 @@
                     </div>
 
                     <div>
-                        <label for="bank_name-{{ $orden->id }}">Banco de origen</label>
-                        <input type="text" id="bank_name-{{ $orden->id }}" name="bank_name" value="{{ $valores['bank_name'] ?? '' }}"
-                               @if ($errores->has('bank_name')) aria-invalid="true" @endif>
-                        @if ($errores->has('bank_name'))
-                            <div class="error-campo">{{ $errores->first('bank_name') }}</div>
-                        @endif
-                    </div>
-
-                    <div>
-                        <label for="payer_name-{{ $orden->id }}">Nombre de quien pagó</label>
-                        <input type="text" id="payer_name-{{ $orden->id }}" name="payer_name" value="{{ $valores['payer_name'] ?? '' }}"
-                               @if ($errores->has('payer_name')) aria-invalid="true" @endif>
-                        @if ($errores->has('payer_name'))
-                            <div class="error-campo">{{ $errores->first('payer_name') }}</div>
-                        @endif
-                    </div>
-
-                    <div>
-                        <label for="payer_rut-{{ $orden->id }}">RUT de quien pagó</label>
-                        <input type="text" id="payer_rut-{{ $orden->id }}" name="payer_rut" value="{{ $valores['payer_rut'] ?? '' }}"
-                               data-rut maxlength="12" autocomplete="off" placeholder="12.345.678-9"
-                               @if ($errores->has('payer_rut')) aria-invalid="true" @endif>
-                        @if ($errores->has('payer_rut'))
-                            <div class="error-campo">{{ $errores->first('payer_rut') }}</div>
-                        @endif
-                    </div>
-
-                    <div>
                         <label for="proof-{{ $orden->id }}">Comprobante</label>
                         @if (filled($valores['proof_guardado'] ?? null))
                             {{-- Ya lo había subido: queda guardado y no se pide de nuevo. --}}
@@ -211,22 +186,13 @@
                             <div class="ayuda" style="margin:0 0 6px">{{ $valores['proof_nombre'] ?? 'comprobante' }}</div>
                         @endif
                         <input type="file" id="proof-{{ $orden->id }}" name="proof" accept=".pdf,.jpg,.jpeg,.png,.webp"
-                               data-max-mb="10"
+                               data-max-mb="5"
                                @if ($errores->has('proof')) aria-invalid="true" @endif>
                         @if ($errores->has('proof'))
                             <div class="error-campo">{{ $errores->first('proof') }}</div>
+                        @else
+                            <div class="ayuda">PDF, JPG, PNG o WEBP · máx. 5 MB</div>
                         @endif
-                    </div>
-
-                    <div class="ancho">
-                        <label for="notes-{{ $orden->id }}">Observaciones <span class="opcional">(opcional)</span></label>
-                        <input type="text" id="notes-{{ $orden->id }}" name="notes" value="{{ $valores['notes'] ?? '' }}">
-                    </div>
-
-                    <div class="ancho">
-                        <label for="billing_notes-{{ $orden->id }}">Observaciones para la factura <span class="opcional">(opcional)</span></label>
-                        <input type="text" id="billing_notes-{{ $orden->id }}" name="billing_notes" value="{{ $valores['billing_notes'] ?? '' }}"
-                               placeholder="Por ejemplo: emitir a nombre de la fundación">
                     </div>
                 </div>
             </fieldset>
@@ -282,7 +248,7 @@
     <table>
         <tbody>
             <tr><td style="width:38%;color:var(--texto-suave)">Responsable</td><td>{{ $orden->responsableNombreCompleto() ?: '-' }}</td></tr>
-            <tr><td style="color:var(--texto-suave)">Entidad pagadora</td><td>{{ $orden->payerEntity?->name ?: '-' }}</td></tr>
+            <tr><td style="color:var(--texto-suave)">Datos de facturación</td><td>{{ $orden->payerEntity?->name ?: '-' }}</td></tr>
             <tr><td style="color:var(--texto-suave)">Participantes</td><td>{{ $sinParticipantes ? '-' : $orden->participantesVigentes->count() }}</td></tr>
         </tbody>
     </table>
@@ -336,18 +302,6 @@
     var form = document.querySelector('[data-validar-comprobante]');
     if (! form) { return; }
 
-    function rutValido(valor) {
-        var limpio = valor.replace(/[^0-9kK]/g, '').toUpperCase();
-        if (limpio.length < 2) { return false; }
-        var cuerpo = limpio.slice(0, -1), suma = 0, factor = 2;
-        for (var i = cuerpo.length - 1; i >= 0; i--) {
-            suma += Number(cuerpo[i]) * factor;
-            factor = factor === 7 ? 2 : factor + 1;
-        }
-        var resto = 11 - (suma % 11);
-        return limpio.slice(-1) === (resto === 11 ? '0' : resto === 10 ? 'K' : String(resto));
-    }
-
     function campo(nombre) { return form.querySelector('[name="' + nombre + '"]'); }
 
     function marcar(input, mensaje) {
@@ -366,17 +320,13 @@
     form.addEventListener('submit', function (evento) {
         var saldo = Number(form.dataset.saldo || 0);
         var hoy = new Date().toISOString().slice(0, 10);
-        var monto = campo('amount'), fecha = campo('paid_on'), banco = campo('bank_name');
-        var nombre = campo('payer_name'), rut = campo('payer_rut'), archivo = campo('proof');
+        var monto = campo('amount'), fecha = campo('paid_on'), archivo = campo('proof');
         var guardado = campo('proof_guardado');
         var montoNumero = Number(String(monto.value).replace(/\D/g, ''));
 
         var errores = [
             [monto, ! montoNumero ? 'Escribe el monto transferido.' : (saldo && montoNumero > saldo ? 'El monto no puede superar el saldo pendiente.' : '')],
             [fecha, ! fecha.value ? 'Indica la fecha de la transferencia.' : (fecha.value > hoy ? 'La fecha de transferencia no puede ser futura.' : '')],
-            [banco, ! banco.value.trim() ? 'Escribe el banco de origen.' : ''],
-            [nombre, ! nombre.value.trim() ? 'Escribe el nombre de quien pagó.' : ''],
-            [rut, ! rut.value.trim() ? 'Escribe el RUT de quien pagó.' : (! rutValido(rut.value) ? 'Este RUT no es válido. Revisa el dígito después del guion.' : '')],
             [archivo, ! (archivo.files && archivo.files.length) && ! guardado ? 'Adjunta el comprobante de la transferencia.' : ''],
         ];
 

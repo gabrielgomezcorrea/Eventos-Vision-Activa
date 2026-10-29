@@ -21,12 +21,6 @@
                               background:#2E7D32;color:#fff;font-size:1.4rem;font-weight:700}
         .entrada .error-campo{font-size:1.05rem;font-weight:600;color:#B42318;background:#FDECEC;border-radius:8px;padding:10px 12px;margin-top:10px}
         .separador{border:0;border-top:2px solid #C9CDD9;margin:28px 0}
-        .portal-banner img{cursor:zoom-in}
-        .visor{position:fixed;inset:0;z-index:50;background:rgba(15,12,25,.82);display:flex;align-items:center;justify-content:center;padding:24px}
-        .visor[hidden]{display:none}
-        .visor img{max-width:100%;max-height:100%;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);background:#fff}
-        .visor-x{position:absolute;top:14px;right:18px;width:48px;height:48px;border-radius:50%;border:0;background:#fff;color:#1F2937;
-                 font-size:2rem;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.4)}
         .ayuda-card h2{font-size:1.15rem;margin-bottom:12px}
         .ayuda-card p{margin:0 0 10px;font-size:1rem;line-height:1.4;word-break:break-word}
         .ayuda-card .ayuda-nombre{font-weight:700;font-size:1.05rem}
@@ -98,24 +92,7 @@
         </div>
     @endif
 
-    <div id="visor" class="visor" hidden role="dialog" aria-modal="true" aria-label="Imagen del evento">
-        <button type="button" class="visor-x" aria-label="Cerrar imagen">×</button>
-        <img src="" alt="{{ $event->name }}">
-    </div>
     <script>
-        (function () {
-            var visor = document.getElementById('visor');
-            var banner = document.querySelector('.portal-banner img');
-            if (visor && banner) {
-                var abrir = function () { visor.querySelector('img').src = banner.src; visor.hidden = false; };
-                var cerrar = function () { visor.hidden = true; };
-                banner.addEventListener('click', abrir);
-                visor.addEventListener('click', function (e) {
-                    if (e.target === visor || e.target.classList.contains('visor-x')) { cerrar(); }
-                });
-                document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cerrar(); } });
-            }
-        })();
         (function () {
             var form = document.getElementById('form-correo');
             if (!form) { return; }

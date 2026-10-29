@@ -33,6 +33,9 @@ class ProgramFormField
         'Administrativo',
         'Docente',
         'Particular',
+        'Administración',
+        'Secretaría',
+        'Coordinación SEP',
         self::CARGO_OTRO,
     ];
 

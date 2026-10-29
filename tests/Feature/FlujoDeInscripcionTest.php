@@ -167,7 +167,7 @@ class FlujoDeInscripcionTest extends TestCase
         // 2. Establecimiento
 
         $this->post(route('inscripcion.establecimientos.agregar', ['token' => $token]), [
-            'name' => 'Colegio San José', 'rbd' => '12345', 'address' => 'Calle 1', 'commune' => 'Ñuñoa',
+            'name' => 'Colegio San José', 'rbd' => '12345', 'region' => 'Maule',
         ])->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'guardado' => 'establecimientos']));
 
         $orden = Order::sole();

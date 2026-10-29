@@ -12,13 +12,15 @@
 @endphp
 <div class="tarjeta" id="participantes">
     <div class="titulo-bloque">
-        <h2>Participantes{{ ($varios ?? false) && ! $orden->esBorrador() ? ' - '.$orden->establishments->first()?->name : '' }}</h2>
+        <h2>Personas que asistirán{{ ($varios ?? false) && ! $orden->esBorrador() ? ' - '.$orden->establishments->first()?->name : '' }}</h2>
         @if ($orden->participants->isNotEmpty())
             <span class="chip chip-exito">{{ $orden->participants->count() }} {{ $orden->participants->count() === 1 ? 'inscrito' : 'inscritos' }}</span>
         @else
             <span class="chip chip-error">Requerido</span>
         @endif
     </div>
+
+    <p class="sub">Registre a cada participante y seleccione las jornadas a las que asistirá. Revise sus nombres y apellidos, ya que se utilizarán en su identificación y certificado.</p>
 
     @if (request('guardado') === 'participantes' && $errores->isEmpty())
         <div class="aviso aviso-exito" role="status">Cambios guardados.</div>
@@ -179,7 +181,7 @@
                     </div>
 
                     <div class="ancho">
-                        <label for="access_type_id">Tipo de acceso</label>
+                        <label for="access_type_id">Jornadas en que participará</label>
                         <select id="access_type_id" name="access_type_id"
                                 @if ($errores->has('access_type_id')) aria-invalid="true" @endif>
                             <option value="">Selecciona</option>
@@ -196,7 +198,7 @@
                     </div>
                 </div>
                 <div class="acciones">
-                    <button type="submit" class="btn btn-primario" data-enviando-texto="Guardando…">Guardar participante</button>
+                    <button type="submit" class="btn btn-primario" data-enviando-texto="Agregando…">Agregar participante</button>
                 </div>
             </form>
         </details>

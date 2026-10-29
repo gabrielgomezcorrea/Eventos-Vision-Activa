@@ -364,6 +364,8 @@ class InscripcionController extends Controller
                     'rut' => $order->payerEntity->rut,
                     'direccion' => $order->payerEntity->address,
                     'correo' => $order->payerEntity->billing_email,
+                    'giro' => $order->payerEntity->business_activity,
+                    'referencia' => $order->payerEntity->billing_reference,
                 ],
             ],
             'participantes' => $order->participants->map(fn (Participant $p): array => [
@@ -512,7 +514,7 @@ class InscripcionController extends Controller
         try {
             $registrar(
                 orden: $order,
-                datos: [...Arr::except($request->validated(), 'proof'), 'payer_rut' => Rut::normalizar($request->validated('payer_rut'))],
+                datos: Arr::except($request->validated(), 'proof'),
                 archivo: $request->file('proof'),
                 usuario: $request->user(),
             );

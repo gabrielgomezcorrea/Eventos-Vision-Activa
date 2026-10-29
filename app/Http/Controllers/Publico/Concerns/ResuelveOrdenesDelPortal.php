@@ -236,7 +236,8 @@ trait ResuelveOrdenesDelPortal
             'address' => $pagador?->address,
             'commune' => $pagador?->commune,
             'billing_email' => $pagador->billing_email ?? $orden->responsible_email,
-            'phone' => $pagador->phone ?? $orden->responsible_phone,
+            'business_activity' => $pagador?->business_activity,
+            'billing_reference' => $pagador?->billing_reference,
         ];
     }
 

@@ -29,7 +29,7 @@ enum OrderKind: string
     {
         return match ($this) {
             self::Institucional => 'Institucional',
-            self::Particular => 'Particular',
+            self::Particular => 'Personal (persona natural)',
             self::Invitado => 'Invitado especial',
         };
     }

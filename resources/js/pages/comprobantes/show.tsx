@@ -343,13 +343,21 @@ export default function ComprobanteShow({
                                 <Dato etiqueta="Fecha de transferencia">
                                     {pago.transferido}
                                 </Dato>
-                                <Dato etiqueta="Banco de origen">
-                                    {pago.banco}
-                                </Dato>
-                                <Dato etiqueta="Pagador">{pago.pagador}</Dato>
-                                <Dato etiqueta="RUT del pagador">
-                                    {pago.rut_pagador}
-                                </Dato>
+                                {pago.banco && (
+                                    <Dato etiqueta="Banco de origen">
+                                        {pago.banco}
+                                    </Dato>
+                                )}
+                                {pago.pagador && (
+                                    <Dato etiqueta="Pagador">
+                                        {pago.pagador}
+                                    </Dato>
+                                )}
+                                {pago.rut_pagador && (
+                                    <Dato etiqueta="RUT del pagador">
+                                        {pago.rut_pagador}
+                                    </Dato>
+                                )}
                                 <Dato etiqueta="Informado por">
                                     {pago.informado_por && (
                                         <>
@@ -362,12 +370,14 @@ export default function ComprobanteShow({
                                         </>
                                     )}
                                 </Dato>
-                                <Dato
-                                    etiqueta="Observaciones del cliente"
-                                    ancho
-                                >
-                                    {pago.notas}
-                                </Dato>
+                                {pago.notas && (
+                                    <Dato
+                                        etiqueta="Observaciones del cliente"
+                                        ancho
+                                    >
+                                        {pago.notas}
+                                    </Dato>
+                                )}
                             </Datos>
                         </SeccionFicha>
 
@@ -394,7 +404,7 @@ export default function ComprobanteShow({
                                 <Dato etiqueta="Participantes">
                                     {orden.participantes}
                                 </Dato>
-                                <Dato etiqueta="Entidad pagadora">
+                                <Dato etiqueta="Datos de facturación">
                                     {orden.entidad}
                                 </Dato>
                                 <Dato etiqueta="RUT">{orden.rut_entidad}</Dato>

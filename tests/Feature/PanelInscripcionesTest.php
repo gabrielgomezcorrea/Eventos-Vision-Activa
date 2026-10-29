@@ -78,9 +78,6 @@ class PanelInscripcionesTest extends TestCase
         return [
             'amount' => 90000,
             'paid_on' => now()->toDateString(),
-            'bank_name' => 'BancoEstado',
-            'payer_name' => 'Fundación Educar',
-            'payer_rut' => '76.086.428-5',
             'proof' => UploadedFile::fake()->create('transferencia.pdf', 100, 'application/pdf'),
         ];
     }

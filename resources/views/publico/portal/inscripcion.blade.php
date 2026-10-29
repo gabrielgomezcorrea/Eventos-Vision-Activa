@@ -6,6 +6,8 @@
          por su cuenta. Un error vuelve en su bloque sin borrar los otros. --}}
     @include('publico.inscripcion._comunas')
 
+    <div class="aviso aviso-info" role="note">Registre a los participantes y complete los datos de facturación. Puede realizar este proceso aunque usted no asista al evento. Antes de continuar al pago, podrá revisar las jornadas seleccionadas y el total.</div>
+
     @include('publico.portal.bloques.responsable', ['valores' => $valoresPorBloque['responsable'], 'errores' => $erroresPorBloque['responsable']])
     @include('publico.portal.bloques.establecimientos', ['valores' => $valoresPorBloque['establecimientos'], 'errores' => $erroresPorBloque['establecimientos']])
     @include('publico.portal.bloques.participantes', ['valores' => $valoresPorBloque['participantes'], 'errores' => $erroresPorBloque['participantes']])
@@ -16,7 +18,8 @@
 
     <div class="tarjeta" id="responsable">
         <p class="etiqueta-seccion">Datos de inscripción</p>
-        <h2 style="margin-bottom:16px">Información del responsable</h2>
+        <h2 style="margin-bottom:8px">Contacto responsable de la inscripción</h2>
+        <p class="sub">Persona con quien coordinaremos la inscripción y cualquier antecedente pendiente. No necesariamente corresponde a quien asistirá.</p>
         @if (request('guardado') === 'responsable' && $erroresPorBloque['responsable']->isEmpty())
             <div class="aviso aviso-exito" role="status">Cambios guardados.</div>
         @endif
@@ -40,10 +43,6 @@
                         <div class="ayuda">Para cambiar el correo, escríbenos.</div>
                     </div>
                     @include('publico.inscripcion._campo', ['valores' => $valoresResp, 'errores' => $erroresResp, 'prefijo' => 'corregir_', 'campo' => 'responsible_phone', 'etiqueta' => 'Teléfono', 'tipoCampo' => 'tel', 'placeholder' => '56912345678', 'autocomplete' => 'tel'])
-                    <div>
-                        <label for="corregir_establecimiento">Establecimiento</label>
-                        <input type="text" id="corregir_establecimiento" value="{{ $orden->establishments->pluck('name')->implode(', ') ?: $orden->responsible_institution }}" disabled>
-                    </div>
                     @include('publico.inscripcion._cargo', ['valores' => $valoresResp, 'errores' => $erroresResp, 'campo' => 'responsible_position'])
                 </div>
                 <div class="acciones">
@@ -56,7 +55,6 @@
                     <tr><td style="width:38%;color:var(--texto-suave)">Nombre</td><td>{{ $orden->responsableNombreCompleto() }}</td></tr>
                     <tr><td style="color:var(--texto-suave)">Correo</td><td>{{ $orden->responsible_email }}</td></tr>
                     <tr><td style="color:var(--texto-suave)">Teléfono</td><td>{{ $orden->responsible_phone ?: '—' }}</td></tr>
-                    <tr><td style="color:var(--texto-suave)">Establecimiento</td><td>{{ $orden->establishments->pluck('name')->implode(', ') ?: '—' }}</td></tr>
                     <tr><td style="color:var(--texto-suave)">Cargo</td><td>{{ $orden->responsible_position ?: '—' }}</td></tr>
                 </tbody>
             </table>
@@ -72,7 +70,7 @@
         @include('publico.portal.bloques.pagador', ['valores' => $valoresPorBloque['pagador'], 'errores' => $erroresPorBloque['pagador']])
     @else
         <div class="tarjeta" id="participantes">
-            <h2 style="margin-bottom:8px">Participantes{{ $varios ? ' - '.$orden->establishments->first()?->name : '' }}</h2>
+            <h2 style="margin-bottom:8px">Personas que asistirán{{ $varios ? ' - '.$orden->establishments->first()?->name : '' }}</h2>
             @if ($erroresPorBloque['participantes']->isNotEmpty())
                 <div class="aviso aviso-error">{{ $erroresPorBloque['participantes']->first() }}</div>
             @endif

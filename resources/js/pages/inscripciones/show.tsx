@@ -124,6 +124,8 @@ type Props = {
             rut: string | null;
             direccion: string | null;
             correo: string | null;
+            giro: string | null;
+            referencia: string | null;
         } | null;
     };
     participantes: Participante[];
@@ -252,19 +254,11 @@ function CargarComprobante({
     const form = useForm<{
         amount: string;
         paid_on: string;
-        bank_name: string;
-        payer_name: string;
-        payer_rut: string;
         proof: File | null;
-        notes: string;
     }>({
         amount: String(total),
         paid_on: '',
-        bank_name: '',
-        payer_name: '',
-        payer_rut: '',
         proof: null,
-        notes: '',
     });
 
     function enviar(e: FormEvent) {
@@ -336,44 +330,7 @@ function CargarComprobante({
                 />
             </Campo>
             <Campo
-                label="Banco de origen"
-                htmlFor="bank_name"
-                error={form.errors.bank_name}
-            >
-                <Input
-                    id="bank_name"
-                    required
-                    value={form.data.bank_name}
-                    onChange={(e) => form.setData('bank_name', e.target.value)}
-                />
-            </Campo>
-            <Campo
-                label="Nombre de quien pagó"
-                htmlFor="payer_name"
-                error={form.errors.payer_name}
-            >
-                <Input
-                    id="payer_name"
-                    required
-                    value={form.data.payer_name}
-                    onChange={(e) => form.setData('payer_name', e.target.value)}
-                />
-            </Campo>
-            <Campo
-                label="RUT de quien pagó"
-                htmlFor="payer_rut"
-                error={form.errors.payer_rut}
-            >
-                <Input
-                    id="payer_rut"
-                    required
-                    placeholder="12.345.678-9"
-                    value={form.data.payer_rut}
-                    onChange={(e) => form.setData('payer_rut', e.target.value)}
-                />
-            </Campo>
-            <Campo
-                label="Comprobante (PDF o imagen, máximo 10 MB)"
+                label="Comprobante (PDF, JPG, PNG o WEBP, máximo 5 MB)"
                 htmlFor="proof"
                 error={errorArchivo ?? form.errors.proof}
             >
@@ -385,11 +342,11 @@ function CargarComprobante({
                     onChange={(e) => {
                         const archivo = e.target.files?.[0] ?? null;
                         const muyGrande =
-                            archivo !== null && archivo.size > 10 * 1024 * 1024;
+                            archivo !== null && archivo.size > 5 * 1024 * 1024;
 
                         setErrorArchivo(
                             muyGrande
-                                ? 'El comprobante no puede pesar más de 10 MB.'
+                                ? 'El comprobante no puede pesar más de 5 MB.'
                                 : null,
                         );
                         form.setData('proof', muyGrande ? null : archivo);
@@ -398,18 +355,6 @@ function CargarComprobante({
                             e.target.value = '';
                         }
                     }}
-                />
-            </Campo>
-            <Campo
-                label="Observaciones"
-                htmlFor="notes"
-                error={form.errors.notes}
-            >
-                <Textarea
-                    id="notes"
-                    rows={2}
-                    value={form.data.notes}
-                    onChange={(e) => form.setData('notes', e.target.value)}
                 />
             </Campo>
         </Panel>
@@ -1417,10 +1362,10 @@ export default function InscripcionShow({
                         </Datos>
                     </SeccionFicha>
 
-                    <SeccionFicha titulo="Entidad pagadora">
+                    <SeccionFicha titulo="Datos de facturación">
                         {orden.entidad === null ? (
                             <p className="text-muted-foreground text-sm">
-                                Sin entidad pagadora.
+                                Sin datos de facturación.
                             </p>
                         ) : (
                             <Datos>
@@ -1428,12 +1373,22 @@ export default function InscripcionShow({
                                     {orden.entidad.nombre}
                                 </Dato>
                                 <Dato etiqueta="RUT">{orden.entidad.rut}</Dato>
+                                {orden.entidad.giro && (
+                                    <Dato etiqueta="Giro">
+                                        {orden.entidad.giro}
+                                    </Dato>
+                                )}
                                 <Dato etiqueta="Dirección">
                                     {orden.entidad.direccion}
                                 </Dato>
-                                <Dato etiqueta="Correo de facturación">
+                                <Dato etiqueta="Correo receptor de la factura">
                                     {orden.entidad.correo}
                                 </Dato>
+                                {orden.entidad.referencia && (
+                                    <Dato etiqueta="Referencia administrativa">
+                                        {orden.entidad.referencia}
+                                    </Dato>
+                                )}
                             </Datos>
                         )}
                     </SeccionFicha>

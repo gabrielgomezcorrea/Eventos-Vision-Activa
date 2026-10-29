@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Inscripciones;
 
 use App\Enums\Permiso;
-use App\Rules\RutValido;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -26,12 +25,7 @@ class CargarComprobanteRequest extends FormRequest
         return [
             'amount' => ['required', 'integer', 'min:1'],
             'paid_on' => ['required', 'date', 'before_or_equal:today'],
-            'bank_name' => ['required', 'string', 'max:255'],
-            'payer_name' => ['required', 'string', 'max:255'],
-            'payer_rut' => ['required', 'string', 'max:20', new RutValido],
-            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
-            'notes' => ['nullable', 'string', 'max:2000'],
-            'billing_notes' => ['nullable', 'string', 'max:2000'],
+            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
         ];
     }
 
@@ -43,7 +37,7 @@ class CargarComprobanteRequest extends FormRequest
         return [
             'proof.required' => 'Adjunta el comprobante.',
             'proof.mimes' => 'El comprobante debe ser un PDF o una imagen (JPG, PNG o WEBP).',
-            'proof.max' => 'El comprobante no puede pesar más de 10 MB.',
+            'proof.max' => 'El comprobante no puede pesar más de 5 MB.',
             'paid_on.before_or_equal' => 'La fecha de la transferencia no puede ser futura.',
         ];
     }
@@ -56,11 +50,6 @@ class CargarComprobanteRequest extends FormRequest
         return [
             'amount' => 'monto informado',
             'paid_on' => 'fecha de la transferencia',
-            'bank_name' => 'banco de origen',
-            'payer_name' => 'nombre de quien pagó',
-            'payer_rut' => 'RUT de quien pagó',
-            'notes' => 'observaciones',
-            'billing_notes' => 'observaciones para facturación',
         ];
     }
 }
