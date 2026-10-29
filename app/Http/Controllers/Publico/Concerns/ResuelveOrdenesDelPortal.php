@@ -198,12 +198,17 @@ trait ResuelveOrdenesDelPortal
      * mensajes flash: `?guardado=` es lo que hace que el bloque diga "Cambios
      * guardados" en vez de recargar en silencio.
      */
+    /**
+     * Tras guardar no lleva ancla: el navegador saltaría al bloque y la página se
+     * movería; el layout deja a la persona exactamente donde estaba. Con ancla
+     * solo cuando se llega desde un enlace viejo, que sí debe ir al bloque.
+     */
     private function aBloque(string $token, string $bloque, bool $guardado = true): RedirectResponse
     {
         return redirect()->to(route('inscripcion.portal.inscripcion', array_filter([
             'token' => $token,
             'guardado' => $guardado ? $bloque : null,
-        ])).'#'.$bloque);
+        ])).($guardado ? '' : '#'.$bloque));
     }
 
     /** @return array<string, mixed> */

@@ -134,7 +134,7 @@ class EmitirEnlaceDeAcceso
      * Enlace de programa ya emitido para este correo que todavía sirve: vigente
      * y sin inscripción, o con alguna inscripción que no esté cancelada ni vencida.
      */
-    private function enlaceGuardadoDe(Event $event, string $email): ?MagicLink
+    public function enlaceGuardadoDe(Event $event, string $email): ?MagicLink
     {
         $muertas = [OrderStatus::Cancelada->value, OrderStatus::Vencida->value];
 
@@ -181,7 +181,7 @@ class EmitirEnlaceDeAcceso
      * Orden a la que debe volver este correo: un borrador o una reserva viva.
      * Las canceladas y vencidas no se retoman.
      */
-    private function ordenVigenteDe(Event $event, string $email): ?Order
+    public function ordenVigenteDe(Event $event, string $email): ?Order
     {
         return Order::query()
             ->where('event_id', $event->getKey())
@@ -202,7 +202,7 @@ class EmitirEnlaceDeAcceso
      *
      * @return Collection<int, Order>|null
      */
-    private function colegiosVigentesDe(Event $event, string $email): ?Collection
+    public function colegiosVigentesDe(Event $event, string $email): ?Collection
     {
         $vigentes = Order::query()
             ->where('event_id', $event->getKey())

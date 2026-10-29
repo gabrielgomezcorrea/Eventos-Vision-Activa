@@ -42,7 +42,11 @@ test('3 colegios, 3 comprobantes distintos, 3 facturas', async ({ page }) => {
     // 1. Pide el enlace de acceso.
     await page.goto(`/i/${EVENTO_SLUG}`);
     await page.getByLabel('Correo electrónico').fill(CORREO);
-    await page.getByRole('button', { name: 'Enviarme el enlace' }).click();
+    await page
+        .getByRole('button', {
+            name: 'Enviarme enlace de inscripción al correo',
+        })
+        .click();
     await expect(page.getByText('Enlace enviado.')).toBeVisible();
 
     const correoEnlace = await esperarCorreo(

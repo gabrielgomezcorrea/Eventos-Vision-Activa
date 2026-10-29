@@ -8,12 +8,15 @@ use App\Actions\ExportarContactos;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Solicitudes\ActualizarSolicitudRequest;
 use App\Http\Requests\Solicitudes\GuardarNotaRequest;
 use App\Mail\ProgramaDelEvento;
 use App\Models\Event;
 use App\Models\ProgramRequest;
+use App\Support\Auditor;
 use App\Support\Forms\ProgramFormField;
 use App\Support\Presentar;
+use App\Support\ReglasDeContacto;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,7 +45,7 @@ class SolicitudController extends Controller
         ]);
 
         $solicitudes = ProgramRequest::query()
-            ->with('event')
+            ->with('event', 'orders:id,program_request_id,responsible_name,responsible_lastname,responsible_phone,responsible_position,responsible_institution')
             ->withCount('notes')
             ->withMax('notes', 'created_at')
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where(
@@ -64,11 +67,12 @@ class SolicitudController extends Controller
                 'id' => $solicitud->id,
                 'recibida' => Presentar::fecha($solicitud->created_at),
                 'recibida_hora' => $solicitud->created_at->format('H:i'),
-                'persona' => $solicitud->nombre_completo,
+                'persona' => $solicitud->nombreParaMostrar(),
+                'directa' => $solicitud->esDirecta(),
                 'cargo' => $solicitud->position,
                 'correo' => $solicitud->email,
                 'telefono' => $solicitud->phone,
-                'institucion' => $solicitud->institution,
+                'institucion' => $solicitud->institucionParaMostrar(),
                 'evento' => $solicitud->event?->name,
                 'estado' => self::estado($solicitud),
                 'ultima_nota' => $solicitud->getAttribute('notes_max_created_at') === null ? null : Carbon::parse($solicitud->getAttribute('notes_max_created_at'))->format('d-m H:i'),
@@ -104,17 +108,18 @@ class SolicitudController extends Controller
     {
         Gate::authorize('view', $programRequest);
 
-        $programRequest->load(['event', 'accessType', 'notes.user']);
+        $programRequest->load(['event', 'accessType', 'notes.user', 'orders:id,program_request_id,responsible_name,responsible_lastname,responsible_phone,responsible_position,responsible_institution']);
         $puedeGestionar = $request->user()->can('update', $programRequest);
 
         return Inertia::render('solicitudes/show', [
             'solicitud' => [
                 'id' => $programRequest->id,
-                'persona' => $programRequest->nombre_completo,
+                'persona' => $programRequest->nombreParaMostrar(),
+                'directa' => $programRequest->esDirecta(),
                 'correo' => $programRequest->email,
-                'cargo' => $programRequest->position,
-                'institucion' => $programRequest->institution,
-                'telefono' => $programRequest->phone,
+                'cargo' => $programRequest->datoOResponsable('position', 'responsible_position'),
+                'institucion' => $programRequest->institucionParaMostrar(),
+                'telefono' => $programRequest->datoOResponsable('phone', 'responsible_phone'),
                 'interes' => $programRequest->interest_label ?? $programRequest->accessType?->name,
                 'evento' => $programRequest->event === null ? null : [
                     'id' => $programRequest->event->id,
@@ -142,6 +147,19 @@ class SolicitudController extends Controller
                 'texto' => $nota->body,
             ])->values()->all(),
             'respuestas' => self::respuestas($programRequest),
+            // Valores del lápiz de "Datos del solicitante", tal como están guardados.
+            'editar' => [
+                // Precargado con lo que ya se sabe: si la solicitud no lo trae, lo
+                // que escribió el responsable en su inscripción.
+                'first_name' => $programRequest->datoOResponsable('first_name', 'responsible_name') ?? '',
+                'last_name' => $programRequest->datoOResponsable('last_name', 'responsible_lastname') ?? '',
+                'phone' => $programRequest->datoOResponsable('phone', 'responsible_phone') ?? '',
+                'position' => '',
+                'position_otro' => '',
+                ...array_map(fn ($v) => $v ?? '', ReglasDeContacto::separarCargo($programRequest->datoOResponsable('position', 'responsible_position'))),
+                'institution' => $programRequest->institucionParaMostrar() ?? '',
+            ],
+            'cargos' => ProgramFormField::CARGOS,
             'puede' => [
                 'gestionar' => $puedeGestionar,
                 'eliminar' => $request->user()->can('delete', $programRequest),
@@ -150,6 +168,27 @@ class SolicitudController extends Controller
             // Lo que "Eliminar todo" borraría, para decirlo antes de confirmar.
             'relacionado' => $request->user()->can('deleteAll', $programRequest) ? EliminarSolicitudConTodo::resumen($programRequest) : null,
         ]);
+    }
+
+    public function update(ActualizarSolicitudRequest $request, ProgramRequest $programRequest): RedirectResponse
+    {
+        $programRequest->fill($request->datosNormalizados());
+        $antes = array_intersect_key($programRequest->getOriginal(), $programRequest->getDirty());
+        $despues = $programRequest->getDirty();
+
+        if ($despues !== []) {
+            $programRequest->save();
+
+            Auditor::registrar(
+                sobre: $programRequest,
+                accion: 'solicitud.corregida',
+                propiedades: ['antes' => $antes, 'despues' => $despues],
+            );
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Datos de '.$programRequest->nombreParaMostrar().' guardados.']);
+
+        return back();
     }
 
     public function guardarNota(GuardarNotaRequest $request, ProgramRequest $programRequest): RedirectResponse
@@ -197,7 +236,7 @@ class SolicitudController extends Controller
 
         $programRequest->delete();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => "Solicitud de {$programRequest->nombre_completo} eliminada."]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Solicitud de {$programRequest->nombreParaMostrar()} eliminada."]);
 
         return to_route('solicitudes.index');
     }
@@ -206,7 +245,7 @@ class SolicitudController extends Controller
     {
         Gate::authorize('deleteAll', $programRequest);
 
-        $nombre = $programRequest->nombre_completo;
+        $nombre = $programRequest->nombreParaMostrar();
         $resultado = $eliminar($programRequest);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => "Solicitud de {$nombre} eliminada con {$resultado['inscripciones']} inscripción(es) y todo lo relacionado."]);

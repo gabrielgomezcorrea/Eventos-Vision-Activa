@@ -32,10 +32,20 @@ tus datos quedan guardados.
 @endif
 
 <x-mail::button :url="$url">
-{{ $colegios && $colegios->count() > 1 ? 'Ver mis inscripciones' : ($numeroDeOrden ? 'Continuar mi reserva' : 'Completar mi reserva') }}
+{{ $colegios && $colegios->count() > 1 ? 'Ver mis inscripciones' : ($numeroDeOrden ? 'Continuar mi inscripción' : 'Completar mi inscripción') }}
 </x-mail::button>
 
-El enlace es personal y vence en {{ (int) round(config('magic_links.ttl_minutes') / 1440) }} días. Si expira, puedes pedir uno nuevo con tu correo.
+**También puedes reenviar este correo a tu encargado de inscribir para que continúe el proceso.**
+
+**O puedes copiar el siguiente enlace a la persona encargada de realizar el proceso:**
+
+<p style="word-break:break-all;overflow-wrap:anywhere;font-size:15px;margin:0 0 16px"><a href="{{ $url }}">{{ $url }}</a></p>
+
+@if ($event->cierreDeEnlaces())
+El enlace sirve hasta el {{ $event->cierreDeEnlaces()->translatedFormat('d \d\e F \d\e Y') }}. Si expira, puedes pedir uno nuevo con tu correo.
+@else
+El enlace sirve por {{ (int) round(config('magic_links.ttl_minutes') / 1440) }} días. Si expira, puedes pedir uno nuevo con tu correo.
+@endif
 
 @include('mail._contacto', ['evento' => $event])
 

@@ -144,7 +144,7 @@ class ComprobanteWebTest extends TestCase
 
         $this->get($this->ruta('portal.pago'))
             ->assertOk()
-            ->assertSee('Ya hay un comprobante en revisión.')
+            ->assertSee('Comprobante en revisión.')
             ->assertSee('Monto enviado: $50.000', false)
             ->assertDontSee('name="proof"', false)
             ->assertDontSee('Enviar comprobante');

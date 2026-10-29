@@ -140,7 +140,8 @@ class CorreoDelProgramaConEnlaceTest extends TestCase
 
         $this->assertStringContainsString('Continuar con la inscripción', $html);
         $this->assertStringContainsString('O puedes copiar el siguiente enlace a la persona encargada de realizar el proceso:', $html);
-        $this->assertSame(2, substr_count($html, $url), 'El botón y el texto plano.');
+        $this->assertSame(3, substr_count($html, $url), 'El botón y el enlace visible (href y texto).');
+        $this->assertMatchesRegularExpression('/word-break: ?break-all/', $html, 'Un enlace largo no estira el correo.');
         $this->assertStringNotContainsString('Este botón te lleva directo', $html);
     }
 }

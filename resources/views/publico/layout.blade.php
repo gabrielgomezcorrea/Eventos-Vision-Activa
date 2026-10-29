@@ -58,7 +58,6 @@
         .pestana{font:inherit;font-size:inherit;cursor:pointer}
         .pestana:hover{border-color:var(--primario);color:var(--primario)}
         .pestana.activa{background:var(--primario);border-color:var(--primario);color:#fff;font-weight:600}
-        html{scroll-behavior:smooth}
         [id]{scroll-margin-top:16px}
         /* Lo que falta para poder enviar: en rojo, al lado del botón bloqueado. */
         .falta{color:var(--error);font-size:.9rem}
@@ -192,7 +191,7 @@
 </head>
 <body>
 <div class="envoltura @yield('envoltura')">
-    <div class="portal-banner">@include('publico._banner', ['evento' => $event, 'ubicacion' => 'form'])</div>
+    <div class="portal-banner">@include('publico._banner', ['evento' => $event, 'ubicacion' => $ubicacionBanner ?? 'form'])</div>
 
     <div class="cabecera">
         <h1>{{ $event->name }}</h1>
@@ -309,6 +308,78 @@
             }
         });
     });
+
+    // Guardar sin recargar: el formulario se envía en segundo plano y solo se
+    // cambia el contenido. La pantalla no se mueve: el bloque que se guardó
+    // queda exactamente donde estaba, aunque arriba aparezca un aviso.
+    // Sin JavaScript (o si algo falla) el formulario se envía como siempre.
+    if (!window.portalSinRecarga && window.fetch && window.DOMParser) {
+        window.portalSinRecarga = true;
+
+        var ejecutarScripts = function (raiz) {
+            raiz.querySelectorAll('script').forEach(function (viejo) {
+                var nuevo = document.createElement('script');
+                Array.prototype.forEach.call(viejo.attributes, function (a) { nuevo.setAttribute(a.name, a.value); });
+                nuevo.textContent = viejo.textContent;
+                viejo.replaceWith(nuevo);
+            });
+        };
+
+        // Atrás/adelante tras cambiar de pestaña sin recargar: se carga la página real.
+        window.addEventListener('popstate', function () { location.reload(); });
+
+        document.addEventListener('submit', function (evento) {
+            var form = evento.target;
+            if (evento.defaultPrevented || (form.method || '').toLowerCase() !== 'post'
+                || form.target || form.hasAttribute('data-recargar')) {
+                return;
+            }
+            var destino = new URL(form.action, location.href);
+            if (destino.origin !== location.origin) {
+                return;
+            }
+            evento.preventDefault();
+
+            var bloque = form.closest('[id]');
+            var idBloque = bloque ? bloque.id : null;
+            var arriba = bloque ? bloque.getBoundingClientRect().top : null;
+            var y = window.scrollY;
+            var datos = evento.submitter ? new FormData(form, evento.submitter) : new FormData(form);
+
+            fetch(destino.href, { method: 'POST', body: datos, credentials: 'same-origin' })
+                .then(function (respuesta) {
+                    var tipo = respuesta.headers.get('content-type') || '';
+                    if (tipo.indexOf('text/html') === -1) { throw new Error('no-html'); }
+                    return respuesta.text().then(function (html) { return { url: respuesta.url, html: html }; });
+                })
+                .then(function (r) {
+                    var doc = new DOMParser().parseFromString(r.html, 'text/html');
+                    var final = new URL(r.url, location.href);
+                    var mismaPagina = final.pathname === location.pathname;
+
+                    document.title = doc.title;
+                    document.body.className = doc.body.className;
+                    document.body.innerHTML = doc.body.innerHTML;
+                    history[mismaPagina ? 'replaceState' : 'pushState'](null, '', final.href);
+                    ejecutarScripts(document.body);
+
+                    if (!mismaPagina) {
+                        window.scrollTo(0, 0);
+                        return;
+                    }
+                    var nuevo = idBloque ? document.getElementById(idBloque) : null;
+                    if (nuevo && arriba !== null) {
+                        window.scrollTo(0, window.scrollY + nuevo.getBoundingClientRect().top - arriba);
+                    } else {
+                        window.scrollTo(0, y);
+                    }
+                })
+                .catch(function () {
+                    // Respaldo: envío normal, con recarga.
+                    HTMLFormElement.prototype.submit.call(form);
+                });
+        });
+    }
 
     document.querySelectorAll('form').forEach(function (form) {
         form.addEventListener('submit', function (evento) {

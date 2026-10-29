@@ -286,11 +286,11 @@ class PortalDelClienteTest extends TestCase
         ]);
     }
 
-    public function test_los_datos_para_transferir_estan_en_el_menu_izquierdo_salvo_en_pago_y_con_pago_aprobado(): void
+    public function test_los_datos_para_transferir_estan_en_el_menu_izquierdo_en_todas_las_pestanas_salvo_con_pago_aprobado(): void
     {
         $this->conCuentaBancaria();
 
-        foreach (['programa', 'inscripcion', 'credenciales'] as $pestana) {
+        foreach (['programa', 'inscripcion', 'pago', 'credenciales'] as $pestana) {
             $this->get($this->ruta("portal.{$pestana}"))
                 ->assertOk()
                 ->assertSee('Datos para transferir')
@@ -298,9 +298,6 @@ class PortalDelClienteTest extends TestCase
                 ->assertSee('$90.000')
                 ->assertSee($this->orden->number);
         }
-
-        // En Pago ya están en el centro, con la tarjeta "Transfiere": no se repiten.
-        $this->get($this->ruta('portal.pago'))->assertOk()->assertDontSee('Datos para transferir')->assertSee('123456789');
 
         $this->orden->forceFill(['payment_status' => PaymentStatus::Aprobado])->save();
         $this->get($this->ruta('portal.programa'))->assertOk()->assertDontSee('Datos para transferir');
@@ -314,15 +311,15 @@ class PortalDelClienteTest extends TestCase
         $this->get($this->ruta('portal.programa'))->assertOk()->assertSee('Se genera al confirmar');
     }
 
-    public function test_un_borrador_incompleto_no_muestra_los_datos_para_transferir(): void
+    public function test_un_borrador_incompleto_igual_muestra_los_datos_para_transferir(): void
     {
         $this->conCuentaBancaria();
-        // Sin participantes todavía: falta lo requerido, aún no hay nada que transferir.
+        // Sin participantes todavía: igual se ve a dónde se paga (pedido del jefe, 28/10/2026).
         $this->orden->forceFill(['status' => OrderStatus::Borrador, 'number' => null])->save();
         $this->orden->participants()->delete();
 
         foreach (['programa', 'inscripcion'] as $pestana) {
-            $this->get($this->ruta("portal.{$pestana}"))->assertOk()->assertDontSee('Datos para transferir');
+            $this->get($this->ruta("portal.{$pestana}"))->assertOk()->assertSee('Datos para transferir')->assertSee('Se genera al confirmar');
         }
     }
 

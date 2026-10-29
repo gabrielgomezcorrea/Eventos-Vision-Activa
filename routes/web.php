@@ -119,6 +119,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('solicitudes/exportar', ExportarContactosController::class)->name('solicitudes.exportar');
     Route::get('solicitudes/exportar/cantidad', [ExportarContactosController::class, 'cantidad'])->name('solicitudes.exportar.cantidad');
     Route::get('solicitudes/{programRequest}', [SolicitudController::class, 'show'])->name('solicitudes.show');
+    Route::patch('solicitudes/{programRequest}', [SolicitudController::class, 'update'])->name('solicitudes.update');
     Route::post('solicitudes/{programRequest}/notas', [SolicitudController::class, 'guardarNota'])->name('solicitudes.notas.store');
     Route::patch('solicitudes/{programRequest}/notas', [SolicitudController::class, 'actualizarNotas'])->name('solicitudes.notas');
     Route::post('solicitudes/{programRequest}/reenviar', [SolicitudController::class, 'reenviarPrograma'])->name('solicitudes.reenviar');

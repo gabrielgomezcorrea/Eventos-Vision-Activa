@@ -136,7 +136,7 @@
             @endphp
             @if ($enRevision)
                 <div class="aviso aviso-info">
-                    <strong>Ya hay un comprobante en revisión.</strong> Te avisaremos cuando Contabilidad lo revise.
+                    <strong>Comprobante en revisión.</strong> Te avisaremos por correo cuando Contabilidad lo valide.
                     @if ($abonoEnRevision)
                         <br>Monto enviado: ${{ number_format($abonoEnRevision->amount, 0, ',', '.') }} ·
                         <a href="{{ route('inscripcion.comprobante.ver', ['token' => $token, 'payment' => $abonoEnRevision->id]) }}" target="_blank" rel="noopener">Ver</a>

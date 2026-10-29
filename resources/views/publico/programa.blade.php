@@ -104,8 +104,14 @@
         .aviso { border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: .92rem; }
         .aviso-error { background: var(--error-suave); color: var(--error); }
         .aviso-exito { background: var(--exito-suave); color: var(--exito); }
-        .exito h2 { font-size: 1.2rem; margin: 0 0 8px; }
-        .exito p { color: var(--texto-suave); margin: 0 0 6px; }
+        .exito h2 { font-size: 1.35rem; margin: 0 0 10px; }
+        .exito p { color: #3A4057; font-size: 1rem; margin: 0 0 8px; }
+        .exito .aviso-exito { display: flex; align-items: center; gap: 12px; background: #DDF3E2; border: 2px solid var(--exito);
+                              color: #14532D; font-weight: 700; font-size: 1.1rem; padding: 14px 16px; margin-bottom: 22px; }
+        .exito .aviso-exito::before { content: "✓"; flex: none; display: grid; place-items: center; width: 32px; height: 32px;
+                                      border-radius: 50%; background: var(--exito); color: #fff; font-size: 1.1rem; }
+        .exito .ayuda { border-top: 2px solid var(--borde); margin-top: 22px; padding-top: 18px; }
+        .exito .ayuda h3 { font-size: 1.05rem; margin: 0 0 8px; }
         .casilla { display: flex; align-items: flex-start; gap: 10px; font-weight: 400; font-size: .9rem; cursor: pointer; }
     .casilla input { width: auto; margin-top: 3px; flex: 0 0 auto; }
     .legal { color: var(--texto-suave); font-size: .78rem; text-align: center; margin: 14px 0 0; line-height: 1.5; }
@@ -132,8 +138,10 @@
                 <p>Enviamos el programa de <strong>{{ $event->name }}</strong> a la dirección que indicaste.</p>
                 <p>Si no lo ves en unos minutos, revisa la carpeta de correo no deseado.</p>
                 @if ($event->contact_email || $event->contact_phone)
-                    <p>¿Dudas? Contáctanos:</p>
-                    @include('publico._contacto', ['evento' => $event])
+                    <div class="ayuda">
+                        <h3>¿Necesitas ayuda?</h3>
+                        @include('publico._contacto', ['evento' => $event, 'plano' => true])
+                    </div>
                 @endif
             </div>
         @else

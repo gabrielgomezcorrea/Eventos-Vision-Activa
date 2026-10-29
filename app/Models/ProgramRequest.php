@@ -24,7 +24,16 @@ class ProgramRequest extends Model
     /** @use HasFactory<ProgramRequestFactory> */
     use HasFactory;
 
+    public const ORIGEN_FORMULARIO = 'form';
+
+    public const ORIGEN_DIRECTO = 'direct';
+
     protected $guarded = [];
+
+    /** Un modelo recién creado no trae los defaults de la base. */
+    protected $attributes = [
+        'origin' => self::ORIGEN_FORMULARIO,
+    ];
 
     protected function casts(): array
     {
@@ -80,6 +89,41 @@ class ProgramRequest extends Model
     public function getNombreCompletoAttribute(): string
     {
         return trim($this->first_name.' '.($this->last_name ?? ''));
+    }
+
+    /** Nombre para el panel; una solicitud directa solo tiene correo. */
+    public function nombreParaMostrar(): string
+    {
+        return $this->nombre_completo !== '' ? $this->nombre_completo : $this->email;
+    }
+
+    /**
+     * Institución de la solicitud o, si no la dio (inscripción directa), la que
+     * puso el responsable en su inscripción. Usa las órdenes ya cargadas si las hay.
+     */
+    public function institucionParaMostrar(): ?string
+    {
+        return $this->datoOResponsable('institution', 'responsible_institution');
+    }
+
+    /**
+     * Un dato de la solicitud o, si viene vacío, el que escribió el responsable
+     * en su inscripción: una solicitud directa nace solo con el correo.
+     */
+    public function datoOResponsable(string $campo, string $delResponsable): ?string
+    {
+        if (filled($this->{$campo})) {
+            return $this->{$campo};
+        }
+
+        $ordenes = $this->relationLoaded('orders') ? $this->orders->sortByDesc('id') : $this->orders()->latest('id')->get();
+
+        return $ordenes->pluck($delResponsable)->first(fn ($valor) => filled($valor));
+    }
+
+    public function esDirecta(): bool
+    {
+        return $this->origin === self::ORIGEN_DIRECTO;
     }
 
     public function yaConvertida(): bool

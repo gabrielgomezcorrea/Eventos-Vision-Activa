@@ -72,6 +72,35 @@
                 </div>
             @endif
 
+            {{-- A quién llamar: siempre a la vista, no al fondo de la página. --}}
+            @if ($event->tieneContacto())
+                <div class="lado-caja">
+                    <p class="lado-titulo">Contáctanos</p>
+                    @include('publico._contacto', ['evento' => $event, 'plano' => true])
+                </div>
+            @endif
+
+            {{-- Dónde transferir, siempre a la vista en todas las pestañas mientras
+                 falte pagar (pedido del jefe, 28/10/2026). Orden del menú:
+                 contacto, datos para transferir, código de descuento. --}}
+            @php
+                // Desde el borrador (pedido del jefe, 28/10/2026): la gente quiere ver
+                // a dónde se paga mientras completa. Sin monto hasta que haya total.
+                $debeTransferir = $orden->kind !== \App\Enums\OrderKind::Invitado
+                    && ! in_array($orden->status, [\App\Enums\OrderStatus::Cancelada, \App\Enums\OrderStatus::Vencida], true)
+                    && ! $orden->payment_status->liberaCredenciales();
+                $montoLado = $orden->esBorrador() ? $orden->calcularTotal() : ($orden->pagado() > 0 ? $orden->saldo() : (int) $orden->total);
+            @endphp
+            @if ($debeTransferir && $event->bank_account_number)
+                <div class="lado-caja">
+                    <p class="lado-titulo">Datos para transferir</p>
+                    @include('publico.portal._datos-bancarios', [
+                        'apilado' => true,
+                        ...($montoLado > 0 ? ['monto' => $montoLado] : []),
+                        'referencia' => $orden->number ?? 'Se genera al confirmar',
+                    ])
+                </div>
+            @endif
             {{-- Código de descuento: arriba y a la vista mientras se completa la
                  inscripción; con todo completo se oculta. --}}
             @if ($orden->esBorrador() && ! $listaParaConfirmar && $orden->kind !== \App\Enums\OrderKind::Invitado)
@@ -100,33 +129,6 @@
                 </div>
             @endif
 
-            {{-- A quién llamar: siempre a la vista, no al fondo de la página. --}}
-            @if ($event->tieneContacto())
-                <div class="lado-caja">
-                    <p class="lado-titulo">Contáctanos</p>
-                    @include('publico._contacto', ['evento' => $event, 'plano' => true])
-                </div>
-            @endif
-
-            {{-- Dónde transferir, siempre a la vista mientras falte pagar. En
-                 la pestaña Pago no se dibuja: su tarjeta "1. Transfiere" ya
-                 trae estos datos en el centro. --}}
-            @php
-                // Recién cuando la inscripción está completa: antes no hay monto ni
-                // nada que transferir todavía.
-                $debeTransferir = $listaParaConfirmar
-                    || ($orden->status === \App\Enums\OrderStatus::Reservada && ! $orden->payment_status->liberaCredenciales());
-            @endphp
-            @if ($debeTransferir && $pestana !== 'pago' && $event->bank_account_number)
-                <div class="lado-caja">
-                    <p class="lado-titulo">Datos para transferir</p>
-                    @include('publico.portal._datos-bancarios', [
-                        'apilado' => true,
-                        'monto' => $orden->esBorrador() ? $orden->calcularTotal() : ($orden->pagado() > 0 ? $orden->saldo() : (int) $orden->total),
-                        'referencia' => $orden->number ?? 'Se genera al confirmar',
-                    ])
-                </div>
-            @endif
         </nav>
 
         <div class="principal">

@@ -128,7 +128,7 @@ class CambiosDelClienteTest extends TestCase
         $this->assertSame(1, $this->asientos($this->jornada1));
 
         $this->post($this->ruta('participantes.agregar'), $this->nuevoParticipante())
-            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         $orden = $this->orden->fresh();
         $this->assertSame(2, $orden->participantesVigentes()->count());
@@ -256,7 +256,7 @@ class CambiosDelClienteTest extends TestCase
         $this->post($this->ruta('pagador.guardar'), [
             'name' => 'Fundación Nueva', 'rut' => '76.086.428-5', 'address' => 'Av. Grecia 1234',
             'commune' => 'Ñuñoa', 'billing_email' => 'factura@fundacion.cl', 'phone' => '56912345678',
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'pagador']).'#pagador');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'pagador']));
 
         $this->assertSame('Fundación Nueva', $this->orden->fresh()->payerEntity->name);
         $this->assertTrue(AuditLog::where('action', 'orden.pagador_actualizado_por_cliente')->exists());

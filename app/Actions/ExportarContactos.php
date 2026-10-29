@@ -127,8 +127,10 @@ class ExportarContactos
      */
     private function solicitudes(array $filtros): array
     {
+        // Una solicitud directa solo trae el correo y nadie autorizó campañas por esa vía.
         return ProgramRequest::query()
             ->with('event')
+            ->where('origin', ProgramRequest::ORIGEN_FORMULARIO)
             ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento))
             ->tap(fn (Builder $q) => $this->filtrarCargo($q, 'position', $filtros['cargo'] ?? null))
             ->latest()

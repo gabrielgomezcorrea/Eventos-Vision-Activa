@@ -94,7 +94,7 @@ class BorradorDeInscripcionTest extends TestCase
             'name' => 'Fundación Educar', 'rut' => '76.086.428-5',
             'address' => 'Av. Grecia 1234', 'commune' => 'nunoa', 'billing_email' => 'Pagos@Fundacion.cl',
             'phone' => '+56 9 1234 5678',
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'pagador']).'#pagador');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'pagador']));
 
         $pagador = $this->orden->fresh()->payerEntity;
         $this->assertSame('Ñuñoa', $pagador->commune);
@@ -106,7 +106,7 @@ class BorradorDeInscripcionTest extends TestCase
     {
         $this->post($this->ruta('establecimientos.agregar'), [
             'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'villa  alegre norte',
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']).'#establecimientos');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
 
         $this->assertSame('Villa Alegre Norte', $this->orden->fresh()->establishments()->sole()->commune);
     }
@@ -125,7 +125,7 @@ class BorradorDeInscripcionTest extends TestCase
         $this->post($this->ruta('participantes.responsable'), [
             'rut' => '11.111.111-1',
             'access_type_id' => $this->acceso->id,
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         $participante = $this->orden->fresh()->participants()->sole();
 
@@ -147,7 +147,7 @@ class BorradorDeInscripcionTest extends TestCase
         $this->post($this->ruta('participantes.agregar'), [
             'first_name' => 'ana  MARÍA', 'last_name' => 'de la fuente', 'position' => 'Otro',
             'position_otro' => 'jefa de utp', 'email' => ' Ana@Colegio.CL', 'rut' => '11.111.111-1', 'access_type_id' => $this->acceso->id,
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         $participante = $this->orden->fresh()->participants()->sole();
 
@@ -222,7 +222,7 @@ class BorradorDeInscripcionTest extends TestCase
             ->assertOk()->assertSee('Elige un cargo de la lista');
 
         $this->post($this->ruta('participantes.agregar'), [...$datos, 'position' => 'Inspector General'])
-            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         // The responsible keeps their buyer position when joining as participant.
         $this->post($this->ruta('responsable.guardar'), [
@@ -230,7 +230,7 @@ class BorradorDeInscripcionTest extends TestCase
             'responsible_phone' => '56912345678', 'kind' => OrderKind::Particular->value,
         ]);
         $this->post($this->ruta('participantes.responsable'), ['rut' => '22.222.222-2', 'access_type_id' => $this->acceso->id])
-            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         $this->assertSame(['Inspector General', 'Directivo'], $this->orden->participants()->orderBy('id')->pluck('position')->all());
     }
@@ -239,13 +239,13 @@ class BorradorDeInscripcionTest extends TestCase
     {
         $this->post($this->ruta('establecimientos.agregar'), [
             'name' => 'Colegio San José', 'address' => 'Calle 1', 'commune' => 'Talca',
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']).'#establecimientos');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
 
         // Each participant belongs to that establishment without being asked.
         $this->post($this->ruta('participantes.agregar'), [
             'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Inspector General',
             'email' => 'carlos@colegio.cl', 'rut' => '11.111.111-1', 'access_type_id' => $this->acceso->id,
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         $this->assertSame(
             $this->orden->fresh()->establishments()->sole()->id,
@@ -258,10 +258,10 @@ class BorradorDeInscripcionTest extends TestCase
         $datos = ['address' => 'Calle 1', 'commune' => 'Talca'];
 
         $this->post($this->ruta('establecimientos.agregar'), [...$datos, 'name' => 'Colegio San José'])
-            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']).'#establecimientos');
+            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
 
         $this->post($this->ruta('establecimientos.agregar'), [...$datos, 'name' => 'Colegio Los Robles'])
-            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']).'#establecimientos');
+            ->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'establecimientos']));
 
         $this->assertSame(
             ['Colegio San José', 'Colegio los Robles'],
@@ -287,7 +287,7 @@ class BorradorDeInscripcionTest extends TestCase
             'first_name' => 'Carlos', 'last_name' => 'Rojas', 'position' => 'Inspector General',
             'email' => 'carlos@colegio.cl', 'rut' => '11.111.111-1', 'access_type_id' => $this->acceso->id,
             'establishment_id' => $losRobles->id,
-        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']).'#participantes');
+        ])->assertRedirect($this->ruta('portal.inscripcion', ['guardado' => 'participantes']));
 
         $this->assertSame($losRobles->id, $this->orden->fresh()->participants()->sole()->establishment_id);
         $this->assertNotSame($sanJose->id, $losRobles->id);

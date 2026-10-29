@@ -35,11 +35,13 @@ use App\Support\Auditor;
 use App\Support\DestinatariosDeAvisos;
 use App\Support\ReglasDeContacto;
 use App\Support\Rut;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -67,6 +69,7 @@ class InscripcionController extends Controller
 
         return view('publico.inscripcion.inicio', [
             'event' => $event,
+            'ubicacionBanner' => 'external',
             'enviado' => false,
             'valores' => [],
             'errores' => new MessageBag,
@@ -78,12 +81,18 @@ class InscripcionController extends Controller
         abort_unless($event->admiteInscripciones(), 404);
 
         $validator = Validator::make($request->all(), [
-            'email' => ['required', 'email:rfc', 'max:255'],
-        ], [], ['email' => 'correo']);
+            'email' => ['required', 'email:rfc', 'regex:/@.+\..+/', 'max:255'],
+        ], [
+            'email.required' => 'Escribe tu correo.',
+            'email.email' => 'Revisa tu correo. Debe verse así: nombre@correo.cl',
+            'email.regex' => 'Revisa tu correo. Debe verse así: nombre@correo.cl',
+            'email.max' => 'Ese correo es demasiado largo.',
+        ], ['email' => 'correo']);
 
         if ($validator->fails()) {
             return view('publico.inscripcion.inicio', [
                 'event' => $event,
+                'ubicacionBanner' => 'external',
                 'enviado' => false,
                 'valores' => $request->only('email'),
                 'errores' => $validator->errors(),
@@ -96,14 +105,15 @@ class InscripcionController extends Controller
         // formulario revelaría si un correo tiene inscripción en el evento.
         return view('publico.inscripcion.inicio', [
             'event' => $event,
+            'ubicacionBanner' => 'external',
             'enviado' => true,
-            'valores' => [],
+            'valores' => $request->only('email'),
             'errores' => new MessageBag,
         ]);
     }
 
     /** Entra con el token del correo y abre o crea el borrador. */
-    public function acceso(string $token): RedirectResponse|Renderable
+    public function acceso(string $token, EmitirEnlaceDeAcceso $emitir): RedirectResponse|Renderable
     {
         $link = MagicLink::resolver($token);
 
@@ -112,6 +122,12 @@ class InscripcionController extends Controller
         }
 
         $link->registrarUso();
+
+        if (($redireccion = $this->unirASolicitud($link, $token, $emitir)) !== null) {
+            return $redireccion;
+        }
+
+        $link->refresh();
 
         // Un enlace de conjunto ya tiene sus órdenes confirmadas, y una orden
         // que ya no es borrador se retoma donde le toca: nunca crea un borrador.
@@ -159,6 +175,73 @@ class InscripcionController extends Controller
         }
 
         return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
+    }
+
+    /**
+     * Un enlace suelto (sin solicitud, orden ni conjunto) se vuelve el enlace
+     * estable de la persona: el clic crea su solicitud directa, o se une a la
+     * que ya tiene, para que todo enlace del mismo correo lleve a la misma
+     * inscripción. Dos clics a la vez (la persona y el robot del correo) no
+     * duplican nada gracias al candado por persona.
+     */
+    private function unirASolicitud(MagicLink $link, string $token, EmitirEnlaceDeAcceso $emitir): ?RedirectResponse
+    {
+        if ($link->program_request_id !== null || $link->order_id !== null || $link->order_group_id !== null) {
+            return null;
+        }
+
+        try {
+            return Cache::lock('inscripcion-directa:'.$link->event_id.':'.sha1($link->email), 10)
+                ->block(5, fn (): ?RedirectResponse => DB::transaction(function () use ($link, $token, $emitir): ?RedirectResponse {
+                    $bloqueado = MagicLink::query()->whereKey($link->getKey())->lockForUpdate()->firstOrFail();
+
+                    if ($bloqueado->program_request_id !== null) {
+                        return null;
+                    }
+
+                    $evento = $bloqueado->event;
+                    $solicitud = ProgramRequest::query()
+                        ->where('event_id', $bloqueado->event_id)
+                        ->where('email', $bloqueado->email)
+                        ->latest('id')
+                        ->first();
+
+                    if ($solicitud !== null) {
+                        $estable = $emitir->enlaceGuardadoDe($evento, $bloqueado->email);
+
+                        if ($estable !== null && $estable->isNot($bloqueado)) {
+                            return redirect()->route('inscripcion.acceso', ['token' => $estable->token_encrypted]);
+                        }
+                    } else {
+                        $solicitud = ProgramRequest::create([
+                            'event_id' => $bloqueado->event_id,
+                            'email' => $bloqueado->email,
+                            'origin' => ProgramRequest::ORIGEN_DIRECTO,
+                            'consented_at' => now(),
+                            'ip_address' => request()->ip(),
+                        ]);
+                    }
+
+                    $destino = [];
+                    $colegios = $emitir->colegiosVigentesDe($evento, $bloqueado->email);
+
+                    if ($colegios !== null) {
+                        $destino['order_group_id'] = $colegios->first()->group_id;
+                    } elseif (($viva = $emitir->ordenVigenteDe($evento, $bloqueado->email)) !== null) {
+                        $destino['order_id'] = $viva->getKey();
+                    }
+
+                    $bloqueado->forceFill([
+                        ...$destino,
+                        'program_request_id' => $solicitud->getKey(),
+                        'token_encrypted' => $token,
+                    ])->save();
+
+                    return null;
+                }));
+        } catch (LockTimeoutException) {
+            throw EnlaceNoUtilizable::paraToken($token);
+        }
     }
 
     // ----------------------------------------------------------------- pasos

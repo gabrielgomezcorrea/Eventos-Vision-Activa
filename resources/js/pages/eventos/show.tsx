@@ -82,6 +82,7 @@ type Evento = {
     bank_account_id: number | null;
     cuenta: Cuenta | null;
     enlace_publico: string;
+    enlace_directo: string;
     banner: string | null;
     banner_ubicaciones: { clave: string; etiqueta: string; activa: boolean }[];
     banner_max_mb: number;
@@ -715,10 +716,7 @@ export default function EventoShow({
                         </Dato>
                         <Dato etiqueta="Descripción">{evento.description}</Dato>
                         <Dato etiqueta="Modalidad">{evento.modalidad}</Dato>
-                        <Dato
-                            etiqueta="Enlace del formulario para inscribirse"
-                            ancho
-                        >
+                        <Dato etiqueta="Enlace formulario">
                             <span className="flex items-center gap-2">
                                 <a
                                     href={evento.enlace_publico}
@@ -736,6 +734,32 @@ export default function EventoShow({
                                     onClick={() => {
                                         void navigator.clipboard.writeText(
                                             evento.enlace_publico,
+                                        );
+                                        toast.success('Enlace copiado');
+                                    }}
+                                >
+                                    <Copy />
+                                </Button>
+                            </span>
+                        </Dato>
+                        <Dato etiqueta="Inscripción directa">
+                            <span className="flex items-center gap-2">
+                                <a
+                                    href={evento.enlace_directo}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="truncate underline-offset-4 hover:underline"
+                                >
+                                    {evento.enlace_directo}
+                                </a>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 shrink-0"
+                                    aria-label="Copiar enlace de inscripción directa"
+                                    onClick={() => {
+                                        void navigator.clipboard.writeText(
+                                            evento.enlace_directo,
                                         );
                                         toast.success('Enlace copiado');
                                     }}

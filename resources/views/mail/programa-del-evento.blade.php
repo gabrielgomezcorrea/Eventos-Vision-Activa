@@ -9,7 +9,7 @@
 
 # {{ $event->name }}
 
-Hola {{ $solicitud->first_name }},
+Hola{{ $solicitud->first_name ? ' '.$solicitud->first_name : '' }},
 
 @if ($event->program_email_intro)
 {{ $event->program_email_intro }}
@@ -43,9 +43,11 @@ Gracias por tu interés en **{{ $event->name }}**.@if ($event->attachments->isNo
 Continuar con la inscripción
 </x-mail::button>
 
+**También puedes reenviar este correo a tu encargado de inscribir para que continúe el proceso.**
+
 **O puedes copiar el siguiente enlace a la persona encargada de realizar el proceso:**
 
-{{ $enlace }}
+<p style="word-break:break-all;overflow-wrap:anywhere;font-size:15px;margin:0 0 16px"><a href="{{ $enlace }}">{{ $enlace }}</a></p>
 
 @include('mail._contacto', ['evento' => $event])
 

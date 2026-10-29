@@ -25,6 +25,7 @@ type SolicitudFila = {
     recibida: string;
     recibida_hora: string;
     persona: string;
+    directa: boolean;
     cargo: string | null;
     correo: string;
     telefono: string | null;
@@ -240,6 +241,11 @@ export default function SolicitudesIndex({
                                         >
                                             {s.persona}
                                         </Link>
+                                        {s.directa && (
+                                            <span className="text-muted-foreground block max-w-56 truncate text-xs">
+                                                Inscripción directa
+                                            </span>
+                                        )}
                                         {s.cargo && (
                                             <span className="text-muted-foreground block max-w-56 truncate text-xs">
                                                 {s.cargo}

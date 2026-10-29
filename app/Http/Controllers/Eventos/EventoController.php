@@ -128,6 +128,7 @@ class EventoController extends Controller
                     'payment_instructions' => $event->bankAccount->payment_instructions,
                 ],
                 'enlace_publico' => route('publico.programa', ['event' => $event->slug]),
+                'enlace_directo' => route('inscripcion.inicio', ['event' => $event->slug]),
                 'banner' => $event->tieneBanner() ? $event->bannerUrl() : null,
                 'banner_ubicaciones' => collect(Event::UBICACIONES_BANNER)
                     ->map(fn (string $etiqueta, string $clave): array => [

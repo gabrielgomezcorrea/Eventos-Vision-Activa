@@ -3,12 +3,17 @@ import { Mail, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoController';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
+import { Campo } from '@/components/campo';
 import { Confirmar } from '@/components/confirmar';
+import { EditarSeccion } from '@/components/editar-seccion';
+import type { Valores } from '@/components/editar-seccion';
 import { EstadoBadge } from '@/components/estado-badge';
 import { NotasConFecha } from '@/components/notas-con-fecha';
 import type { Nota } from '@/components/notas-con-fecha';
 import { Dato, Datos, SeccionFicha } from '@/components/seccion-ficha';
+import { NativeSelect } from '@/components/native-select';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Dialog,
     DialogClose,
@@ -23,6 +28,7 @@ type Props = {
     solicitud: {
         id: number;
         persona: string;
+        directa: boolean;
         correo: string;
         cargo: string | null;
         institucion: string | null;
@@ -40,6 +46,8 @@ type Props = {
     };
     respuestas: { pregunta: string; respuesta: string }[];
     notas: Nota[];
+    editar: Valores;
+    cargos: string[];
     puede: { gestionar: boolean; eliminar: boolean; eliminar_todo: boolean };
     relacionado: {
         inscripciones: number;
@@ -52,6 +60,8 @@ export default function SolicitudShow({
     solicitud,
     respuestas,
     notas,
+    editar,
+    cargos,
     puede,
     relacionado,
 }: Props) {
@@ -80,6 +90,11 @@ export default function SolicitudShow({
                         </h1>
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                             <EstadoBadge estado={solicitud.estado} />
+                            {solicitud.directa && (
+                                <span className="text-muted-foreground text-sm">
+                                    Inscripción directa
+                                </span>
+                            )}
                             {solicitud.evento && (
                                 <Link
                                     href={EventoController.show(
@@ -188,7 +203,142 @@ export default function SolicitudShow({
                     </Dialog>
                 </header>
 
-                <SeccionFicha titulo="Quién la envió">
+                <SeccionFicha
+                    titulo="Datos del solicitante"
+                    accion={
+                        puede.gestionar && (
+                            <EditarSeccion
+                                titulo="Datos del solicitante"
+                                url={SolicitudController.update.url(
+                                    solicitud.id,
+                                )}
+                                inicial={editar}
+                            >
+                                {(f) => (
+                                    <>
+                                        <Campo
+                                            label="Nombre"
+                                            htmlFor="s-first_name"
+                                            error={f.errors.first_name}
+                                        >
+                                            <Input
+                                                id="s-first_name"
+                                                value={f.data.first_name}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'first_name',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                        <Campo
+                                            label="Apellidos"
+                                            htmlFor="s-last_name"
+                                            error={f.errors.last_name}
+                                        >
+                                            <Input
+                                                id="s-last_name"
+                                                value={f.data.last_name}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'last_name',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                        <Campo
+                                            label="Teléfono"
+                                            htmlFor="s-phone"
+                                            error={f.errors.phone}
+                                        >
+                                            <Input
+                                                id="s-phone"
+                                                type="tel"
+                                                inputMode="tel"
+                                                placeholder="56912345678"
+                                                value={f.data.phone}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'phone',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                        <Campo
+                                            label="Cargo"
+                                            htmlFor="s-position"
+                                            error={f.errors.position}
+                                        >
+                                            <NativeSelect
+                                                id="s-position"
+                                                value={f.data.position}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'position',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Elige un cargo
+                                                </option>
+                                                {cargos.map((opcion) => (
+                                                    <option
+                                                        key={opcion}
+                                                        value={opcion}
+                                                    >
+                                                        {opcion === 'Otro'
+                                                            ? 'Otro (especificar)'
+                                                            : opcion}
+                                                    </option>
+                                                ))}
+                                            </NativeSelect>
+                                        </Campo>
+                                        {f.data.position === 'Otro' && (
+                                            <Campo
+                                                label="¿Cuál cargo?"
+                                                htmlFor="s-position_otro"
+                                                error={f.errors.position_otro}
+                                            >
+                                                <Input
+                                                    id="s-position_otro"
+                                                    maxLength={120}
+                                                    placeholder="Jefe de UTP"
+                                                    value={f.data.position_otro}
+                                                    onChange={(e) =>
+                                                        f.set(
+                                                            'position_otro',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </Campo>
+                                        )}
+                                        <Campo
+                                            label="Institución"
+                                            htmlFor="s-institution"
+                                            error={f.errors.institution}
+                                        >
+                                            <Input
+                                                id="s-institution"
+                                                value={f.data.institution}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'institution',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                    </>
+                                )}
+                            </EditarSeccion>
+                        )
+                    }
+                >
                     <Datos>
                         <Dato etiqueta="Correo">
                             <a
@@ -245,7 +395,8 @@ export default function SolicitudShow({
                             {solicitud.campana ?? 'Sin campaña'}
                         </Dato>
                         <Dato etiqueta="Desde qué página la envió" ancho>
-                            {solicitud.desde ?? 'Entró directo'}
+                            {solicitud.desde ??
+                                'Inscripción directa con correo'}
                         </Dato>
                     </Datos>
                 </SeccionFicha>
