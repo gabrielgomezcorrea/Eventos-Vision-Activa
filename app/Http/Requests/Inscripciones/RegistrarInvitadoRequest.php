@@ -40,7 +40,7 @@ class RegistrarInvitadoRequest extends FormRequest
             'event_id' => ['required', Rule::exists('events', 'id')],
             'first_name' => ReglasDeContacto::nombres(),
             'last_name' => ReglasDeContacto::apellidos(),
-            'rut' => ['required', 'string', 'max:20', new RutValido],
+            'rut' => ['nullable', 'string', 'max:20', new RutValido],
             'email' => ReglasDeContacto::correo(),
             'phone' => ReglasDeContacto::telefono(false),
             'position' => ReglasDeContacto::cargo(true, $this->evento()?->cargosDeParticipante() ?? ProgramFormField::CARGOS_PARTICIPANTE),

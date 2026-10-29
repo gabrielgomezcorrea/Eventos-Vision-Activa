@@ -47,23 +47,26 @@
             <div class="fila-persona-datos">
                 <strong>{{ $participante->nombre_completo }}</strong>
                 <span class="ayuda" style="margin:0">
-                    {{ collect([$participante->rut, $participante->accessType?->name, $variosColegios ? null : $participante->establishment?->name])->filter()->implode(' · ') }}
+                    {{ collect([$participante->rut, $participante->accessType?->name ?? '-', $variosColegios ? null : $participante->establishment?->name])->filter()->implode(' · ') }}
                     · ${{ number_format($valorDe($participante), 0, ',', '.') }}
                 </span>
-                @unless ($orden->esBorrador())
                     <details class="desplegable-chico">
-                        <summary>Cambiar acceso</summary>
+                        <summary>{{ $participante->access_type_id === null ? 'Elegir acceso' : 'Cambiar acceso' }}</summary>
                         <form method="POST" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"
                               action="{{ route('inscripcion.participantes.acceso', ['token' => $token, 'participante' => $participante->id]) }}">
                             @method('PATCH')
                             <select name="access_type_id" aria-label="Acceso de {{ $participante->nombre_completo }}" style="width:auto">
+                                @if ($participante->access_type_id === null)
+                                    <option value="" selected disabled>Selecciona</option>
+                                @endif
                                 @foreach ($accesos as $acceso)
                                     <option value="{{ $acceso->id }}" @selected($participante->access_type_id === $acceso->id)>{{ $acceso->name }} — ${{ number_format($acceso->precioVigente(), 0, ',', '.') }}</option>
                                 @endforeach
                             </select>
-                            <button type="submit" class="btn btn-secundario" data-enviando-texto="Cambiando…">Cambiar</button>
+                            <button type="submit" class="btn btn-secundario" data-enviando-texto="Guardando…">Guardar</button>
                         </form>
                     </details>
+                @unless ($orden->esBorrador())
                     @include('publico.portal._corregir-participante', ['participante' => $participante])
                 @endunless
             </div>

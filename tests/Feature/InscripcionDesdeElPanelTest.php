@@ -123,27 +123,38 @@ class InscripcionDesdeElPanelTest extends TestCase
             ->where('orden.creada_por_el_equipo', false));
     }
 
-    public function test_el_portal_acepta_participante_sin_rut_solo_en_inscripciones_del_equipo(): void
+    public function test_el_portal_acepta_participante_sin_rut_ni_acceso_y_no_cobra_hasta_elegirlo(): void
     {
-        $this->actingAs($this->usuarioConRol(Rol::Coordinacion));
-        $this->crear();
-        $delEquipo = Order::query()->firstOrFail();
+        $orden = Order::create(['event_id' => $this->event->id, 'responsible_email' => 'otra@colegio.cl', 'responsible_name' => 'O']);
         $acceso = $this->event->accessTypes()->create(['name' => 'General', 'position' => 1, 'price' => 1000]);
-        [, $token] = MagicLink::emitir($this->event, 'flor@colegio.cl', $delEquipo);
-        $normal = Order::create(['event_id' => $this->event->id, 'responsible_email' => 'otra@colegio.cl', 'responsible_name' => 'O']);
-        [, $tokenNormal] = MagicLink::emitir($this->event, 'otra@colegio.cl', $normal);
+        [, $token] = MagicLink::emitir($this->event, 'otra@colegio.cl', $orden);
 
-        $datos = [
-            'first_name' => 'Ana', 'last_name' => 'Pérez', 'position' => 'Director/a',
-            'email' => 'ana@colegio.cl', 'access_type_id' => $acceso->id,
-        ];
+        $datos = ['first_name' => 'Ana', 'last_name' => 'Pérez', 'position' => 'Director/a', 'email' => 'ana@colegio.cl'];
 
-        $this->post(route('inscripcion.participantes.agregar', ['token' => $token]), $datos);
-        $this->assertSame(1, $delEquipo->participants()->count());
-        $this->assertNull($delEquipo->participants()->first()->rut);
+        $this->post(route('inscripcion.participantes.agregar', ['token' => $token]), $datos + ['access_type_id' => '']);
 
-        $this->post(route('inscripcion.participantes.agregar', ['token' => $tokenNormal]), $datos);
-        $this->assertSame(0, $normal->participants()->count());
+        $participante = $orden->participants()->sole();
+        $this->assertNull($participante->rut);
+        $this->assertNull($participante->access_type_id);
+        $this->assertSame(0, $orden->fresh()->calcularSubtotal());
+
+        $this->patch(route('inscripcion.participantes.acceso', ['token' => $token, 'participante' => $participante->id]), ['access_type_id' => $acceso->id]);
+
+        $this->assertSame($acceso->id, $participante->fresh()->access_type_id);
+        $this->assertSame(1000, $orden->fresh()->calcularSubtotal());
+    }
+
+    public function test_el_invitado_especial_puede_registrarse_sin_rut(): void
+    {
+        $this->actingAs($this->usuarioConRol(Rol::Administrador));
+        $acceso = $this->event->accessTypes()->create(['name' => 'General', 'position' => 1, 'price' => 1000]);
+
+        $this->post(route('inscripciones.invitado'), [
+            'event_id' => $this->event->id, 'first_name' => 'Luz', 'last_name' => 'Rojas', 'position' => 'Director/a',
+            'email' => 'luz@colegio.cl', 'access_type_id' => $acceso->id,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull(Order::query()->latest('id')->first()->participants()->first()->rut);
     }
 
     public function test_reenviar_al_cliente_manda_el_correo_de_su_etapa(): void

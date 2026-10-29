@@ -453,14 +453,14 @@ class InscripcionController extends Controller
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'first_name' => ReglasDeContacto::nombres(),
             'last_name' => ReglasDeContacto::apellidos(),
-            // Una inscripción creada por el equipo parte de la ficha en papel
-            // del colegio, que no siempre trae RUT: la ficha del panel marca
-            // a quien le falta.
-            'rut' => [$orden->creadaPorElEquipo() ? 'nullable' : 'required', 'string', 'max:20', new RutValido],
+            // El RUT del participante es opcional: la ficha del panel marca a
+            // quien le falta. El de la entidad pagadora sigue obligatorio.
+            'rut' => ['nullable', 'string', 'max:20', new RutValido],
             'position' => ReglasDeContacto::cargo(true, $orden->event->cargosDeParticipante()),
             'position_otro' => ReglasDeContacto::cargoOtro('position'),
             'email' => ReglasDeContacto::correo(),
-            'access_type_id' => ['required', Rule::in($accesos)],
+            // Sin acceso el participante queda en "-": no cobra ni ocupa cupo hasta que se elija uno.
+            'access_type_id' => ['nullable', Rule::in($accesos)],
             'establishment_id' => [$requiereEstablecimiento ? 'required' : 'nullable', Rule::in($establecimientos)],
         ], [
             'access_type_id.required' => 'Seleccione el tipo de acceso.',
@@ -487,6 +487,7 @@ class InscripcionController extends Controller
             'email' => 'correo',
         ]);
         $datos['rut'] = Rut::normalizar($datos['rut'] ?? null);
+        $datos['access_type_id'] = ($datos['access_type_id'] ?? '') === '' ? null : (int) $datos['access_type_id'];
         $datos['establishment_id'] = $requiereEstablecimiento
             ? (int) $validator->validated()['establishment_id']
             : ($establecimientos[0] ?? null);
@@ -499,7 +500,7 @@ class InscripcionController extends Controller
 
         // Ya confirmada: toma cupos, usos del código y recalcula el monto.
         try {
-            $modificar->agregarParticipante($orden, $datos, AccessType::findOrFail($datos['access_type_id']));
+            $modificar->agregarParticipante($orden, $datos, $datos['access_type_id'] === null ? null : AccessType::findOrFail($datos['access_type_id']));
         } catch (CambioNoPermitido|CuposInsuficientes $e) {
             return $this->vistaInscripcion($token, $orden->fresh(), 'participantes', $request->all(), (new MessageBag)->add('cambio', $e->getMessage()));
         }
@@ -539,6 +540,13 @@ class InscripcionController extends Controller
 
         if ($validator->fails()) {
             return $this->vistaInscripcion($token, $orden, 'participantes', $request->all(), $validator->errors());
+        }
+
+        // En borrador no hay cupos ni precio congelado: solo se guarda la elección.
+        if ($orden->esBorrador()) {
+            $orden->participants()->findOrFail($participante)->update(['access_type_id' => (int) $validator->validated()['access_type_id']]);
+
+            return $this->aBloque($token, 'participantes');
         }
 
         try {

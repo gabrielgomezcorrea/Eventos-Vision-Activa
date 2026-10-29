@@ -374,7 +374,7 @@ class InscripcionController extends Controller
                 'correo' => $p->email,
                 'cargo' => $p->position,
                 'rut' => $p->rut,
-                'falta_rut' => $order->creadaPorElEquipo() && $p->rut === null && $p->status !== ParticipantStatus::Reemplazado,
+                'falta_rut' => $p->rut === null && $p->status !== ParticipantStatus::Reemplazado,
                 'establecimiento' => $p->establishment?->name,
                 'establishment_id' => $p->establishment_id,
                 'acceso' => $p->accessType?->name,
@@ -459,9 +459,7 @@ class InscripcionController extends Controller
                 'editarNotas' => $puedeReemplazar,
                 'verCredenciales' => $puedeVerCredenciales,
             ],
-            'faltan_rut' => $order->creadaPorElEquipo()
-                ? $order->participantesVigentes()->whereNull('rut')->count()
-                : 0,
+            'faltan_rut' => $order->participantesVigentes()->whereNull('rut')->count(),
             'reenvio' => $puedeReemplazar ? $this->reenvioDe($order) : null,
             'enlace_cliente' => $this->enlaceDelCliente($order, $puedeReemplazar, $emitir),
             // Solo sobre una reserva vigente; si algo lo impide, el botón lo dice.

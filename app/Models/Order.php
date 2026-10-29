@@ -400,12 +400,15 @@ class Order extends Model
      */
     public function participantesParaDescuento(): int
     {
+        // Quien no tiene acceso elegido todavía no cuenta para el descuento por cantidad.
+        $conAcceso = fn (self $orden): int => $orden->participantesVigentes->whereNotNull('access_type_id')->count();
+
         if (! $this->event->cuentaDescuentoPorConjunto() || $this->group_id === null) {
-            return $this->participantesVigentes->count();
+            return $conAcceso($this);
         }
 
         return (int) $this->group->orders->sum(
-            fn (self $orden): int => $orden->is($this) ? $this->participantesVigentes->count() : $orden->participantesVigentes->count()
+            fn (self $orden): int => $conAcceso($orden->is($this) ? $this : $orden)
         );
     }
 

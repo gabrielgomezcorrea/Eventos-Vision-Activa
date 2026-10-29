@@ -81,7 +81,7 @@
                     <span class="iniciales">{{ mb_strtoupper(mb_substr($participante->first_name, 0, 1).mb_substr((string) $participante->last_name, 0, 1)) }}</span>
                     <div class="fila-persona-datos">
                         <strong>{{ $participante->nombre_completo }}</strong>
-                        <span class="ayuda" style="margin:0">{{ collect([$participante->rut, $participante->accessType?->name])->filter()->implode(' · ') }}</span>
+                        <span class="ayuda" style="margin:0">{{ collect([$participante->rut, $participante->accessType?->name ?? '-'])->filter()->implode(' · ') }}</span>
                         @if ($nivel->permiteCorregirDatos())
                             @include('publico.portal._corregir-participante', ['participante' => $participante])
                         @endif

@@ -36,20 +36,21 @@ class ModificarInscripcion
      * @throws CambioNoPermitido
      * @throws CuposInsuficientes
      */
-    public function agregarParticipante(Order $orden, array $datos, AccessType $acceso): Participant
+    public function agregarParticipante(Order $orden, array $datos, ?AccessType $acceso): Participant
     {
         return $this->enTransaccion($orden, NivelDeCambio::Completo, function (Order $fresca) use ($datos, $acceso): Participant {
-            $acceso->loadMissing('sessions');
-            $this->cupos->tomar($acceso->consumoDeCupos());
+            // Sin acceso (queda en "-") no ocupa cupo ni cobra hasta que se elija uno.
+            $acceso?->loadMissing('sessions');
+            $this->cupos->tomar($acceso?->consumoDeCupos() ?? []);
 
             // El cupo del código es por persona (el solicitante), no por participante:
             // sumar a alguien no ocupa otro.
             $codigo = $this->codigoDe($fresca);
 
             $participante = $fresca->participants()->create($datos + [
-                'access_type_id' => $acceso->getKey(),
+                'access_type_id' => $acceso?->getKey(),
                 // El precio vigente en este momento, solo para quien entra.
-                'unit_price' => $acceso->precioVigente(),
+                'unit_price' => $acceso?->precioVigente() ?? 0,
             ]);
 
             // Cada persona usa un solo código por evento, también al agregarla después.
@@ -64,7 +65,7 @@ class ModificarInscripcion
             Auditor::registrar(
                 sobre: $fresca,
                 accion: 'orden.participante_agregado_por_cliente',
-                propiedades: ['participante' => $participante->nombre_completo, 'acceso' => $acceso->name, 'total' => $fresca->total],
+                propiedades: ['participante' => $participante->nombre_completo, 'acceso' => $acceso?->name, 'total' => $fresca->total],
                 actorLabel: $fresca->responsible_email,
             );
 

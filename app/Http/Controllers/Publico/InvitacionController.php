@@ -40,7 +40,7 @@ class InvitacionController extends Controller
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'first_name' => ReglasDeContacto::nombres(),
             'last_name' => ReglasDeContacto::apellidos(),
-            'rut' => ['required', 'string', 'max:20', new RutValido],
+            'rut' => ['nullable', 'string', 'max:20', new RutValido],
             'phone' => ReglasDeContacto::telefono(false),
             'position' => ReglasDeContacto::cargo(true, $evento->cargosDeParticipante()),
             'position_otro' => ReglasDeContacto::cargoOtro('position'),

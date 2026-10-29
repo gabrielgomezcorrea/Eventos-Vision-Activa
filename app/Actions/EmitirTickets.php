@@ -45,7 +45,9 @@ class EmitirTickets
             $nuevos = collect();
 
             foreach ($orden->participantesVigentes as $participante) {
-                if ($this->yaTieneTicket($participante)) {
+                // Sin tipo de acceso (queda en "-") no hay credencial: no sabría
+                // a qué jornadas entra. Sale cuando se le elija uno.
+                if ($participante->access_type_id === null || $this->yaTieneTicket($participante)) {
                     continue;
                 }
 

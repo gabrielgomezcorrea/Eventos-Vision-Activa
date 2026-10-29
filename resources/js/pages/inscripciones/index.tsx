@@ -253,7 +253,6 @@ function NuevoInvitado({
                 <Campo label="RUT" htmlFor="i-rut" error={form.errors.rut}>
                     <Input
                         id="i-rut"
-                        required
                         placeholder="12.345.678-9"
                         value={form.data.rut}
                         onChange={(e) => form.setData('rut', e.target.value)}

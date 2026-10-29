@@ -293,7 +293,7 @@
                 @forelse ($orden->participantesVigentes as $participante)
                     <tr>
                         <td>{{ $participante->nombre_completo }}</td>
-                        <td><span class="chip">{{ $participante->accessType?->name }}</span></td>
+                        <td><span class="chip">{{ $participante->accessType?->name ?? '-' }}</span></td>
                         <td style="text-align:right">${{ number_format($borrador ? ($participante->accessType?->precioVigente() ?? 0) : $participante->unit_price, 0, ',', '.') }}</td>
                     </tr>
                 @empty

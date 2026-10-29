@@ -53,7 +53,7 @@ class CorregirParticipanteRequest extends FormRequest
         return [
             'first_name' => ReglasDeContacto::nombres(),
             'last_name' => ReglasDeContacto::apellidos(),
-            'rut' => [$this->orden()->creadaPorElEquipo() ? 'nullable' : 'required', 'string', 'max:20', new RutValido],
+            'rut' => ['nullable', 'string', 'max:20', new RutValido],
             'position' => ReglasDeContacto::cargo(true, $this->orden()->event->cargosDeParticipante()),
             'position_otro' => ReglasDeContacto::cargoOtro('position'),
             'email' => ReglasDeContacto::correo(),
