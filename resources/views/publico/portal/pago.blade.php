@@ -121,7 +121,10 @@
 
         @if ($event->bank_account_number)
             @include('publico.portal._datos-bancarios', ['referencia' => $orden->number ?? '-'])
-            <p class="ayuda" style="margin-top:10px">Indica el número de inscripción en el mensaje de la transferencia.</p>
+            {{-- Las instrucciones del evento suelen traer esta misma frase: no se repite. --}}
+            @unless (\Illuminate\Support\Str::contains(mb_strtolower((string) $event->payment_instructions), 'número de inscripción'))
+                <p class="ayuda" style="margin-top:10px">Indica el número de inscripción en el mensaje de la transferencia.</p>
+            @endunless
         @else
             <div class="vacio">Nos pondremos en contacto contigo con los datos para la transferencia.</div>
         @endif
