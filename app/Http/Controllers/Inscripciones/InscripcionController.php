@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Inscripciones;
 
 use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\CancelarOrden;
+use App\Actions\CrearInscripcionDesdePanel;
+use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\ReactivarReserva;
 use App\Actions\ReemplazarParticipante;
 use App\Actions\RegistrarComprobante;
 use App\Actions\RegistrarInvitado;
 use App\Enums\EventStatus;
 use App\Enums\InvoiceDocumentType;
+use App\Enums\OrderKind;
 use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
@@ -24,11 +27,15 @@ use App\Http\Requests\Inscripciones\CancelarOrdenRequest;
 use App\Http\Requests\Inscripciones\CargarComprobanteRequest;
 use App\Http\Requests\Inscripciones\CorregirCorreoDelResponsableRequest;
 use App\Http\Requests\Inscripciones\CorregirParticipanteRequest;
+use App\Http\Requests\Inscripciones\CrearInscripcionRequest;
 use App\Http\Requests\Inscripciones\GuardarNotaRequest;
 use App\Http\Requests\Inscripciones\ReemplazarParticipanteRequest;
 use App\Http\Requests\Inscripciones\RegistrarFacturaRequest;
 use App\Http\Requests\Inscripciones\RegistrarInvitadoRequest;
+use App\Mail\EnlaceDeAcceso;
 use App\Mail\FacturaEmitida;
+use App\Mail\OrdenConfirmada;
+use App\Mail\PagoAprobado;
 use App\Models\Event;
 use App\Models\InvoiceRecord;
 use App\Models\Order;
@@ -39,6 +46,7 @@ use App\Support\Auditor;
 use App\Support\GeneradorQr;
 use App\Support\Presentar;
 use App\Support\Rut;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -132,7 +140,112 @@ class InscripcionController extends Controller
                         ])->all(),
                 ]
                 : null,
+            // Inscripción iniciada por el equipo: solo eventos publicados.
+            'nuevaInscripcion' => $request->user()->can(Permiso::GestionarOrdenes->value)
+                ? ['eventos' => Event::query()->where('status', EventStatus::Publicado->value)->orderBy('name')->pluck('name', 'id')]
+                : null,
         ]);
+    }
+
+    /**
+     * Enlace del portal para que el equipo llene la ficha del colegio. Solo en
+     * inscripciones que creó el equipo y siguen abiertas.
+     */
+    private function enlaceDelCliente(Order $order, bool $puedeEditar, EmitirEnlaceDeAcceso $emitir): ?string
+    {
+        if (! $puedeEditar || ! $order->creadaPorElEquipo()
+            || $order->kind === OrderKind::Invitado
+            || ! in_array($order->status, [OrderStatus::Borrador, OrderStatus::Reservada], true)) {
+            return null;
+        }
+
+        return $this->enlaceEstableDe($order, $emitir);
+    }
+
+    /**
+     * Enlace estable de la solicitud, solo si lleva a esta inscripción: si el
+     * responsable ya no es el de la solicitud, devolverlo abriría otro borrador.
+     */
+    private function enlaceEstableDe(Order $order, EmitirEnlaceDeAcceso $emitir): ?string
+    {
+        $solicitud = $order->programRequest;
+
+        if ($solicitud === null) {
+            return null;
+        }
+
+        $correo = mb_strtolower(trim($solicitud->email));
+        $viva = $emitir->colegiosVigentesDe($order->event, $correo)?->first() ?? $emitir->ordenVigenteDe($order->event, $correo);
+
+        if ($viva === null || ($viva->isNot($order) && $viva->group_id !== $order->group_id)) {
+            return null;
+        }
+
+        return $emitir->urlDeAcceso($solicitud);
+    }
+
+    /**
+     * Qué correo le toca al cliente según la etapa de su inscripción.
+     *
+     * @return array{etapa: string|null, disponible: bool, texto: string|null, motivo: string|null}|null
+     */
+    private function reenvioDe(Order $order): ?array
+    {
+        if ($order->kind === OrderKind::Invitado) {
+            return null;
+        }
+
+        return match (true) {
+            $order->status === OrderStatus::Cancelada => ['etapa' => null, 'disponible' => false, 'texto' => null, 'motivo' => 'Inscripción cancelada: no hay nada que enviar.'],
+            $order->status === OrderStatus::Vencida => ['etapa' => null, 'disponible' => false, 'texto' => null, 'motivo' => 'Reserva vencida: reactívala antes de enviar.'],
+            $order->esBorrador() => ['etapa' => 'borrador', 'disponible' => true, 'texto' => 'Le enviaremos el enlace para completar la inscripción.', 'motivo' => null],
+            $order->payment_status === PaymentStatus::Aprobado => ['etapa' => 'pagada', 'disponible' => true, 'texto' => 'Le enviaremos el pago confirmado con sus credenciales.', 'motivo' => null],
+            default => ['etapa' => 'confirmada', 'disponible' => true, 'texto' => 'Le enviaremos la confirmación con los datos para pagar.', 'motivo' => null],
+        };
+    }
+
+    /** Vuelve a mandarle al cliente el correo de la etapa en que va su inscripción. */
+    public function reenviarAlCliente(Order $order, EmitirEnlaceDeAcceso $emitir): RedirectResponse
+    {
+        Gate::authorize('update', $order);
+
+        $reenvio = $this->reenvioDe($order);
+
+        if ($reenvio === null || ! $reenvio['disponible']) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $reenvio['motivo'] ?? 'Esta inscripción no tiene correo para reenviar.']);
+
+            return back();
+        }
+
+        // En borrador sin responsable escrito, el correo es el del enlace.
+        $correo = $order->responsible_email !== ''
+            ? $order->responsible_email
+            : (string) $order->magicLinks()->latest('id')->value('email');
+
+        if ($correo === '') {
+            Inertia::flash('toast', ['type' => 'error', 'message' => 'Esta inscripción todavía no tiene un correo al que enviar.']);
+
+            return back();
+        }
+
+        if ($reenvio['etapa'] === 'borrador') {
+            $url = $this->enlaceEstableDe($order, $emitir);
+
+            if ($url !== null) {
+                Mail::to($correo)->queue(new EnlaceDeAcceso(event: $order->event, url: $url, numeroDeOrden: $order->number));
+            } elseif (! $emitir($order->event, $correo)) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => 'Espera un momento antes de volver a enviarlo.']);
+
+                return back();
+            }
+        } else {
+            Mail::to($correo)->queue($reenvio['etapa'] === 'pagada' ? new PagoAprobado($order) : new OrdenConfirmada($order));
+        }
+
+        Auditor::registrar($order, 'orden.correo_reenviado', propiedades: ['etapa' => $reenvio['etapa'], 'correo' => $correo]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Correo enviado a {$correo}."]);
+
+        return back();
     }
 
     /**
@@ -170,7 +283,30 @@ class InscripcionController extends Controller
         return to_route('inscripciones.show', $orden);
     }
 
-    public function show(Request $request, Order $order): Response
+    /** El equipo inicia una inscripción con el correo de quien hace el trámite. */
+    public function crearDesdePanel(CrearInscripcionRequest $request, CrearInscripcionDesdePanel $crear, EmitirEnlaceDeAcceso $emitir): RedirectResponse
+    {
+        try {
+            [$orden, $nueva] = $crear($request->evento(), $request->correo(), $request->user(), $emitir, $request->avisarAlCliente());
+        } catch (LockTimeoutException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => 'Otra persona está creando esa inscripción. Intenta de nuevo en unos segundos.']);
+
+            return back();
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $nueva
+                ? ($request->avisarAlCliente()
+                    ? "Inscripción creada. Le enviamos el enlace a {$request->correo()}."
+                    : 'Inscripción creada. No se le envió ningún correo al cliente.')
+                : 'Ese correo ya tiene una inscripción en este evento. Te llevamos a ella.',
+        ]);
+
+        return to_route('inscripciones.show', $orden);
+    }
+
+    public function show(Request $request, Order $order, EmitirEnlaceDeAcceso $emitir): Response
     {
         Gate::authorize('view', $order);
 
@@ -199,6 +335,8 @@ class InscripcionController extends Controller
                 'estado' => Presentar::estado($order->status),
                 'pago' => Presentar::estado($order->payment_status),
                 'tipo' => $order->kind->label(),
+                'creada_por_el_equipo' => $order->creadaPorElEquipo(),
+                'sin_correos' => ! $order->notify_client,
                 'evento' => ['id' => $order->event->id, 'nombre' => $order->event->name],
                 'confirmada' => $order->confirmed_at?->format('d-m-Y H:i'),
                 'vence' => $order->reserved_until?->format('d-m-Y H:i'),
@@ -236,6 +374,7 @@ class InscripcionController extends Controller
                 'correo' => $p->email,
                 'cargo' => $p->position,
                 'rut' => $p->rut,
+                'falta_rut' => $order->creadaPorElEquipo() && $p->rut === null && $p->status !== ParticipantStatus::Reemplazado,
                 'establecimiento' => $p->establishment?->name,
                 'establishment_id' => $p->establishment_id,
                 'acceso' => $p->accessType?->name,
@@ -320,6 +459,11 @@ class InscripcionController extends Controller
                 'editarNotas' => $puedeReemplazar,
                 'verCredenciales' => $puedeVerCredenciales,
             ],
+            'faltan_rut' => $order->creadaPorElEquipo()
+                ? $order->participantesVigentes()->whereNull('rut')->count()
+                : 0,
+            'reenvio' => $puedeReemplazar ? $this->reenvioDe($order) : null,
+            'enlace_cliente' => $this->enlaceDelCliente($order, $puedeReemplazar, $emitir),
             // Solo sobre una reserva vigente; si algo lo impide, el botón lo dice.
             'cancelacion' => $puedeReemplazar && $order->status === OrderStatus::Reservada
                 ? ['impedimento' => CancelarOrden::impedimento($order)]

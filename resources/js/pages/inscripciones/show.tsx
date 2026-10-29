@@ -10,7 +10,9 @@ import {
     ArrowRight,
     Ban,
     ChevronDown,
+    ExternalLink,
     FileText,
+    Mail,
     Paperclip,
     RefreshCw,
     RotateCcw,
@@ -81,6 +83,7 @@ type Participante = {
     correo: string | null;
     cargo: string | null;
     rut: string | null;
+    falta_rut: boolean;
     establecimiento: string | null;
     establishment_id: number | null;
     acceso: string | null;
@@ -97,6 +100,8 @@ type Props = {
         estado: Estado;
         pago: Estado;
         tipo: string;
+        creada_por_el_equipo: boolean;
+        sin_correos: boolean;
         evento: { id: number; nombre: string };
         confirmada: string | null;
         vence: string | null;
@@ -173,6 +178,13 @@ type Props = {
         editarNotas: boolean;
         verCredenciales: boolean;
     };
+    faltan_rut: number;
+    reenvio: {
+        disponible: boolean;
+        texto: string | null;
+        motivo: string | null;
+    } | null;
+    enlace_cliente: string | null;
     cancelacion: { impedimento: string | null } | null;
     reactivacion: { impedimento: string | null; plazo: string } | null;
     opciones: {
@@ -962,6 +974,58 @@ function CorregirParticipante({
     );
 }
 
+/** Vuelve a mandarle al cliente el correo de la etapa en que va. */
+function ReenviarAlCliente({
+    ordenId,
+    titulo,
+    reenvio,
+}: {
+    ordenId: number;
+    titulo: string;
+    reenvio: {
+        disponible: boolean;
+        texto: string | null;
+        motivo: string | null;
+    };
+}) {
+    if (!reenvio.disponible) {
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span>
+                        <Button variant="outline" disabled>
+                            <Mail />
+                            Reenviar al cliente
+                        </Button>
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent>{reenvio.motivo}</TooltipContent>
+            </Tooltip>
+        );
+    }
+
+    return (
+        <Confirmar
+            titulo={`Reenviar al cliente ${titulo}`}
+            descripcion={reenvio.texto ?? ''}
+            textoAccion="Reenviar"
+            destructivo={false}
+            onConfirmar={() =>
+                router.post(
+                    InscripcionController.reenviarAlCliente.url(ordenId),
+                    {},
+                    { preserveScroll: true },
+                )
+            }
+        >
+            <Button variant="outline">
+                <Mail />
+                Reenviar al cliente
+            </Button>
+        </Confirmar>
+    );
+}
+
 function ReactivarReserva({
     ordenId,
     titulo,
@@ -1115,6 +1179,9 @@ export default function InscripcionShow({
     pagos,
     facturacion,
     puede,
+    faltan_rut,
+    reenvio,
+    enlace_cliente,
     cancelacion,
     reactivacion,
     opciones,
@@ -1140,6 +1207,13 @@ export default function InscripcionShow({
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                             <EstadoBadge estado={orden.estado} />
                             <EstadoBadge estado={orden.pago} />
+                            {orden.creada_por_el_equipo && (
+                                <span className="text-muted-foreground">
+                                    Creada por el equipo
+                                    {orden.sin_correos &&
+                                        ' · sin correos al cliente'}
+                                </span>
+                            )}
                             <Link
                                 href={EventoController.show(orden.evento.id)}
                                 className="text-muted-foreground hover:underline"
@@ -1192,6 +1266,25 @@ export default function InscripcionShow({
                         )}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        {reenvio && (
+                            <ReenviarAlCliente
+                                ordenId={orden.id}
+                                titulo={titulo}
+                                reenvio={reenvio}
+                            />
+                        )}
+                        {enlace_cliente && (
+                            <Button variant="outline" asChild>
+                                <a
+                                    href={enlace_cliente}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <ExternalLink />
+                                    Abrir formulario del cliente
+                                </a>
+                            </Button>
+                        )}
                         {puede.cargarComprobante && (
                             <CargarComprobante
                                 ordenId={orden.id}
@@ -1352,95 +1445,118 @@ export default function InscripcionShow({
                             Sin participantes.
                         </p>
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="hover:bg-transparent">
-                                    {puede.reemplazar && (
-                                        <TableHead className="w-44 pl-5">
-                                            <span className="sr-only">
-                                                Acciones
-                                            </span>
-                                        </TableHead>
-                                    )}
-                                    <TableHead
-                                        className={cn(
-                                            !puede.reemplazar && 'pl-5',
-                                        )}
-                                    >
-                                        Participante
-                                    </TableHead>
-                                    <TableHead>RUT</TableHead>
-                                    <TableHead>Establecimiento</TableHead>
-                                    <TableHead>Acceso</TableHead>
-                                    <TableHead className="text-right">
-                                        Valor
-                                    </TableHead>
-                                    <TableHead>Estado</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {participantes.map((p) => (
-                                    <TableRow
-                                        key={p.id}
-                                        className={cn(
-                                            p.estado.value === 'replaced' &&
-                                                'text-muted-foreground',
-                                        )}
-                                    >
+                        <>
+                            {faltan_rut > 0 && (
+                                <p className="border-b bg-amber-50 px-5 py-3 text-sm text-amber-800">
+                                    Faltan {faltan_rut} RUT. Pídelos al colegio:
+                                    de ahí salen facturas y certificados.
+                                </p>
+                            )}
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="hover:bg-transparent">
                                         {puede.reemplazar && (
-                                            <TableCell className="pl-3">
-                                                <div className="flex items-center gap-1">
-                                                    {p.estado.value !==
-                                                        'replaced' && (
-                                                        <CorregirParticipante
+                                            <TableHead className="w-44 pl-5">
+                                                <span className="sr-only">
+                                                    Acciones
+                                                </span>
+                                            </TableHead>
+                                        )}
+                                        <TableHead
+                                            className={cn(
+                                                !puede.reemplazar && 'pl-5',
+                                            )}
+                                        >
+                                            Participante
+                                        </TableHead>
+                                        <TableHead>RUT</TableHead>
+                                        <TableHead>Establecimiento</TableHead>
+                                        <TableHead>Acceso</TableHead>
+                                        <TableHead className="text-right">
+                                            Valor
+                                        </TableHead>
+                                        <TableHead>Estado</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {participantes.map((p) => (
+                                        <TableRow
+                                            key={p.id}
+                                            className={cn(
+                                                p.estado.value === 'replaced' &&
+                                                    'text-muted-foreground',
+                                            )}
+                                        >
+                                            {puede.reemplazar && (
+                                                <TableCell className="pl-3">
+                                                    <div className="flex items-center gap-1">
+                                                        {p.estado.value !==
+                                                            'replaced' && (
+                                                            <CorregirParticipante
+                                                                ordenId={
+                                                                    orden.id
+                                                                }
+                                                                participante={p}
+                                                                establecimientos={
+                                                                    establecimientos
+                                                                }
+                                                            />
+                                                        )}
+                                                        <Reemplazar
                                                             ordenId={orden.id}
                                                             participante={p}
                                                             establecimientos={
                                                                 establecimientos
                                                             }
                                                         />
-                                                    )}
-                                                    <Reemplazar
-                                                        ordenId={orden.id}
-                                                        participante={p}
-                                                        establecimientos={
-                                                            establecimientos
-                                                        }
-                                                    />
-                                                </div>
-                                            </TableCell>
-                                        )}
-                                        <TableCell
-                                            className={cn(
-                                                !puede.reemplazar && 'pl-5',
+                                                    </div>
+                                                </TableCell>
                                             )}
-                                        >
-                                            <span className="font-medium">
-                                                {p.nombre}
-                                            </span>
-                                            {(p.cargo || p.reemplazado_por) && (
-                                                <span className="text-muted-foreground block text-xs">
-                                                    {p.reemplazado_por
-                                                        ? `Reemplazado por ${p.reemplazado_por}`
-                                                        : p.cargo}
+                                            <TableCell
+                                                className={cn(
+                                                    !puede.reemplazar && 'pl-5',
+                                                )}
+                                            >
+                                                <span className="font-medium">
+                                                    {p.nombre}
                                                 </span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>{p.rut ?? '—'}</TableCell>
-                                        <TableCell className="max-w-48 truncate">
-                                            {p.establecimiento ?? '—'}
-                                        </TableCell>
-                                        <TableCell>{p.acceso ?? '—'}</TableCell>
-                                        <TableCell className="text-right tabular-nums">
-                                            {clp(p.valor)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <EstadoBadge estado={p.estado} />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                                {(p.cargo ||
+                                                    p.reemplazado_por) && (
+                                                    <span className="text-muted-foreground block text-xs">
+                                                        {p.reemplazado_por
+                                                            ? `Reemplazado por ${p.reemplazado_por}`
+                                                            : p.cargo}
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {p.falta_rut ? (
+                                                    <span className="text-amber-700">
+                                                        Falta RUT
+                                                    </span>
+                                                ) : (
+                                                    (p.rut ?? '—')
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="max-w-48 truncate">
+                                                {p.establecimiento ?? '—'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {p.acceso ?? '—'}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                {clp(p.valor)}
+                                            </TableCell>
+                                            <TableCell>
+                                                <EstadoBadge
+                                                    estado={p.estado}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </>
                     )}
                 </SeccionFicha>
 

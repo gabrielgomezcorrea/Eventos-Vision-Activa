@@ -167,7 +167,7 @@ class ConfirmarOrden
 
         // Un conjunto de varios colegios manda un solo correo con todos
         // adentro (App\Actions\ConfirmarConjunto), no uno por colegio.
-        if ($enviarCorreo) {
+        if ($enviarCorreo && $orden->notify_client) {
             Mail::to($orden->responsible_email)->queue(new OrdenConfirmada($orden));
         }
 

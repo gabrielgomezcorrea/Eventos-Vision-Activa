@@ -40,6 +40,7 @@ class RecordarReservas extends Command
 
         $ordenes = Order::query()
             ->where('status', OrderStatus::Reservada)
+            ->where('notify_client', true)
             ->whereNull('reminder_sent_at')
             ->whereNotNull('reserved_until')
             ->whereBetween('reserved_until', [now(), now()->addHours($ventana)])

@@ -88,7 +88,7 @@ class ExpirarReservas extends Command
                 $vencidas++;
             });
 
-            if ($orden->fresh()->status === OrderStatus::Vencida) {
+            if ($orden->notify_client && $orden->fresh()->status === OrderStatus::Vencida) {
                 Mail::to($orden->responsible_email)->queue(new ReservaVencida($orden));
             }
         }

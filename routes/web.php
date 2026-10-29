@@ -97,6 +97,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('comprobantes/{payment}/revisar', [ComprobanteController::class, 'revisar'])->name('comprobantes.revisar');
 
     Route::get('inscripciones', [InscripcionController::class, 'index'])->name('inscripciones.index');
+    Route::post('inscripciones/nueva', [InscripcionController::class, 'crearDesdePanel'])->name('inscripciones.crear');
     Route::post('inscripciones/invitado', [InscripcionController::class, 'registrarInvitado'])->name('inscripciones.invitado');
     Route::get('inscripciones/{order}', [InscripcionController::class, 'show'])->name('inscripciones.show');
     Route::get('inscripciones/{order}/credenciales', [InscripcionController::class, 'credenciales'])->name('inscripciones.credenciales');
@@ -104,6 +105,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('inscripciones/{order}/notas', [InscripcionController::class, 'actualizarNotas'])->name('inscripciones.notas');
     Route::post('inscripciones/{order}/comprobante', [InscripcionController::class, 'cargarComprobante'])->name('inscripciones.comprobante');
     Route::post('inscripciones/{order}/factura', [InscripcionController::class, 'registrarFactura'])->name('inscripciones.factura');
+    Route::post('inscripciones/{order}/reenviar-al-cliente', [InscripcionController::class, 'reenviarAlCliente'])->name('inscripciones.reenviar');
     Route::post('inscripciones/{order}/cancelar', [InscripcionController::class, 'cancelar'])->name('inscripciones.cancelar');
     Route::post('inscripciones/{order}/reactivar', [InscripcionController::class, 'reactivar'])->name('inscripciones.reactivar');
     Route::post('inscripciones/{order}/participantes/{participant}/reemplazar', [InscripcionController::class, 'reemplazar'])

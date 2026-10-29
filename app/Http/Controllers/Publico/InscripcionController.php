@@ -453,7 +453,10 @@ class InscripcionController extends Controller
         $validator = Validator::make(ReglasDeContacto::limpiar($request->all()), [
             'first_name' => ReglasDeContacto::nombres(),
             'last_name' => ReglasDeContacto::apellidos(),
-            'rut' => ['required', 'string', 'max:20', new RutValido],
+            // Una inscripción creada por el equipo parte de la ficha en papel
+            // del colegio, que no siempre trae RUT: la ficha del panel marca
+            // a quien le falta.
+            'rut' => [$orden->creadaPorElEquipo() ? 'nullable' : 'required', 'string', 'max:20', new RutValido],
             'position' => ReglasDeContacto::cargo(true, $orden->event->cargosDeParticipante()),
             'position_otro' => ReglasDeContacto::cargoOtro('position'),
             'email' => ReglasDeContacto::correo(),

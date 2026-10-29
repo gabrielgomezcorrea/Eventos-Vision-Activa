@@ -104,7 +104,7 @@ class RevisarPago
             default => new PagoRechazado($orden, $comentario ?? ''),
         };
 
-        if ($correo !== null) {
+        if ($correo !== null && $orden->notify_client) {
             Mail::to($orden->responsible_email)->queue($correo);
         }
 

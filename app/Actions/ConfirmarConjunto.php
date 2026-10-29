@@ -57,7 +57,9 @@ class ConfirmarConjunto
             );
 
             $grupo = $ordenes[0]->group()->firstOrFail();
-            Mail::to($borrador->responsible_email)->queue(new ConjuntoConfirmado($grupo, collect($ordenes)));
+            if ($borrador->notify_client) {
+                Mail::to($borrador->responsible_email)->queue(new ConjuntoConfirmado($grupo, collect($ordenes)));
+            }
 
             return $ordenes;
         });

@@ -1,5 +1,5 @@
 import { Head, Link, router, setLayoutProps, useForm } from '@inertiajs/react';
-import { Search, UserPlus } from 'lucide-react';
+import { Plus, Search, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
@@ -11,6 +11,7 @@ import { Panel } from '@/pages/inscripciones/show';
 import { NativeSelect } from '@/components/native-select';
 import { Paginacion } from '@/components/paginacion';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
     Table,
@@ -55,9 +56,94 @@ type Props = {
         cargos: Record<string, string[]>;
         accesos: Record<string, Record<string, string>>;
     } | null;
+    nuevaInscripcion: { eventos: Record<string, string> } | null;
 };
 
 const clp = (valor: number): string => `$${valor.toLocaleString('es-CL')}`;
+
+/** El equipo inicia la inscripción de un colegio con el correo de quien hace el trámite. */
+function NuevaInscripcion({ eventos }: { eventos: Record<string, string> }) {
+    const [abierto, setAbierto] = useState(false);
+    const ids = Object.keys(eventos);
+    const form = useForm({
+        event_id: ids[0] ?? '',
+        email: '',
+        notify_client: true,
+    });
+
+    function guardar(e: FormEvent) {
+        e.preventDefault();
+        form.post(InscripcionController.crearDesdePanel.url(), {
+            onSuccess: () => setAbierto(false),
+        });
+    }
+
+    return (
+        <Panel
+            titulo="Nueva inscripción"
+            descripcion="Le enviamos el enlace al correo del responsable."
+            trigger={
+                <Button>
+                    <Plus />
+                    Nueva inscripción
+                </Button>
+            }
+            abierto={abierto}
+            onOpenChange={(valor) => {
+                setAbierto(valor);
+
+                if (valor) {
+                    form.reset();
+                    form.clearErrors();
+                }
+            }}
+            onSubmit={guardar}
+            procesando={form.processing}
+            textoEnviar="Crear inscripción"
+        >
+            <Campo
+                label="Evento"
+                htmlFor="n-event"
+                error={form.errors.event_id}
+            >
+                <NativeSelect
+                    id="n-event"
+                    value={form.data.event_id}
+                    onChange={(e) => form.setData('event_id', e.target.value)}
+                >
+                    {ids.map((id) => (
+                        <option key={id} value={id}>
+                            {eventos[id]}
+                        </option>
+                    ))}
+                </NativeSelect>
+            </Campo>
+            <Campo
+                label="Correo del responsable"
+                htmlFor="n-email"
+                error={form.errors.email}
+            >
+                <Input
+                    id="n-email"
+                    type="email"
+                    required
+                    placeholder="nombre@colegio.cl"
+                    value={form.data.email}
+                    onChange={(e) => form.setData('email', e.target.value)}
+                />
+            </Campo>
+            <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                    checked={form.data.notify_client}
+                    onCheckedChange={(valor) =>
+                        form.setData('notify_client', valor === true)
+                    }
+                />
+                Enviarle correo
+            </label>
+        </Panel>
+    );
+}
 
 /** Invitado sin costo: ocupa cupo y recibe su credencial al guardar. */
 function NuevoInvitado({
@@ -278,6 +364,7 @@ export default function InscripcionesIndex({
     estados,
     pagos,
     invitados,
+    nuevaInscripcion,
 }: Props) {
     const [buscar, setBuscar] = useState(filtros.buscar ?? '');
 
@@ -316,12 +403,21 @@ export default function InscripcionesIndex({
                     <h1 className="text-xl font-semibold tracking-tight">
                         Inscripciones
                     </h1>
-                    {invitados && (
-                        <NuevoInvitado
-                            opciones={invitados}
-                            nombresDeEvento={eventos}
-                        />
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                        {invitados && (
+                            <NuevoInvitado
+                                opciones={invitados}
+                                nombresDeEvento={eventos}
+                            />
+                        )}
+                        {nuevaInscripcion &&
+                            Object.keys(nuevaInscripcion.eventos).length >
+                                0 && (
+                                <NuevaInscripcion
+                                    eventos={nuevaInscripcion.eventos}
+                                />
+                            )}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">

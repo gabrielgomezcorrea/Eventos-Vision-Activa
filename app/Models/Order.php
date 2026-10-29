@@ -23,6 +23,8 @@ use Illuminate\Support\Str;
  * Orden de inscripción. Es la entidad central: conecta responsable, entidad
  * pagadora, establecimientos, participantes, accesos, pago y tickets.
  *
+ * @property int|null $created_by_user_id
+ * @property bool $notify_client
  * @property OrderStatus $status
  * @property PaymentStatus $payment_status
  * @property OrderKind $kind
@@ -52,6 +54,7 @@ class Order extends Model
         'payment_status' => 'pending',
         'kind' => 'institutional',
         'total' => 0,
+        'notify_client' => true,
     ];
 
     protected static function booted(): void
@@ -69,6 +72,7 @@ class Order extends Model
             'payment_status' => PaymentStatus::class,
             'kind' => OrderKind::class,
             'total' => 'integer',
+            'notify_client' => 'boolean',
             'applied_tariff_until' => 'date',
             'subtotal' => 'integer',
             'discount_amount' => 'integer',
@@ -95,6 +99,18 @@ class Order extends Model
     public function programRequest(): BelongsTo
     {
         return $this->belongsTo(ProgramRequest::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function creadaPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /** La inscripción la inició el equipo desde el panel, no el cliente. */
+    public function creadaPorElEquipo(): bool
+    {
+        return $this->created_by_user_id !== null;
     }
 
     /** @return BelongsTo<Event, $this> */
