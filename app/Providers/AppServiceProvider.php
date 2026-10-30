@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Database\Faker\ChileProvider;
 use Faker\Factory;
 use Faker\Generator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
@@ -58,6 +59,10 @@ class AppServiceProvider extends ServiceProvider
         // Detrás de un proxy la petición llega como http; sin esto los
         // enlaces mágicos y los QR saldrían con http://.
         URL::forceHttps(app()->isProduction());
+
+        // El paginador toma la ruta de la petición cruda, que detrás del proxy
+        // llega como http; el navegador bloquea ese "Siguiente" por contenido mixto.
+        Paginator::currentPathResolver(fn (): string => url()->current());
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
