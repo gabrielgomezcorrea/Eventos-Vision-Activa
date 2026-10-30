@@ -56,7 +56,7 @@ class DashboardController extends Controller
         // Solicitudes tiene permiso propio: sin esto, Contabilidad veía una
         // tarjeta que la llevaba a una pantalla que no puede abrir.
         if ($usuario->can(Permiso::VerSolicitudes->value)) {
-            $tarjetas[] = self::tarjeta('Solicitudes sin inscribir', ProgramRequest::whereNull('converted_at')->count(), 'Pidieron el programa y no se han inscrito', 'info', 'inbox', route('solicitudes.index'));
+            $tarjetas[] = self::tarjeta('Solicitudes sin seguimiento', ProgramRequest::whereDoesntHave('notes')->whereNull('converted_at')->count(), 'Nadie las ha contactado y no se han inscrito', 'info', 'inbox', route('solicitudes.index', ['seguimiento' => 'sin']));
         }
 
         // Quien solo trabaja en la puerta no tiene colas de oficina: su

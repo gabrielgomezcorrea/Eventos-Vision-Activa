@@ -297,7 +297,7 @@ class EventoController extends Controller
     {
         return [
             'solicitudes' => $evento->programRequests()->count(),
-            'solicitudes_sin_seguir' => $evento->programRequests()->whereNull('converted_at')->count(),
+            'solicitudes_sin_seguir' => $evento->programRequests()->whereDoesntHave('notes')->whereNull('converted_at')->count(),
             'inscripciones' => $evento->orders()->whereNotNull('number')->count(),
             'pagadas' => $evento->orders()->where('payment_status', PaymentStatus::Aprobado)->count(),
             'por_vencer' => $evento->orders()
