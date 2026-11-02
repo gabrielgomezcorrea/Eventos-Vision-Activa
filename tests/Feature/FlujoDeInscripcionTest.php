@@ -57,7 +57,7 @@ class FlujoDeInscripcionTest extends TestCase
         $this->get("/i/{$this->event->slug}")
             ->assertOk()
             ->assertSee('Ingresa tu correo')
-            ->assertSee('Te enviaremos un enlace para inscribirte')
+            ->assertSee('Ingresa tu correo y recibirás un enlace para acceder al formulario de inscripción')
             ->assertSee('name="email"', escape: false)
             ->assertDontSee('name="password"', escape: false);
     }

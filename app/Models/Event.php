@@ -239,6 +239,46 @@ class Event extends Model
         return $this->discount_counting_mode === ModoConteoDescuento::PorConjunto;
     }
 
+    public const LOGO_FORMATOS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    public const LOGO_MAX_MB = 2;
+
+    /** Alto del logo en la página de inscripción, en píxeles: lo ajusta quien configura. */
+    public const LOGO_ALTO_MIN = 24;
+
+    public const LOGO_ALTO_MAX = 160;
+
+    public const LOGO_ALTO_POR_DEFECTO = 46;
+
+    public function altoDelLogo(): int
+    {
+        return (int) ($this->logo_height ?: self::LOGO_ALTO_POR_DEFECTO);
+    }
+
+    public function tieneLogo(): bool
+    {
+        return filled($this->logo_path) && Storage::disk($this->logo_disk)->exists($this->logo_path);
+    }
+
+    /** Va por ruta propia, como el banner: no depende del disco `public`. */
+    public function logoUrl(): ?string
+    {
+        if (blank($this->logo_path)) {
+            return null;
+        }
+
+        return route('publico.evento.logo', [
+            'event' => $this->slug,
+            'v' => $this->logo_updated_at?->timestamp ?? 0,
+        ]);
+    }
+
+    /** Título de la página de inscripción: el escrito para mostrar o, si no, el nombre. */
+    public function tituloParaMostrar(): string
+    {
+        return filled($this->display_title) ? $this->display_title : $this->name;
+    }
+
     /** @return BelongsTo<BankAccount, $this> */
     public function bankAccount(): BelongsTo
     {
@@ -292,6 +332,34 @@ class Event extends Model
     public function sessions(): HasMany
     {
         return $this->hasMany(EventSession::class)->orderBy('position');
+    }
+
+    /** Dates of the sessions in Chile time, e.g. "11 y 12 de noviembre de 2026"; null without dated sessions. */
+    public function fechasLegibles(): ?string
+    {
+        $days = $this->sessions->pluck('starts_at')->filter()
+            ->map(fn ($date) => $date->copy()->timezone(config('app.timezone'))->locale('es'))
+            ->unique(fn ($date) => $date->toDateString())->sortBy(fn ($date) => $date->timestamp)->values();
+
+        if ($days->isEmpty()) {
+            return null;
+        }
+
+        $first = $days->first();
+        $last = $days->last();
+
+        if ($days->count() === 1) {
+            return $first->isoFormat('D [de] MMMM [de] YYYY');
+        }
+
+        if ($first->format('Y-m') === $last->format('Y-m')) {
+            $list = $days->map(fn ($d) => $d->day)->all();
+            $tail = array_pop($list);
+
+            return implode(', ', $list).' y '.$tail.$first->isoFormat(' [de] MMMM [de] YYYY');
+        }
+
+        return $first->isoFormat('D [de] MMMM').' al '.$last->isoFormat('D [de] MMMM [de] YYYY');
     }
 
     /** @return HasMany<AccessType, $this> */

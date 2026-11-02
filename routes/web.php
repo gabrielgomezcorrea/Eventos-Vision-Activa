@@ -51,6 +51,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('eventos/{event}/estado', [EventoController::class, 'cambiarEstado'])->name('eventos.estado');
     Route::delete('eventos/{event}', [EventoController::class, 'destroy'])->name('eventos.destroy');
 
+    Route::post('eventos/{event}/logo', [EventoController::class, 'subirLogo'])->name('eventos.logo.store');
+    Route::delete('eventos/{event}/logo', [EventoController::class, 'quitarLogo'])->name('eventos.logo.destroy');
     Route::post('eventos/{event}/banner', [EventoController::class, 'subirBanner'])->name('eventos.banner.store');
     Route::patch('eventos/{event}/banner', [EventoController::class, 'ubicarBanner'])->name('eventos.banner.update');
     Route::delete('eventos/{event}/banner', [EventoController::class, 'quitarBanner'])->name('eventos.banner.destroy');
@@ -133,6 +135,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'show'])->name('cuentas-bancarias.show');
     Route::patch('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'update'])->name('cuentas-bancarias.update');
     Route::delete('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'destroy'])->name('cuentas-bancarias.destroy');
+
 
     Route::get('settings/webs', [WebController::class, 'index'])->name('webs.index');
     Route::post('settings/webs', [WebController::class, 'store'])->name('webs.store');

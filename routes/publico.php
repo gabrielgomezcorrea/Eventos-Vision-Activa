@@ -3,6 +3,7 @@
 use App\Http\Controllers\Publico\BannerController;
 use App\Http\Controllers\Publico\InscripcionController;
 use App\Http\Controllers\Publico\InvitacionController;
+use App\Http\Controllers\Publico\EventLogoController;
 use App\Http\Controllers\Publico\PortalController;
 use App\Http\Controllers\Publico\ProgramRequestController;
 use App\Http\Controllers\Publico\TicketController;
@@ -22,6 +23,8 @@ Route::view('/privacidad', 'publico.privacidad')->name('publico.privacidad');
 // Banner del evento. Es la única imagen pública del sistema: el correo la pide
 // desde el cliente de la persona, sin sesión ni permiso posible.
 Route::get('/e/{event:slug}/banner', BannerController::class)->name('publico.evento.banner');
+
+Route::get('/e/{event:slug}/logo', EventLogoController::class)->name('publico.evento.logo');
 
 Route::get('/f/{event:slug}', [ProgramRequestController::class, 'mostrar'])
     ->name('publico.programa');

@@ -176,20 +176,27 @@ class InscripcionDirectaTest extends TestCase
         $this->assertStringContainsString('El enlace sirve hasta el', Mail::queued(EnlaceDeAcceso::class)->last()->render());
     }
 
-    public function test_la_pagina_del_correo_muestra_el_banner_solo_si_external_esta_marcada(): void
+    public function test_la_pagina_del_correo_muestra_la_presentacion_del_evento_y_no_el_banner(): void
     {
         Storage::fake(config('filesystems.private_disk'));
         $this->actingAs($this->usuarioConRol(Rol::Administrador))
             ->post(route('eventos.banner.store', $this->event), [
                 'banner' => UploadedFile::fake()->image('afiche.jpg', 1200, 400),
             ]);
-        $this->event->refresh();
 
-        $this->event->update(['banner_placements' => ['external']]);
-        $this->get(route('inscripcion.inicio', $this->event->slug))->assertSee($this->event->bannerUrl(), false);
+        $this->event->update([
+            'organizer_name' => 'Corporación de Prueba',
+            'event_type' => 'Seminario Internacional',
+            'display_title' => 'Liderazgo para la Calidad',
+            'tagline' => 'Fortalecer capacidades',
+        ]);
 
-        $this->event->update(['banner_placements' => ['form', 'mail']]);
-        $this->get(route('inscripcion.inicio', $this->event->slug))->assertDontSee('/banner', false);
+        $this->get(route('inscripcion.inicio', $this->event->slug))
+            ->assertSee('Seminario Internacional')
+            ->assertSee('Liderazgo para la Calidad')
+            ->assertSee('Fortalecer capacidades')
+            ->assertSee('Corporación de Prueba')
+            ->assertDontSee('/banner', false);
     }
 
     public function test_el_panel_muestra_el_correo_como_nombre_y_el_enlace_directo(): void

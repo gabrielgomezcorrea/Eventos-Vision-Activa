@@ -79,6 +79,15 @@ type Evento = {
     aviso: string;
     reserva: string;
     fecha_limite_reemplazos: string | null;
+    organizer_name: string | null;
+    logo: string | null;
+    logo_max_mb: number;
+    logo_height: number;
+    logo_alto_min: number;
+    logo_alto_max: number;
+    event_type: string | null;
+    display_title: string | null;
+    tagline: string | null;
     bank_account_id: number | null;
     cuenta: Cuenta | null;
     enlace_publico: string;
@@ -474,6 +483,127 @@ function Banner({
     );
 }
 
+/**
+ * Logo del evento: uno solo, se sube o se cambia aquí mismo. Sin lista ni
+ * valores precargados.
+ */
+function LogoEvento({
+    evento,
+    alto,
+    setAlto,
+}: {
+    evento: Evento;
+    alto: string;
+    setAlto: (valor: string) => void;
+}) {
+    const entrada = useRef<HTMLInputElement>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [subiendo, setSubiendo] = useState(false);
+
+    function subir(archivo: File | undefined) {
+        setError(null);
+
+        if (!archivo) {
+            return;
+        }
+
+        if (archivo.size > evento.logo_max_mb * 1024 * 1024) {
+            setError(
+                `El logo pesa más de ${evento.logo_max_mb} MB. Elige uno más liviano.`,
+            );
+
+            if (entrada.current) {
+                entrada.current.value = '';
+            }
+
+            return;
+        }
+
+        router.post(
+            EventoController.subirLogo.url(evento.id),
+            { logo: archivo },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onStart: () => setSubiendo(true),
+                onFinish: () => {
+                    setSubiendo(false);
+
+                    if (entrada.current) {
+                        entrada.current.value = '';
+                    }
+                },
+                onError: (errores) =>
+                    setError(errores.logo ?? 'No se pudo subir el logo.'),
+            },
+        );
+    }
+
+    return (
+        <div className="grid gap-2">
+            <Label htmlFor="logo">Logo</Label>
+            {evento.logo && (
+                <div className="flex items-center gap-3">
+                    <img
+                        src={evento.logo}
+                        alt="Logo del evento"
+                        style={{
+                            height: `${Number(alto) || evento.logo_height}px`,
+                        }}
+                        className="max-w-[60%] rounded border bg-white p-1"
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                            router.delete(
+                                EventoController.quitarLogo.url(evento.id),
+                                { preserveScroll: true },
+                            )
+                        }
+                    >
+                        Quitar
+                    </Button>
+                </div>
+            )}
+            <Input
+                ref={entrada}
+                id="logo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={subiendo}
+                onChange={(e) => subir(e.target.files?.[0])}
+            />
+            <p className="text-muted-foreground text-xs">
+                JPG, PNG o WEBP, hasta {evento.logo_max_mb} MB. Mejor PNG con
+                fondo transparente.
+            </p>
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            {evento.logo && (
+                <div className="grid gap-1">
+                    <Label htmlFor="logo_height">
+                        Tamaño del logo ({alto} px de alto)
+                    </Label>
+                    <input
+                        id="logo_height"
+                        type="range"
+                        min={evento.logo_alto_min}
+                        max={evento.logo_alto_max}
+                        step={2}
+                        value={alto}
+                        onChange={(e) => setAlto(e.target.value)}
+                    />
+                    <p className="text-muted-foreground text-xs">
+                        Mueve la barra y mira arriba cómo queda. Se guarda con
+                        el botón Guardar.
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function EventoShow({
     evento,
     resumen,
@@ -768,6 +898,144 @@ export default function EventoShow({
                                 </Button>
                             </span>
                         </Dato>
+                    </Datos>
+                </SeccionFicha>
+
+                <SeccionFicha
+                    titulo="Página de inscripción"
+                    accion={
+                        puede.editar && (
+                            <EditarSeccion
+                                titulo="Página de inscripción"
+                                url={urlActualizar}
+                                inicial={{
+                                    organizer_name: evento.organizer_name ?? '',
+                                    event_type: evento.event_type ?? '',
+                                    display_title: evento.display_title ?? '',
+                                    tagline: evento.tagline ?? '',
+                                    logo_height: String(evento.logo_height),
+                                }}
+                            >
+                                {(f) => (
+                                    <>
+                                        <Campo
+                                            label="Organizador"
+                                            htmlFor="organizer_name"
+                                            error={f.errors.organizer_name}
+                                        >
+                                            <Input
+                                                id="organizer_name"
+                                                list="organizadores-sugeridos"
+                                                value={f.data.organizer_name}
+                                                maxLength={160}
+                                                placeholder="Corporación Liderazgo y Calidad Educacional"
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'organizer_name',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                            <datalist id="organizadores-sugeridos">
+                                                <option value="Visión Activa" />
+                                                <option value="Corporación Liderazgo y Calidad Educacional" />
+                                            </datalist>
+                                        </Campo>
+                                        <LogoEvento
+                                            evento={evento}
+                                            alto={f.data.logo_height}
+                                            setAlto={(valor) =>
+                                                f.set('logo_height', valor)
+                                            }
+                                        />
+                                        <Campo
+                                            label="Tipo de evento"
+                                            htmlFor="event_type"
+                                            error={f.errors.event_type}
+                                        >
+                                            <Input
+                                                id="event_type"
+                                                list="tipos-de-evento"
+                                                value={f.data.event_type}
+                                                maxLength={60}
+                                                placeholder="Seminario Internacional"
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'event_type',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                            <datalist id="tipos-de-evento">
+                                                <option value="Seminario Internacional" />
+                                                <option value="Seminario" />
+                                                <option value="Congreso" />
+                                                <option value="Curso" />
+                                                <option value="Taller" />
+                                                <option value="Jornada" />
+                                            </datalist>
+                                        </Campo>
+                                        <Campo
+                                            label="Título para mostrar"
+                                            htmlFor="display_title"
+                                            error={f.errors.display_title}
+                                        >
+                                            <Input
+                                                id="display_title"
+                                                value={f.data.display_title}
+                                                maxLength={120}
+                                                placeholder={evento.name}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'display_title',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                        <Campo
+                                            label="Subtítulo (una línea)"
+                                            htmlFor="tagline"
+                                            error={f.errors.tagline}
+                                        >
+                                            <Input
+                                                id="tagline"
+                                                value={f.data.tagline}
+                                                maxLength={160}
+                                                onChange={(e) =>
+                                                    f.set(
+                                                        'tagline',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </Campo>
+                                    </>
+                                )}
+                            </EditarSeccion>
+                        )
+                    }
+                >
+                    <Datos columnas={2}>
+                        <Dato etiqueta="Organizador">
+                            {evento.organizer_name}
+                        </Dato>
+                        <Dato etiqueta="Logo">
+                            {evento.logo ? (
+                                <img
+                                    src={evento.logo}
+                                    alt="Logo del evento"
+                                    className="max-h-10 w-auto"
+                                />
+                            ) : null}
+                        </Dato>
+                        <Dato etiqueta="Tipo de evento">
+                            {evento.event_type}
+                        </Dato>
+                        <Dato etiqueta="Título para mostrar">
+                            {evento.display_title ?? evento.name}
+                        </Dato>
+                        <Dato etiqueta="Subtítulo">{evento.tagline}</Dato>
                     </Datos>
                 </SeccionFicha>
 

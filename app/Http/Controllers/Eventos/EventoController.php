@@ -12,6 +12,7 @@ use App\Enums\ReservationDurationUnit;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Eventos\ActualizarEventoRequest;
 use App\Http\Requests\Eventos\BannerRequest;
+use App\Http\Requests\Eventos\LogoRequest;
 use App\Http\Requests\Eventos\CambiarEstadoEventoRequest;
 use App\Http\Requests\Eventos\CrearEventoRequest;
 use App\Http\Requests\Eventos\UbicacionesBannerRequest;
@@ -117,6 +118,15 @@ class EventoController extends Controller
                 'reservation_duration_unit' => $event->reservation_duration_unit->value,
                 'reserva' => self::plazo($event),
                 'fecha_limite_reemplazos' => $event->limiteDeReemplazos()?->format('d/m/Y \a \l\a\s H:i'),
+                'organizer_name' => $event->organizer_name,
+                'logo' => $event->tieneLogo() ? $event->logoUrl() : null,
+                'logo_max_mb' => Event::LOGO_MAX_MB,
+                'event_type' => $event->event_type,
+                'display_title' => $event->display_title,
+                'tagline' => $event->tagline,
+                'logo_height' => $event->altoDelLogo(),
+                'logo_alto_min' => Event::LOGO_ALTO_MIN,
+                'logo_alto_max' => Event::LOGO_ALTO_MAX,
                 'bank_account_id' => $event->bank_account_id,
                 'cuenta' => $event->bankAccount === null ? null : [
                     'label' => $event->bankAccount->label,
@@ -192,6 +202,44 @@ class EventoController extends Controller
         $event->update($request->validated());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cambios guardados.']);
+
+        return back();
+    }
+
+    public function subirLogo(LogoRequest $request, Event $event): RedirectResponse
+    {
+        $disco = config('filesystems.private_disk');
+        $anterior = $event->logo_path;
+        $anteriorDisco = $event->logo_disk;
+        $archivo = $request->file('logo');
+
+        $event->update([
+            'logo_disk' => $disco,
+            'logo_path' => $archivo->store('logos/'.$event->getKey(), $disco),
+            'logo_mime' => $archivo->getClientMimeType(),
+            'logo_updated_at' => now(),
+        ]);
+
+        if (filled($anterior)) {
+            Storage::disk($anteriorDisco)->delete($anterior);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Logo guardado.']);
+
+        return back();
+    }
+
+    public function quitarLogo(Event $event): RedirectResponse
+    {
+        Gate::authorize('update', $event);
+
+        if (filled($event->logo_path)) {
+            Storage::disk($event->logo_disk)->delete($event->logo_path);
+        }
+
+        $event->update(['logo_disk' => null, 'logo_path' => null, 'logo_mime' => null, 'logo_updated_at' => null]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Logo quitado.']);
 
         return back();
     }

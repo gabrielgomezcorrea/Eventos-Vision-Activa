@@ -63,7 +63,7 @@ class InscripcionController extends Controller
 
     // ---------------------------------------------------------------- acceso
 
-    public function inicio(Event $event): Renderable
+    public function inicio(Request $request, Event $event): Renderable
     {
         throw_unless($event->admiteInscripciones(), EnlaceNoUtilizable::eventoNoDisponible($event));
 
@@ -71,7 +71,7 @@ class InscripcionController extends Controller
             'event' => $event,
             'ubicacionBanner' => 'external',
             'enviado' => false,
-            'valores' => [],
+            'valores' => $request->only('email'),
             'errores' => new MessageBag,
         ]);
     }

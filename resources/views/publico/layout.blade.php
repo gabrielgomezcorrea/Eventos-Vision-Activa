@@ -196,13 +196,18 @@
     </style>
 </head>
 <body>
+@yield('barra')
 <div class="envoltura @yield('envoltura')">
+    @hasSection('encabezado')
+        @yield('encabezado')
+    @else
     <div class="portal-banner">@include('publico._banner', ['evento' => $event, 'ubicacion' => $ubicacionBanner ?? 'form'])</div>
 
     <div class="cabecera">
         <h1>{{ $event->name }}</h1>
         <p>@yield('subtitulo', 'Inscripción de participantes')</p>
     </div>
+    @endif
 
     @isset($paso)
         @php

@@ -85,6 +85,21 @@ export function EditarSeccion({ titulo, url, inicial, children }: Props) {
                         </SheetDescription>
                     </SheetHeader>
                     <div className="flex-1 space-y-5 px-4">
+                        {Object.keys(form.errors).length > 0 && (
+                            <div
+                                role="alert"
+                                className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800"
+                            >
+                                <p className="font-medium">
+                                    No se guardó. Corrige esto:
+                                </p>
+                                <ul className="mt-1 list-disc pl-5">
+                                    {Object.values(form.errors).map((m) => (
+                                        <li key={m}>{m}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         {children({
                             data: form.data,
                             set: (campo, valor) => form.setData(campo, valor),
