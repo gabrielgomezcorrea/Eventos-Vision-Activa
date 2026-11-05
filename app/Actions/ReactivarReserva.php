@@ -41,9 +41,9 @@ class ReactivarReserva
      * @throws ReactivacionNoPermitida
      * @throws CuposInsuficientes
      */
-    public function __invoke(Order $orden): Order
+    public function __invoke(Order $orden, bool $conservarPrecio = false): Order
     {
-        return DB::transaction(function () use ($orden): Order {
+        return DB::transaction(function () use ($orden, $conservarPrecio): Order {
             $fresca = Order::whereKey($orden->getKey())->lockForUpdate()->firstOrFail();
             $fresca->load('event', 'participantesVigentes.accessType.sessions');
 
@@ -61,6 +61,26 @@ class ReactivarReserva
             }
 
             $totalAnterior = (int) $fresca->total;
+
+            // Al reactivarse sola con el comprobante, se cobra lo que ya se le
+            // dijo: la persona transfirió ese monto.
+            if ($conservarPrecio) {
+                $fresca->forceFill([
+                    'status' => OrderStatus::Reservada,
+                    'reserved_until' => $fresca->event->calcularVencimientoReserva(),
+                ])->save();
+
+                Auditor::registrar(
+                    sobre: $fresca,
+                    accion: 'orden.reactivada',
+                    estadoAnterior: OrderStatus::Vencida->value,
+                    estadoNuevo: OrderStatus::Reservada->value,
+                    propiedades: ['vence' => $fresca->reserved_until?->format('d-m-Y H:i'), 'total' => $totalAnterior, 'al_pagar' => true],
+                );
+
+                return $fresca;
+            }
+
             $anticipado = false;
             $rigeHasta = null;
 

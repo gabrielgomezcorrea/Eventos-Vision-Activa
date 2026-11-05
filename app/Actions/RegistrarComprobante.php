@@ -2,9 +2,12 @@
 
 namespace App\Actions;
 
+use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Exceptions\ComprobanteNoAceptado;
+use App\Exceptions\CuposInsuficientes;
+use App\Exceptions\ReactivacionNoPermitida;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -22,6 +25,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class RegistrarComprobante
 {
+    public function __construct(private readonly ReactivarReserva $reactivar) {}
+
     /**
      * @param  array<string, mixed>  $datos  Datos ya validados por su Form Request.
      *
@@ -36,6 +41,14 @@ class RegistrarComprobante
     ): Payment {
         if (! $orden->admiteComprobante()) {
             throw ComprobanteNoAceptado::para($orden);
+        }
+
+        if ($orden->status === OrderStatus::Vencida) {
+            try {
+                $orden = $this->reactivar->__invoke($orden, conservarPrecio: true);
+            } catch (CuposInsuficientes|ReactivacionNoPermitida $e) {
+                throw new ComprobanteNoAceptado('Tu reserva venció y ya no se puede retomar: '.lcfirst($e->getMessage()).' Escríbenos para ver otra opción.');
+            }
         }
 
         $disco = config('filesystems.private_disk');

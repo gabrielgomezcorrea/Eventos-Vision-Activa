@@ -61,10 +61,55 @@ class ComprobanteWebTest extends TestCase
     {
         $this->orden->event->update(['contact_name' => 'Flor Vidal Oliva', 'contact_phone' => '56951887769', 'contact_email' => 'administracion@visionactiva.cl']);
         $this->orden->update(['status' => OrderStatus::Vencida]);
+        // Con el evento abierto se retoma sola al pagar; cerrado ya no, y ahí manda el contacto.
+        $this->orden->event->update(['status' => EventStatus::Cerrado]);
 
         $this->get($this->ruta('portal.pago'))
             ->assertOk()
             ->assertSeeInOrder(['La reserva de cupos venció', 'Flor Vidal Oliva', '+56 9 5188 7769', 'administracion@visionactiva.cl']);
+    }
+
+    private function vencer(): void
+    {
+        $this->orden->forceFill(['reserved_until' => now()->subDay()])->save();
+        $this->artisan('reservas:expirar');
+        $this->assertSame(OrderStatus::Vencida, $this->orden->fresh()->status);
+    }
+
+    public function test_una_reserva_vencida_con_cupo_se_reactiva_sola_al_enviar_el_comprobante_y_conserva_su_precio(): void
+    {
+        $this->vencer();
+        // El precio subió después: igual se cobra lo que ya se le dijo.
+        $this->orden->event->accessTypes()->first()->update(['price' => 120000]);
+
+        $this->get($this->ruta('portal.pago'))->assertOk()->assertSee('todavía puedes pagar');
+
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'paid_on' => now()->toDateString(),
+            'proof' => UploadedFile::fake()->create('transferencia.pdf', 100, 'application/pdf'),
+        ])->assertRedirect();
+
+        $orden = $this->orden->fresh();
+        $this->assertSame(OrderStatus::Reservada, $orden->status);
+        $this->assertSame(PaymentStatus::EnValidacion, $orden->payment_status);
+        $this->assertSame(90000, (int) $orden->total);
+        $this->assertSame(1, $orden->event->sessions()->first()->reserved_seats, 'Volvió a tomar su cupo.');
+    }
+
+    public function test_una_reserva_vencida_sin_cupo_no_se_reactiva_y_dice_por_que(): void
+    {
+        $this->vencer();
+        $this->orden->event->sessions()->first()->update(['reserved_seats' => 10]);
+
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'paid_on' => now()->toDateString(),
+            'proof' => UploadedFile::fake()->create('transferencia.pdf', 100, 'application/pdf'),
+        ])->assertOk()->assertSee('ya no se puede retomar');
+
+        $this->assertSame(OrderStatus::Vencida, $this->orden->fresh()->status);
+        $this->assertSame(0, $this->orden->fresh()->payments()->count());
     }
 
     public function test_la_pantalla_de_estado_ofrece_informar_el_pago(): void

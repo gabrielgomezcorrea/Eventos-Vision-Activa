@@ -122,16 +122,17 @@ class CorreosDelMvpTest extends TestCase
         }
     }
 
-    public function test_la_reserva_vencida_pone_el_contacto_junto_al_pedido_de_escribir(): void
+    public function test_la_reserva_vencida_ofrece_pagar_igual_y_pone_el_contacto_junto_al_pedido_de_escribir(): void
     {
         $this->event->update(['contact_name' => 'Flor Vidal Oliva', 'contact_phone' => '56951887769', 'contact_email' => 'administracion@visionactiva.cl']);
 
         $html = (new ReservaVencida($this->orden->fresh()))->render();
-        $pedido = mb_strpos($html, 'contáctanos y revisamos la disponibilidad');
 
+        // Se retoma sola al pagar si quedan cupos: el correo lleva a pagar, no solo a escribir.
+        $this->assertLessThan(mb_strpos($html, 'Enviar mi comprobante'), mb_strpos($html, 'todavía puedes pagar'));
+        $pedido = mb_strpos($html, 'Si tienes dudas, contáctanos');
         $this->assertNotFalse($pedido);
-        // The contact comes right after the request, before the button and the footer.
-        $this->assertLessThan(mb_strpos($html, 'Ver mi inscripción'), mb_strpos($html, 'Flor Vidal Oliva', $pedido));
+        $this->assertNotFalse(mb_strpos($html, 'Flor Vidal Oliva', $pedido));
     }
 
     public function test_el_enlace_saluda_por_su_nombre_a_quien_pidio_el_programa(): void

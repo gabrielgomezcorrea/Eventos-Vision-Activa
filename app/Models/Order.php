@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\ReactivarReserva;
 use App\Enums\InvoiceStatus;
 use App\Enums\NivelDeCambio;
 use App\Enums\OrderKind;
@@ -236,9 +237,21 @@ class Order extends Model
      */
     public function admiteComprobante(): bool
     {
-        return $this->status === OrderStatus::Reservada
+        return ($this->status === OrderStatus::Reservada || $this->seReactivaAlPagar())
             && $this->saldo() > 0
             && ! $this->tieneAbonoEnRevision();
+    }
+
+    /**
+     * Una reserva vencida no frena a quien llega a pagar: al enviar el
+     * comprobante se reactiva sola si quedan cupos (Gabriel, 05/11/2026: "no
+     * podemos perder clientes"). Si no quedan, el envío falla con el motivo.
+     */
+    public function seReactivaAlPagar(): bool
+    {
+        return $this->status === OrderStatus::Vencida
+            && $this->kind !== OrderKind::Invitado
+            && ReactivarReserva::impedimento($this) === null;
     }
 
     public function esBorrador(): bool

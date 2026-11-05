@@ -16,15 +16,15 @@ cupos quedaron liberados.
 **Participantes que quedaron sin cupo:** {{ $orden->participantesVigentes->count() }}
 </x-mail::panel>
 
-Si aún deseas participar, contáctanos y revisamos la disponibilidad:
-
-@include('mail._datos_contacto', ['evento' => $event])
-
-También puedes iniciar una inscripción nueva desde [la página del evento]({{ route('inscripcion.inicio', $event) }}).
+Si aún deseas participar, todavía puedes pagar: envía el comprobante desde tu inscripción y la retomamos si quedan cupos.
 
 <x-mail::button :url="$urlEstado">
-Ver mi inscripción
+Enviar mi comprobante
 </x-mail::button>
+
+Si tienes dudas, contáctanos:
+
+@include('mail._datos_contacto', ['evento' => $event])
 
 @include('mail._contacto', ['evento' => $event])
 

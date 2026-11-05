@@ -447,6 +447,23 @@ class PanelInscripcionesTest extends TestCase
         $this->assertSame(1, $this->orden->invoiceRecords()->count());
     }
 
+    public function test_contabilidad_sube_el_comprobante_de_una_reserva_vencida_y_se_reactiva_sola(): void
+    {
+        $this->orden->forceFill(['reserved_until' => now()->subDay()])->save();
+        $this->artisan('reservas:expirar');
+        $contabilidad = $this->usuario(Rol::Contabilidad);
+
+        $this->actingAs($contabilidad)->get(route('inscripciones.show', $this->orden))
+            ->assertInertia(fn (Assert $page) => $page->where('puede.cargarComprobante', true));
+
+        $this->actingAs($contabilidad)
+            ->post(route('inscripciones.comprobante', $this->orden), $this->comprobante())
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(OrderStatus::Reservada, $this->orden->fresh()->status);
+        $this->assertSame(PaymentStatus::EnValidacion, $this->orden->fresh()->payment_status);
+    }
+
     public function test_una_persona_natural_con_un_abono_parcial_recibe_su_boleta_en_foto(): void
     {
         $this->orden->forceFill(['kind' => OrderKind::Particular])->save();

@@ -18,7 +18,7 @@
     $pago = $orden->pagoVigente();
     $observacion = $pago?->reviews->firstWhere('action', \App\Enums\PaymentReviewAction::Observar);
     $aprobado = $orden->payment_status->liberaCredenciales();
-    $muestraTransferencia = $borrador || ($orden->status === \App\Enums\OrderStatus::Reservada && ! $aprobado);
+    $muestraTransferencia = $borrador || (($orden->status === \App\Enums\OrderStatus::Reservada || $orden->seReactivaAlPagar()) && ! $aprobado);
     $admiteComprobante = ! $borrador && $orden->admiteComprobante();
 
     $total = $borrador ? $orden->calcularTotal() : (int) $orden->total;
@@ -50,10 +50,16 @@
 @endif
 
 @if ($orden->status === \App\Enums\OrderStatus::Vencida)
-    <div class="aviso aviso-error">
-        La reserva de cupos venció y los cupos fueron liberados. Si aún deseas participar, contáctanos:
-        @include('publico._contacto', ['evento' => $event])
-    </div>
+    @if ($orden->seReactivaAlPagar())
+        <div class="aviso aviso-info">
+            Tu reserva venció, pero todavía puedes pagar: al enviar el comprobante la retomamos si quedan cupos.
+        </div>
+    @else
+        <div class="aviso aviso-error">
+            La reserva de cupos venció y los cupos fueron liberados. Si aún deseas participar, contáctanos:
+            @include('publico._contacto', ['evento' => $event])
+        </div>
+    @endif
 @endif
 
 @if ($errorDeComprobante ?? null)
