@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Enums\EventStatus;
 use App\Enums\Rol;
+use App\Mail\ProgramaDelEvento;
 use App\Models\AccessType;
 use App\Models\Event;
 use App\Models\EventSession;
+use App\Models\MagicLink;
+use App\Models\Order;
+use App\Models\ProgramRequest;
 use App\Models\User;
 use Database\Seeders\RolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -274,37 +278,62 @@ class PanelEventosTest extends TestCase
         $this->assertSame('56934567890', $evento->contact_whatsapp);
     }
 
-    public function test_el_programa_solo_acepta_pdf_de_hasta_5_mb(): void
+    public function test_los_archivos_del_evento_aceptan_varios_formatos_pero_no_ejecutables_ni_mas_de_10_mb(): void
     {
         Storage::fake(config('filesystems.private_disk'));
         $evento = $this->evento();
         $this->actingAs($this->usuario(Rol::Administrador));
 
-        $this->post(route('eventos.programa.store', $evento), [
-            'programa' => UploadedFile::fake()->create('programa.docx', 50, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
-        ])->assertSessionHasErrors('programa');
+        foreach (['instalador.exe' => 'application/x-msdownload', 'dibujo.svg' => 'image/svg+xml', 'comprimido.zip' => 'application/zip'] as $nombre => $mime) {
+            $this->post(route('eventos.programa.store', $evento), [
+                'programa' => [UploadedFile::fake()->create($nombre, 5, $mime)],
+            ])->assertSessionHasErrors('programa.0');
+        }
 
         $this->post(route('eventos.programa.store', $evento), [
-            'programa' => UploadedFile::fake()->create('grande.pdf', 5 * 1024 + 1, 'application/pdf'),
-        ])->assertSessionHasErrors('programa');
+            'programa' => [UploadedFile::fake()->create('grande.pdf', 10 * 1024 + 1, 'application/pdf')],
+        ])->assertSessionHasErrors('programa.0');
 
         $this->assertSame(0, $evento->attachments()->count());
     }
 
-    public function test_subir_otro_programa_reemplaza_al_anterior_y_borra_su_archivo(): void
+    public function test_se_suben_varios_archivos_a_la_vez_y_se_acumulan(): void
     {
         Storage::fake(config('filesystems.private_disk'));
         $evento = $this->evento();
         $this->actingAs($this->usuario(Rol::Administrador));
 
-        foreach (['uno', 'dos'] as $nombre) {
-            $this->post(route('eventos.programa.store', $evento), [
-                'programa' => UploadedFile::fake()->create("{$nombre}.pdf", 50, 'application/pdf'),
-            ])->assertSessionHasNoErrors();
+        $this->post(route('eventos.programa.store', $evento), [
+            'programa' => [
+                UploadedFile::fake()->create('programa.pdf', 50, 'application/pdf'),
+                UploadedFile::fake()->create('ficha.docx', 50, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->post(route('eventos.programa.store', $evento), [
+            'programa' => [UploadedFile::fake()->create('planilla.xlsx', 50, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(['programa.pdf', 'ficha.docx', 'planilla.xlsx'], $evento->attachments()->pluck('original_name')->all());
+        $this->assertCount(3, Storage::disk(config('filesystems.private_disk'))->allFiles('programas'));
+    }
+
+    public function test_el_correo_adjunta_todos_los_archivos_mientras_quepan(): void
+    {
+        Storage::fake(config('filesystems.private_disk'));
+        $evento = $this->evento();
+        $disco = config('filesystems.private_disk');
+
+        foreach ([['uno.pdf', 2], ['ficha.docx', 3], ['enorme.pdf', 14], ['final.pdf', 2]] as [$nombre, $mb]) {
+            Storage::disk($disco)->put("programas/{$nombre}", str_repeat('a', $mb * 1024 * 1024));
+            $evento->attachments()->create(['disk' => $disco, 'path' => "programas/{$nombre}", 'original_name' => $nombre, 'mime_type' => 'application/octet-stream', 'size' => $mb * 1024 * 1024]);
         }
 
-        $this->assertSame(['dos.pdf'], $evento->attachments()->pluck('original_name')->all());
-        $this->assertCount(1, Storage::disk(config('filesystems.private_disk'))->allFiles('programas'));
+        $solicitud = ProgramRequest::create(['event_id' => $evento->id, 'first_name' => 'Ana', 'last_name' => 'Paz', 'email' => 'ana@colegio.cl', 'consented_at' => now()]);
+        $adjuntos = (new ProgramaDelEvento($solicitud->load('event.attachments')))->attachments();
+
+        // 2 + 3 caben; el de 14 MB pasaría de los 15 y se queda fuera; el último sí cabe.
+        $this->assertSame(['uno.pdf', 'ficha.docx', 'final.pdf'], array_map(fn ($a) => $a->as, $adjuntos));
     }
 
     public function test_el_programa_subido_se_descarga_solo_con_permiso_y_desde_su_evento(): void
@@ -313,7 +342,7 @@ class PanelEventosTest extends TestCase
         $evento = $this->evento();
         $this->actingAs($this->usuario(Rol::Administrador));
         $this->post(route('eventos.programa.store', $evento), [
-            'programa' => UploadedFile::fake()->create('programa.pdf', 50, 'application/pdf'),
+            'programa' => [UploadedFile::fake()->create('programa.pdf', 50, 'application/pdf')],
         ]);
         $archivo = $evento->attachments()->sole();
 
@@ -339,5 +368,33 @@ class PanelEventosTest extends TestCase
         $this->assertSame('Flor Vidal Oliva', $evento->contact_name);
         $this->assertSame('administracion@visionactiva.cl', $evento->contact_email);
         $this->assertSame('56951887769', $evento->contact_phone);
+    }
+
+    public function test_varios_archivos_llegan_al_portal_y_solo_el_pdf_se_muestra_en_el_navegador(): void
+    {
+        Storage::fake(config('filesystems.private_disk'));
+        $evento = $this->evento(['status' => EventStatus::Publicado]);
+        $this->actingAs($this->usuario(Rol::Administrador))->post(route('eventos.programa.store', $evento), [
+            'programa' => [
+                UploadedFile::fake()->createWithContent('programa.pdf', '%PDF-1.4 programa'),
+                UploadedFile::fake()->createWithContent('ficha.docx', 'PK ficha'),
+                // Un html que se hace pasar por pdf no debe correr en este dominio.
+                UploadedFile::fake()->createWithContent('falso.pdf', '<html><script>alert(1)</script></html>'),
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(3, $evento->attachments()->count());
+
+        $orden = Order::create(['event_id' => $evento->id, 'responsible_name' => 'Ana', 'responsible_lastname' => 'Paz', 'responsible_email' => 'ana@colegio.cl']);
+        [, $token] = MagicLink::emitir($evento, 'ana@colegio.cl', $orden);
+        [$pdf, $docx, $falso] = $evento->attachments()->get()->all();
+        $ruta = fn ($a, $ver = 1) => route('inscripcion.portal.adjunto', ['token' => $token, 'attachment' => $a->id, 'ver' => $ver]);
+
+        $this->get(route('inscripcion.portal.programa', ['token' => $token]))
+            ->assertOk()->assertSee('Documentos del evento')->assertSee('programa.pdf')->assertSee('ficha.docx');
+
+        $this->get($ruta($pdf))->assertOk()->assertHeader('content-disposition', 'inline; filename="programa.pdf"');
+        $this->get($ruta($docx))->assertOk()->assertDownload('ficha.docx');
+        $this->get($ruta($falso))->assertOk()->assertDownload('falso.pdf');
     }
 }

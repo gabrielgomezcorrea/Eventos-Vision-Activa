@@ -11,6 +11,7 @@ use App\Support\Forms\ProgramFormField;
 use App\Support\ReglasDeContacto;
 use App\Support\WebsAutorizadas;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -117,27 +118,21 @@ class FormularioPublicoController extends Controller
     public function subirPrograma(ProgramaRequest $request, Event $event): RedirectResponse
     {
         $disco = config('filesystems.private_disk');
-        $archivo = $request->file('programa');
+        /** @var array<int, UploadedFile> $archivos */
+        $archivos = $request->file('programa');
 
-        // Un solo programa viaja en el correo: subir otro reemplaza al anterior
-        // (registro y archivo), para que no se acumulen adjuntos que pesen de más.
-        $anterior = $event->attachments()->latest('id')->first();
-
-        $event->attachments()->create([
-            'disk' => $disco,
-            'path' => $archivo->store('programas/'.$event->getKey(), $disco),
-            // El nombre original, para que el adjunto no llegue con el hash.
-            'original_name' => $archivo->getClientOriginalName(),
-            'mime_type' => $archivo->getClientMimeType(),
-            'size' => $archivo->getSize(),
-        ]);
-
-        if ($anterior !== null) {
-            Storage::disk($anterior->disk)->delete($anterior->path);
-            $anterior->delete();
+        foreach ($archivos as $archivo) {
+            $event->attachments()->create([
+                'disk' => $disco,
+                'path' => $archivo->store('programas/'.$event->getKey(), $disco),
+                // El nombre original, para que el adjunto no llegue con el hash.
+                'original_name' => $archivo->getClientOriginalName(),
+                'mime_type' => $archivo->getClientMimeType(),
+                'size' => $archivo->getSize(),
+            ]);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Programa cargado. Se adjunta al correo que reciben quienes lo piden.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => count($archivos) === 1 ? 'Archivo cargado.' : count($archivos).' archivos cargados.']);
 
         return back();
     }

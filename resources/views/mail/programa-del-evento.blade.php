@@ -14,7 +14,7 @@ Hola{{ $solicitud->first_name ? ' '.$solicitud->first_name : '' }},
 @if ($event->program_email_intro)
 {{ $event->program_email_intro }}
 @else
-Gracias por tu interés en **{{ $event->name }}**.@if ($event->attachments->isNotEmpty()) Adjuntamos el programa del evento en este correo.@endif
+Gracias por tu interés en **{{ $event->name }}**.@if ($event->attachments->isNotEmpty()) Adjuntamos {{ $event->attachments->count() > 1 ? 'los documentos' : 'el documento' }} del evento en este correo.@endif
 @endif
 
 <x-mail::panel>

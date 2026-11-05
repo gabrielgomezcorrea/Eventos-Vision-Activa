@@ -234,7 +234,7 @@ class CorreosDelMvpTest extends TestCase
         $this->assertSame(['Programa.pdf'], array_map(fn ($adjunto) => $adjunto->as, $correo->attachments()));
     }
 
-    public function test_el_correo_del_programa_adjunta_solo_el_mas_reciente_y_solo_si_pesa_5_mb_o_menos(): void
+    public function test_el_correo_del_programa_adjunta_todos_los_archivos_y_se_salta_los_que_no_caben(): void
     {
         Storage::fake('documentos');
         Storage::disk('documentos')->put('programas/viejo.pdf', '%PDF-1.4');
@@ -243,10 +243,25 @@ class CorreosDelMvpTest extends TestCase
         $nuevo = $this->event->attachments()->create(['disk' => 'documentos', 'path' => 'programas/nuevo.pdf', 'original_name' => 'Nuevo.pdf', 'mime_type' => 'application/pdf', 'size' => 8]);
         $solicitud = ProgramRequest::factory()->for($this->event)->create();
 
-        $this->assertSame(['Nuevo.pdf'], array_map(fn ($a) => $a->as, (new ProgramaDelEvento($solicitud))->attachments()));
+        $this->assertSame(['Viejo.pdf', 'Nuevo.pdf'], array_map(fn ($a) => $a->as, (new ProgramaDelEvento($solicitud))->attachments()));
 
-        // Si el más reciente pesa de más, el correo sale igual, sin adjunto.
-        $nuevo->update(['size' => 5 * 1024 * 1024 + 1]);
-        $this->assertSame([], (new ProgramaDelEvento($solicitud->fresh()))->attachments());
+        // Si uno pesa de más (más de 15 MB), el correo sale igual, con los demás.
+        $nuevo->update(['size' => 15 * 1024 * 1024 + 1]);
+        $this->assertSame(['Viejo.pdf'], array_map(fn ($a) => $a->as, (new ProgramaDelEvento($solicitud->fresh()))->attachments()));
+    }
+
+    public function test_el_correo_con_las_dos_opciones_solo_sale_para_su_evento(): void
+    {
+        $solicitud = ProgramRequest::factory()->for($this->event)->create(['first_name' => 'Ana']);
+
+        $general = (new ProgramaDelEvento($solicitud))->render();
+        $this->assertStringNotContainsString('CMEI-2026', $general, 'Otro evento no puede recibir el código ni los valores de este.');
+
+        $this->event->update(['slug' => ProgramaDelEvento::SLUG_CON_OPCIONES]);
+        $propio = (new ProgramaDelEvento($solicitud->fresh()))->render();
+
+        foreach (['Estos son los pasos', 'estás aquí', 'CMEI-2026', '$140.000', 'Completar inscripción en línea', 'asistida por nuestra secretaria', 'Importante', 'Saludos cordiales'] as $texto) {
+            $this->assertStringContainsString($texto, $propio);
+        }
     }
 }

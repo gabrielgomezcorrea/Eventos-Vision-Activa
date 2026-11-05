@@ -23,10 +23,10 @@ class ProgramaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'programa' => [
-                'required', 'file',
-                // Only PDF: a Word file can be edited by whoever receives it.
-                'mimes:pdf',
+            'programa' => ['required', 'array', 'max:10'],
+            'programa.*' => [
+                'file',
+                'mimes:'.implode(',', EventAttachment::EXTENSIONES),
                 'max:'.(EventAttachment::MAX_MB * 1024),
             ],
         ];
@@ -38,8 +38,10 @@ class ProgramaRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'programa.mimes' => 'El programa debe ser un PDF.',
-            'programa.max' => 'El archivo no puede pesar más de '.EventAttachment::MAX_MB.' MB.',
+            'programa.required' => 'Elige al menos un archivo.',
+            'programa.*.mimes' => 'Ese tipo de archivo no se puede subir. Usa PDF, Word, Excel, PowerPoint o una imagen.',
+            'programa.*.max' => 'Un archivo no puede pesar más de '.EventAttachment::MAX_MB.' MB.',
+            'programa.*.uploaded' => 'No se pudo subir uno de los archivos. Revisa que no pese más de '.EventAttachment::MAX_MB.' MB.',
         ];
     }
 }

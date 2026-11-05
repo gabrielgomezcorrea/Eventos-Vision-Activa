@@ -109,8 +109,13 @@ class PortalController extends Controller
         $disco = Storage::disk($attachment->disk);
 
         // ?ver=1 lo abre en el navegador ("Ver programa"); sin él, se descarga.
-        return $request->boolean('ver')
-            ? $disco->response($attachment->path, $attachment->original_name, ['Content-Disposition' => 'inline; filename="'.addslashes($attachment->original_name).'"'])
+        // Solo se muestra lo que el navegador dibuja sin riesgo, según el
+        // contenido real del archivo y no su nombre: un html llamado .pdf
+        // correría en este dominio. Word, Excel y lo demás se descargan.
+        $seMuestra = in_array($disco->mimeType($attachment->path), ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], true);
+
+        return $request->boolean('ver') && $seMuestra
+            ? $disco->response($attachment->path, $attachment->original_name, ['Content-Disposition' => 'inline; filename="'.addslashes($attachment->original_name).'"', 'X-Content-Type-Options' => 'nosniff'])
             : $disco->download($attachment->path, $attachment->original_name);
     }
 

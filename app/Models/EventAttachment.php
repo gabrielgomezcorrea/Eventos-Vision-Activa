@@ -13,11 +13,19 @@ use Illuminate\Support\Facades\Storage;
  */
 class EventAttachment extends Model
 {
+    /** Tamaño máximo de cada archivo, en MB. */
+    public const MAX_MB = 10;
+
     /**
-     * Tamaño máximo del programa, en MB. Con adjuntos grandes Gmail rechazaba
-     * el primer correo (más de 25 MB) y la cola lo reintentaba sin fin.
+     * Lo que viaja adjunto en un correo, sumado, en MB. Gmail rechaza más de
+     * 25 MB y el adjunto crece un tercio al codificarse: con adjuntos grandes
+     * el correo fallaba y la cola lo reintentaba sin fin. Lo que no cabe sigue
+     * disponible en el portal, pero no viaja.
      */
-    public const MAX_MB = 5;
+    public const MAX_CORREO_MB = 15;
+
+    /** Documentos de oficina e imágenes. Nada ejecutable ni que corra en el navegador (html, svg). */
+    public const EXTENSIONES = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf', 'txt', 'csv', 'jpg', 'jpeg', 'png', 'webp'];
 
     protected $guarded = [];
 
@@ -37,10 +45,28 @@ class EventAttachment extends Model
         return Storage::disk($this->disk)->exists($this->path);
     }
 
-    /** Cabe en el correo: existe en disco y pesa el máximo o menos. */
-    public function cabeEnElCorreo(): bool
+    /**
+     * Los adjuntos que viajan en el correo: en orden de subida, mientras la
+     * suma quepa.
+     *
+     * @param  iterable<int, self>  $adjuntos
+     * @return array<int, self>
+     */
+    public static function paraElCorreo(iterable $adjuntos): array
     {
-        return $this->size <= self::MAX_MB * 1024 * 1024 && $this->existe();
+        $usado = 0;
+        $viajan = [];
+
+        foreach ($adjuntos as $adjunto) {
+            if (! $adjunto->existe() || $usado + $adjunto->size > self::MAX_CORREO_MB * 1024 * 1024) {
+                continue;
+            }
+
+            $usado += $adjunto->size;
+            $viajan[] = $adjunto;
+        }
+
+        return $viajan;
     }
 
     public function tamanoLegible(): string

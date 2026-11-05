@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\EventAttachment;
 use App\Models\ProgramRequest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,6 +20,14 @@ class ProgramaDelEvento extends Mailable implements ShouldQueue
     use Queueable, SerializesModels;
 
     /**
+     * Evento cuyo correo lleva las dos opciones de inscripción y los valores
+     * del código CMEI-2026. Ese texto está escrito a mano (Gabriel,
+     * 05/11/2026), así que solo sale para este evento: en otro mandaría
+     * precios y un código que no le corresponden.
+     */
+    public const SLUG_CON_OPCIONES = 'seminario-liderazgo-noviembre-2026';
+
+    /**
      * @param  string|null  $urlDeInscripcion  Enlace que deja al cliente dentro de su
      *                                         inscripción sin escribir el correo de nuevo.
      */
@@ -34,7 +43,9 @@ class ProgramaDelEvento extends Mailable implements ShouldQueue
     public function content(): Content
     {
         return new Content(
-            markdown: 'mail.programa-del-evento',
+            markdown: $this->solicitud->event->slug === self::SLUG_CON_OPCIONES
+                ? 'mail.programa-del-evento-con-opciones'
+                : 'mail.programa-del-evento',
             with: [
                 'solicitud' => $this->solicitud,
                 'event' => $this->solicitud->event,
@@ -44,18 +55,17 @@ class ProgramaDelEvento extends Mailable implements ShouldQueue
     }
 
     /**
-     * Solo el programa más reciente del evento, y solo si cabe en el correo.
-     * Los archivos antiguos siguen disponibles en el portal, pero no viajan.
+     * Todos los archivos del evento mientras quepan en el correo. Los que no
+     * caben siguen disponibles en el portal, pero no viajan.
      *
      * @return array<int, Attachment>
      */
     public function attachments(): array
     {
-        $programa = $this->solicitud->event->attachments->last();
-
-        return $programa?->cabeEnElCorreo()
-            ? [Attachment::fromStorageDisk($programa->disk, $programa->path)->as($programa->original_name)]
-            : [];
+        return array_map(
+            fn (EventAttachment $a): Attachment => Attachment::fromStorageDisk($a->disk, $a->path)->as($a->original_name),
+            EventAttachment::paraElCorreo($this->solicitud->event->attachments),
+        );
     }
 
     public function build(): self

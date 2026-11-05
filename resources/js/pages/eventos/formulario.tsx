@@ -358,7 +358,7 @@ function PonerEnLaWeb({ embeber }: { embeber: Props['embeber'] }) {
     );
 }
 
-/** El PDF se sube apenas se elige, y el límite se avisa antes de subir. */
+/** Los archivos se suben apenas se eligen, y el límite se avisa antes de subir. */
 function Adjuntos({
     eventoId,
     adjuntos,
@@ -373,30 +373,26 @@ function Adjuntos({
     const [errorLocal, setErrorLocal] = useState<string | null>(null);
     const { errors } = usePage().props;
 
-    function subir(archivo: File | undefined) {
+    function subir(archivos: File[]) {
         setErrorLocal(null);
 
-        if (!archivo) {
+        if (archivos.length === 0) {
             return;
         }
 
         // Se avisa antes de subir: descubrir el límite después de esperar la
         // subida de un archivo pesado es la peor forma de enterarse.
-        if (!archivo.name.toLowerCase().endsWith('.pdf')) {
-            setErrorLocal('El programa debe ser un PDF.');
+        const pesado = archivos.find((a) => a.size > maxMb * 1024 * 1024);
 
-            return;
-        }
-
-        if (archivo.size > maxMb * 1024 * 1024) {
-            setErrorLocal(`«${archivo.name}» pesa más de ${maxMb} MB.`);
+        if (pesado) {
+            setErrorLocal(`«${pesado.name}» pesa más de ${maxMb} MB.`);
 
             return;
         }
 
         router.post(
             FormularioPublicoController.subirPrograma.url(eventoId),
-            { programa: archivo },
+            { programa: archivos },
             {
                 forceFormData: true,
                 preserveScroll: true,
@@ -414,7 +410,7 @@ function Adjuntos({
 
     return (
         <div className="grid gap-2">
-            <Label htmlFor="programa">Programa</Label>
+            <Label htmlFor="programa">Archivos</Label>
 
             {adjuntos.length > 0 && (
                 <ul className="divide-y rounded-lg border">
@@ -438,7 +434,7 @@ function Adjuntos({
                             </span>
                             <Confirmar
                                 titulo={`Quitar «${archivo.nombre}»`}
-                                descripcion="Dejará de viajar en el correo con el programa."
+                                descripcion="Dejará de viajar en el correo."
                                 textoAccion="Quitar archivo"
                                 onConfirmar={() =>
                                     router.delete(
@@ -468,10 +464,10 @@ function Adjuntos({
                 ref={entrada}
                 id="programa"
                 type="file"
-                accept=".pdf,application/pdf"
+                multiple
                 className="hidden"
                 disabled={subiendo}
-                onChange={(e) => subir(e.target.files?.[0])}
+                onChange={(e) => subir(Array.from(e.target.files ?? []))}
             />
             <div className="flex items-center gap-3">
                 <Button
@@ -481,19 +477,22 @@ function Adjuntos({
                     disabled={subiendo}
                     onClick={() => entrada.current?.click()}
                 >
-                    {adjuntos.length > 0
-                        ? 'Reemplazar programa'
-                        : 'Subir programa'}
+                    Subir archivos
                 </Button>
-                <span className="text-muted-foreground text-xs">
-                    PDF, máximo {maxMb} MB
-                </span>
             </div>
 
             {subiendo && (
                 <p className="text-muted-foreground text-xs">Subiendo…</p>
             )}
-            <InputError message={errorLocal ?? errors.programa} />
+            <InputError
+                message={
+                    errorLocal ??
+                    errors.programa ??
+                    Object.entries(errors).find(([clave]) =>
+                        clave.startsWith('programa.'),
+                    )?.[1]
+                }
+            />
         </div>
     );
 }

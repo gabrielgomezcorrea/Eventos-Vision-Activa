@@ -1,20 +1,23 @@
 @extends('publico.portal.base')
 
 @section('pestana')
-    @if ($adjuntos->isNotEmpty())
+    @if ($adjuntos->count() === 1)
         <div class="tarjeta estado-orden">
             <div>
                 <h2>Programa del evento</h2>
-                @if ($adjuntos->count() > 1)
-                    <p class="sub" style="margin:4px 0 0">
-                        @foreach ($adjuntos->skip(1) as $adjunto)
-                            <a href="{{ route('inscripcion.portal.adjunto', ['token' => $token, 'attachment' => $adjunto->id, 'ver' => 1]) }}" target="_blank" rel="noopener">{{ $adjunto->original_name }}</a>@if (! $loop->last), @endif
-                        @endforeach
-                    </p>
-                @endif
             </div>
             <a class="btn btn-primario" target="_blank" rel="noopener"
                href="{{ route('inscripcion.portal.adjunto', ['token' => $token, 'attachment' => $adjuntos->first()->id, 'ver' => 1]) }}">Ver programa</a>
+        </div>
+    @elseif ($adjuntos->count() > 1)
+        {{-- Con varios archivos no se sabe cuál es el programa: cada uno con su nombre. --}}
+        <div class="tarjeta">
+            <h2>Documentos del evento</h2>
+            <ul style="margin:8px 0 0;padding-left:20px">
+                @foreach ($adjuntos as $adjunto)
+                    <li><a href="{{ route('inscripcion.portal.adjunto', ['token' => $token, 'attachment' => $adjunto->id, 'ver' => 1]) }}" target="_blank" rel="noopener">{{ $adjunto->original_name }}</a></li>
+                @endforeach
+            </ul>
         </div>
     @endif
 
