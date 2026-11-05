@@ -136,7 +136,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'update'])->name('cuentas-bancarias.update');
     Route::delete('settings/cuentas-bancarias/{bankAccount}', [CuentaBancariaController::class, 'destroy'])->name('cuentas-bancarias.destroy');
 
-
     Route::get('settings/webs', [WebController::class, 'index'])->name('webs.index');
     Route::post('settings/webs', [WebController::class, 'store'])->name('webs.store');
     Route::delete('settings/webs', [WebController::class, 'destroy'])->name('webs.destroy');

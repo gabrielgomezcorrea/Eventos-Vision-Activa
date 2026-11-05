@@ -1,9 +1,9 @@
 <?php
 
 use App\Http\Controllers\Publico\BannerController;
+use App\Http\Controllers\Publico\EventLogoController;
 use App\Http\Controllers\Publico\InscripcionController;
 use App\Http\Controllers\Publico\InvitacionController;
-use App\Http\Controllers\Publico\EventLogoController;
 use App\Http\Controllers\Publico\PortalController;
 use App\Http\Controllers\Publico\ProgramRequestController;
 use App\Http\Controllers\Publico\TicketController;
