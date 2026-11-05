@@ -5,8 +5,6 @@ import type { FormEvent } from 'react';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
 import { Campo } from '@/components/campo';
 import { EstadoBadge } from '@/components/estado-badge';
-import { tonoVencimiento } from '@/lib/vencimiento';
-import type { Vencimiento } from '@/lib/vencimiento';
 import { Panel } from '@/pages/inscripciones/show';
 import { NativeSelect } from '@/components/native-select';
 import { Paginacion } from '@/components/paginacion';
@@ -21,7 +19,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
 import type { Estado, Paginado } from '@/types';
 
 type OrdenFila = {
@@ -34,8 +31,6 @@ type OrdenFila = {
     participantes: number;
     estado: Estado;
     pago: Estado;
-    vence: string | null;
-    vencimiento: Vencimiento;
 };
 
 type Filtros = {
@@ -509,14 +504,13 @@ export default function InscripcionesIndex({
                                 </TableHead>
                                 <TableHead>Estado</TableHead>
                                 <TableHead>Pago</TableHead>
-                                <TableHead>Vence</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {ordenes.data.length === 0 && (
                                 <TableRow className="hover:bg-transparent">
                                     <TableCell
-                                        colSpan={6}
+                                        colSpan={5}
                                         className="text-muted-foreground py-12 text-center"
                                     >
                                         {hayFiltros
@@ -576,30 +570,6 @@ export default function InscripcionesIndex({
                                     </TableCell>
                                     <TableCell>
                                         <EstadoBadge estado={orden.pago} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <span
-                                            className={cn(
-                                                orden.vencimiento &&
-                                                    tonoVencimiento[
-                                                        orden.vencimiento.tono
-                                                    ],
-                                            )}
-                                        >
-                                            {orden.vence ?? '—'}
-                                        </span>
-                                        {orden.vencimiento?.nota && (
-                                            <span
-                                                className={cn(
-                                                    'block text-xs',
-                                                    tonoVencimiento[
-                                                        orden.vencimiento.tono
-                                                    ],
-                                                )}
-                                            >
-                                                {orden.vencimiento.nota}
-                                            </span>
-                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))}

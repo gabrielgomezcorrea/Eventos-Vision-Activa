@@ -1,7 +1,8 @@
 import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
-import { Mail, Trash2 } from 'lucide-react';
+import { ArrowRight, Mail, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import EventoController from '@/actions/App/Http/Controllers/Eventos/EventoController';
+import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
 import { Campo } from '@/components/campo';
 import { Confirmar } from '@/components/confirmar';
@@ -37,6 +38,7 @@ type Props = {
         evento: { id: number; nombre: string } | null;
         estado: Estado;
         inscrita: boolean;
+        inscripcion_id: number | null;
         llego: string;
         programa_enviado: string | null;
         se_inscribio: string | null;
@@ -108,6 +110,18 @@ export default function SolicitudShow({
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        {solicitud.inscripcion_id && (
+                            <Button asChild>
+                                <Link
+                                    href={InscripcionController.show.url(
+                                        solicitud.inscripcion_id,
+                                    )}
+                                >
+                                    Ir a inscripción
+                                    <ArrowRight />
+                                </Link>
+                            </Button>
+                        )}
                         {puede.gestionar && (
                             <Confirmar
                                 titulo="Reenviar el programa"

@@ -16,6 +16,7 @@ import {
     Paperclip,
     RefreshCw,
     RotateCcw,
+    Tag,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
@@ -188,6 +189,7 @@ type Props = {
     } | null;
     enlace_cliente: string | null;
     cancelacion: { impedimento: string | null } | null;
+    codigo: { aplicado: string | null; quitar_bloqueado: string | null } | null;
     reactivacion: { impedimento: string | null; plazo: string } | null;
     opciones: {
         abonos: Record<string, string>;
@@ -239,6 +241,112 @@ export function Panel({
                 </form>
             </SheetContent>
         </Sheet>
+    );
+}
+
+/** Aplica o quita el código de descuento de una inscripción confirmada. */
+function CodigoDeDescuento({
+    ordenId,
+    codigo,
+}: {
+    ordenId: number;
+    codigo: { aplicado: string | null; quitar_bloqueado: string | null };
+}) {
+    if (codigo.aplicado) {
+        const boton = (
+            <Button
+                variant="outline"
+                size="sm"
+                disabled={!!codigo.quitar_bloqueado}
+            >
+                Quitar código
+            </Button>
+        );
+
+        return (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">
+                    Código <span className="font-mono">{codigo.aplicado}</span>
+                </span>
+                {codigo.quitar_bloqueado ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span>{boton}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            {codigo.quitar_bloqueado}
+                        </TooltipContent>
+                    </Tooltip>
+                ) : (
+                    <Confirmar
+                        titulo="Quitar el código de descuento"
+                        descripcion="El total vuelve a calcularse sin el código."
+                        textoAccion="Quitar código"
+                        destructivo={false}
+                        onConfirmar={() =>
+                            router.delete(
+                                InscripcionController.quitarCodigo.url(ordenId),
+                                { preserveScroll: true },
+                            )
+                        }
+                    >
+                        {boton}
+                    </Confirmar>
+                )}
+            </div>
+        );
+    }
+
+    return <AplicarCodigo ordenId={ordenId} />;
+}
+
+function AplicarCodigo({ ordenId }: { ordenId: number }) {
+    const [abierto, setAbierto] = useState(false);
+    const form = useForm({ codigo: '' });
+
+    // Si el servidor rechaza el código, el panel sigue abierto con lo escrito.
+    // Al aplicarse, este componente se reemplaza por «Quitar código».
+    function enviar(e: FormEvent) {
+        e.preventDefault();
+        form.post(InscripcionController.aplicarCodigo.url(ordenId), {
+            preserveScroll: true,
+        });
+    }
+
+    return (
+        <div className="mt-2">
+            <Panel
+                titulo="Aplicar código de descuento"
+                descripcion="Para cuando el cliente olvidó ingresarlo. Se calcula igual que si lo hubiera puesto él."
+                trigger={
+                    <Button variant="outline" size="sm">
+                        <Tag />
+                        Aplicar código
+                    </Button>
+                }
+                abierto={abierto}
+                onOpenChange={setAbierto}
+                onSubmit={enviar}
+                procesando={form.processing}
+                textoEnviar="Aplicar"
+            >
+                <Campo
+                    label="Código de descuento"
+                    htmlFor="codigo"
+                    error={form.errors.codigo}
+                >
+                    <Input
+                        id="codigo"
+                        value={form.data.codigo}
+                        onChange={(e) =>
+                            form.setData('codigo', e.target.value.toUpperCase())
+                        }
+                        className="font-mono uppercase"
+                        autoComplete="off"
+                    />
+                </Campo>
+            </Panel>
+        </div>
     );
 }
 
@@ -1128,6 +1236,7 @@ export default function InscripcionShow({
     reenvio,
     enlace_cliente,
     cancelacion,
+    codigo,
     reactivacion,
     opciones,
 }: Props) {
@@ -1272,6 +1381,12 @@ export default function InscripcionShow({
                                     {clp(orden.descuento)} ·{' '}
                                     {orden.descuento_etiqueta}
                                 </span>
+                            )}
+                            {codigo && (
+                                <CodigoDeDescuento
+                                    ordenId={orden.id}
+                                    codigo={codigo}
+                                />
                             )}
                         </Dato>
                         <Dato etiqueta="Tipo">{orden.tipo}</Dato>

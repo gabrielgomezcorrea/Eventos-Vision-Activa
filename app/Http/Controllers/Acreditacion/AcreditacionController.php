@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Acreditacion;
 use App\Actions\AcreditarParticipante;
 use App\Actions\BuscarParticipantes;
 use App\Actions\ResolverCredencial;
-use App\Enums\EventStatus;
 use App\Enums\Permiso;
 use App\Http\Controllers\Controller;
 use App\Models\Event;
@@ -134,7 +133,7 @@ class AcreditacionController extends Controller
     private function eventosDisponibles(): Collection
     {
         return Event::query()
-            ->whereIn('status', [EventStatus::Publicado->value, EventStatus::Cerrado->value])
+            ->publicados()
             ->orderBy('name')
             ->get();
     }

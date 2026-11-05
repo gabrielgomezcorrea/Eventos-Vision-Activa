@@ -154,7 +154,13 @@ class PanelSolicitudesTest extends TestCase
         // Sin seguimiento: sin notas y sin inscribirse (Marta). Eva ya se inscribió.
         $this->assertSame(['marta@colegio.cl'], $correos(['seguimiento' => 'sin']));
         $this->assertSame(['luis@colegio.cl'], $correos(['seguimiento' => 'con']));
-        $this->assertCount(3, $correos([]));
+        // Por defecto ya viene en «solo las que faltan por seguir»; `pendientes=0` las muestra todas.
+        $this->assertSame(['luis@colegio.cl', 'marta@colegio.cl'], $correos([]));
+        $this->assertCount(3, $correos(['pendientes' => 0]));
+
+        // «Solo las que faltan por seguir»: las que aún no se inscriben (Marta y Luis), no Eva.
+        $this->assertSame(['luis@colegio.cl', 'marta@colegio.cl'], $correos(['pendientes' => 1]));
+        $this->assertSame(['marta@colegio.cl'], $correos(['pendientes' => 1, 'seguimiento' => 'sin']));
 
         $this->assertSame('Contactada', $contactada->fresh()->estado());
         $this->assertSame('Ya se inscribió', $inscrita->fresh()->estado());

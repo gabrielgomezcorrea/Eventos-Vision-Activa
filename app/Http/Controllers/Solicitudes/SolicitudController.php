@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Solicitudes;
 use App\Actions\EliminarSolicitudConTodo;
 use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\ExportarContactos;
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Http\Controllers\Controller;
@@ -44,6 +45,9 @@ class SolicitudController extends Controller
             'seguimiento' => ['nullable', 'in:sin,con'],
         ]);
 
+        // Por defecto solo las que faltan por seguir; se apaga con `pendientes=0`.
+        $soloPendientes = (bool) ($filtros['pendientes'] ?? true);
+
         $solicitudes = ProgramRequest::query()
             ->with('event', 'orders:id,program_request_id,responsible_name,responsible_lastname,responsible_phone,responsible_position,responsible_institution')
             ->withCount('notes')
@@ -55,7 +59,7 @@ class SolicitudController extends Controller
                     ->orWhere('institution', 'like', "%{$buscar}%"),
             ))
             ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento))
-            ->when($filtros['pendientes'] ?? false, fn (Builder $q) => $q->whereNull('converted_at'))
+            ->when($soloPendientes, fn (Builder $q) => $q->whereNull('converted_at'))
             ->when($filtros['cargo'] ?? null, fn (Builder $q, string $cargo) => $q->where('position', $cargo))
             // Sin seguimiento: nadie la ha contactado ni se ha inscrito todavía.
             ->when(($filtros['seguimiento'] ?? null) === 'sin', fn (Builder $q) => $q->whereDoesntHave('notes')->whereNull('converted_at'))
@@ -83,7 +87,7 @@ class SolicitudController extends Controller
             'filtros' => [
                 'buscar' => $filtros['buscar'] ?? null,
                 'evento' => $filtros['evento'] ?? null,
-                'pendientes' => (bool) ($filtros['pendientes'] ?? false),
+                'pendientes' => $soloPendientes,
                 'cargo' => $filtros['cargo'] ?? null,
                 'seguimiento' => $filtros['seguimiento'] ?? null,
             ],
@@ -139,6 +143,7 @@ class SolicitudController extends Controller
                     $programRequest->utm_campaign,
                 ])->filter()->implode(' · ') ?: null,
                 'internal_notes' => $programRequest->internal_notes,
+                'inscripcion_id' => $this->inscripcionDe($request, $programRequest),
             ],
             'notas' => $programRequest->notes->map(fn ($nota): array => [
                 'id' => $nota->id,
@@ -292,5 +297,20 @@ class SolicitudController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * La inscripción que salió de esta solicitud, para saltar a ella: la más
+     * reciente ya confirmada y, si solo hay borradores, el último. Nulo si no
+     * hay o si quien mira no puede ver inscripciones.
+     */
+    private function inscripcionDe(Request $request, ProgramRequest $solicitud): ?int
+    {
+        $orden = $solicitud->orders()
+            ->orderByRaw('case when status = ? then 1 else 0 end', [OrderStatus::Borrador->value])
+            ->latest('id')
+            ->first();
+
+        return $orden !== null && $request->user()->can('view', $orden) ? $orden->id : null;
     }
 }

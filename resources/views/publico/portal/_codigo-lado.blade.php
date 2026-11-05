@@ -1,7 +1,7 @@
 {{--
     Código de descuento en la columna izquierda, a la vista desde el inicio.
-    Solo mientras la inscripción se está completando: el precio se congela al
-    confirmar y, con todo completo, esta caja se oculta.
+    En borrador se aplica y se quita; con todo completo se oculta. Confirmada,
+    solo muestra el código aplicado: el precio ya está congelado y lo quita el equipo.
 --}}
 <div class="lado-caja" id="codigo">
     <p class="lado-titulo">Código de descuento</p>
@@ -10,9 +10,11 @@
         <p style="margin:0 0 8px;font-size:.9rem;color:var(--exito)">
             <strong>Descuento aplicado ({{ $alcance === 'Descuento completo' ? 'completo' : $alcance }})</strong>
         </p>
-        <form method="POST" action="{{ route('inscripcion.codigo.quitar', ['token' => $token]) }}" style="margin:0">
-            <button type="submit" class="btn btn-secundario">Quitar código</button>
-        </form>
+        @if ($orden->esBorrador())
+            <form method="POST" action="{{ route('inscripcion.codigo.quitar', ['token' => $token]) }}" style="margin:0">
+                <button type="submit" class="btn btn-secundario">Quitar código</button>
+            </form>
+        @endif
     @else
         <form method="POST" action="{{ route('inscripcion.codigo.aplicar', ['token' => $token]) }}" style="margin:0">
             <label for="codigo-descuento" style="font-size:.85rem">¿Tienes un código?</label>

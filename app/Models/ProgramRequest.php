@@ -150,10 +150,10 @@ class ProgramRequest extends Model
     public function colorDelEstado(): string
     {
         return match (true) {
-            $this->converted_at !== null => 'success',
+            $this->converted_at !== null => 'info',
             $this->tieneNotas() => 'success',
-            $this->program_sent_at !== null => 'info',
-            default => 'warning',
+            $this->program_sent_at !== null => 'warning',
+            default => 'danger',
         };
     }
 }

@@ -2,13 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Models\Accreditation;
 use App\Models\Event;
-use App\Models\EventSession;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\ProgramRequest;
@@ -34,29 +32,30 @@ class DashboardController extends Controller
         $tarjetas = [];
 
         if ($usuario->can(Permiso::VerComprobantes->value)) {
-            $enValidacion = Payment::pendientesDeRevision()->count();
+            $enValidacion = Payment::pendientesDeRevision()->whereHas('order.event', fn (Builder $q) => $q->publicados())->count();
 
             $tarjetas[] = self::tarjeta('Comprobantes por revisar', $enValidacion, $enValidacion > 0 ? 'Esperando a Contabilidad' : 'Nada pendiente', $enValidacion > 0 ? 'warning' : 'gray', 'banknote', route('comprobantes.index'));
         }
 
         if ($usuario->can(Permiso::VerOrdenes->value)) {
             $porVencer = Order::query()
+                ->whereHas('event', fn (Builder $q) => $q->publicados())
                 ->where('status', OrderStatus::Reservada)
                 ->whereNotIn('payment_status', [PaymentStatus::EnValidacion->value, PaymentStatus::Aprobado->value])
                 ->whereBetween('reserved_until', [now(), now()->addHours(48)])
                 ->count();
 
-            $observados = Order::where('payment_status', PaymentStatus::Observado)->count();
+            $observados = Order::whereHas('event', fn (Builder $q) => $q->publicados())->where('payment_status', PaymentStatus::Observado)->count();
 
             $tarjetas[] = self::tarjeta('Reservas por vencer', $porVencer, 'En las próximas 48 horas', $porVencer > 0 ? 'danger' : 'gray', 'clock', route('inscripciones.index'));
             $tarjetas[] = self::tarjeta('Pagos observados', $observados, 'Esperando respuesta del cliente', $observados > 0 ? 'warning' : 'gray', 'alert', route('inscripciones.index'));
-            $tarjetas[] = self::tarjeta('Inscripciones pagadas', Order::where('payment_status', PaymentStatus::Aprobado)->count(), 'Con credenciales emitidas', 'success', 'check', route('inscripciones.index'));
+            $tarjetas[] = self::tarjeta('Inscripciones pagadas', Order::whereHas('event', fn (Builder $q) => $q->publicados())->where('payment_status', PaymentStatus::Aprobado)->count(), 'Con credenciales emitidas', 'success', 'check', route('inscripciones.index'));
         }
 
         // Solicitudes tiene permiso propio: sin esto, Contabilidad veía una
         // tarjeta que la llevaba a una pantalla que no puede abrir.
         if ($usuario->can(Permiso::VerSolicitudes->value)) {
-            $tarjetas[] = self::tarjeta('Solicitudes sin seguimiento', ProgramRequest::whereDoesntHave('notes')->whereNull('converted_at')->count(), 'Nadie las ha contactado y no se han inscrito', 'info', 'inbox', route('solicitudes.index', ['seguimiento' => 'sin']));
+            $tarjetas[] = self::tarjeta('Solicitudes sin seguimiento', ProgramRequest::whereHas('event', fn (Builder $q) => $q->publicados())->whereDoesntHave('notes')->whereNull('converted_at')->count(), 'Nadie las ha contactado y no se han inscrito', 'info', 'inbox', route('solicitudes.index', ['seguimiento' => 'sin']));
         }
 
         // Quien solo trabaja en la puerta no tiene colas de oficina: su
@@ -64,14 +63,12 @@ class DashboardController extends Controller
         $soloPuerta = $usuario->can(Permiso::VerAcreditacion->value) && ! $usuario->can(Permiso::VerOrdenes->value);
 
         if ($usuario->can(Permiso::VerAcreditacion->value) && ! $soloPuerta) {
-            $tarjetas[] = self::tarjeta('Acreditados', Accreditation::count(), 'Retiraron su pulsera', 'success', 'qr', null);
+            $tarjetas[] = self::tarjeta('Acreditados', Accreditation::whereHas('event', fn (Builder $q) => $q->publicados())->count(), 'Retiraron su pulsera', 'success', 'qr', null);
         }
 
         return Inertia::render('dashboard', [
             'tarjetas' => $tarjetas,
             'puerta' => $soloPuerta ? self::puerta() : null,
-            // La pregunta que Coordinación responde varias veces al día por teléfono.
-            'jornadas' => $usuario->can(Permiso::VerEventos->value) ? self::cuposPorJornada() : null,
             'actividad' => $usuario->can(Permiso::VerOrdenes->value) ? self::actividad() : null,
         ]);
     }
@@ -88,8 +85,8 @@ class DashboardController extends Controller
         $desde = today()->subDays(89);
         $porDia = fn (Collection $fechas): Collection => $fechas->countBy(fn ($fecha): string => Carbon::parse($fecha)->format('Y-m-d'));
 
-        $inscritas = $porDia(Order::where('confirmed_at', '>=', $desde)->pluck('confirmed_at'));
-        $pagadas = $porDia(Payment::where('status', PaymentStatus::Aprobado)->where('reviewed_at', '>=', $desde)->pluck('reviewed_at'));
+        $inscritas = $porDia(Order::whereHas('event', fn (Builder $q) => $q->publicados())->where('confirmed_at', '>=', $desde)->pluck('confirmed_at'));
+        $pagadas = $porDia(Payment::whereHas('order.event', fn (Builder $q) => $q->publicados())->where('status', PaymentStatus::Aprobado)->where('reviewed_at', '>=', $desde)->pluck('reviewed_at'));
 
         return collect(range(0, 89))
             ->map(function (int $dias) use ($desde, $inscritas, $pagadas): array {
@@ -110,7 +107,7 @@ class DashboardController extends Controller
     private static function puerta(): array
     {
         $eventos = Event::query()
-            ->whereIn('status', [EventStatus::Publicado->value, EventStatus::Cerrado->value])
+            ->publicados()
             ->where(fn (Builder $q) => $q->whereNull('starts_on')->orWhere('starts_on', '>=', today()))
             ->withCount([
                 'tickets as esperados' => fn (Builder $q) => $q->whereNull('revoked_at'),
@@ -132,6 +129,7 @@ class DashboardController extends Controller
 
         $ultimas = Accreditation::query()
             ->with(['participant', 'event'])
+            ->whereHas('event', fn (Builder $q) => $q->publicados())
             ->latest('accredited_at')
             ->limit(8)
             ->get()
@@ -154,31 +152,5 @@ class DashboardController extends Controller
     private static function tarjeta(string $titulo, int $valor, string $detalle, string $tono, string $icono, ?string $href): array
     {
         return compact('titulo', 'valor', 'detalle', 'tono', 'icono', 'href');
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private static function cuposPorJornada(): array
-    {
-        return EventSession::query()
-            ->with('event')
-            ->whereNotNull('capacity')
-            ->whereHas('event', fn (Builder $q) => $q->where('status', EventStatus::Publicado))
-            ->orderBy('event_id')
-            ->orderBy('position')
-            ->get()
-            ->map(fn (EventSession $jornada): array => [
-                'id' => $jornada->id,
-                'evento_id' => $jornada->event_id,
-                'evento' => $jornada->event->name,
-                'jornada' => $jornada->name,
-                'fecha' => $jornada->starts_at?->format('d-m-Y'),
-                'capacidad' => $jornada->capacity,
-                'tomados' => $jornada->reserved_seats,
-                'disponibles' => $jornada->cuposDisponibles(),
-                'ocupacion' => $jornada->capacity > 0 ? (int) round($jornada->reserved_seats / $jornada->capacity * 100) : null,
-            ])
-            ->all();
     }
 }

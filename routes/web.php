@@ -110,6 +110,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('inscripciones/{order}/reenviar-al-cliente', [InscripcionController::class, 'reenviarAlCliente'])->name('inscripciones.reenviar');
     Route::post('inscripciones/{order}/cancelar', [InscripcionController::class, 'cancelar'])->name('inscripciones.cancelar');
     Route::post('inscripciones/{order}/reactivar', [InscripcionController::class, 'reactivar'])->name('inscripciones.reactivar');
+    Route::post('inscripciones/{order}/codigo', [InscripcionController::class, 'aplicarCodigo'])->name('inscripciones.codigo.aplicar');
+    Route::delete('inscripciones/{order}/codigo', [InscripcionController::class, 'quitarCodigo'])->name('inscripciones.codigo.quitar');
     Route::post('inscripciones/{order}/participantes/{participant}/reemplazar', [InscripcionController::class, 'reemplazar'])
         ->scopeBindings()
         ->name('inscripciones.reemplazar');

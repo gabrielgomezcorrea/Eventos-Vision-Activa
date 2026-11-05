@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Inscripciones;
 
+use App\Actions\AplicarCodigoDesdePanel;
 use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\CancelarOrden;
 use App\Actions\CrearInscripcionDesdePanel;
 use App\Actions\EmitirEnlaceDeAcceso;
+use App\Actions\QuitarCodigoDesdePanel;
 use App\Actions\ReactivarReserva;
 use App\Actions\ReemplazarParticipante;
 use App\Actions\RegistrarComprobante;
@@ -18,11 +20,13 @@ use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Exceptions\CancelacionNoPermitida;
+use App\Exceptions\CodigoNoAplicable;
 use App\Exceptions\ComprobanteNoAceptado;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\ReactivacionNoPermitida;
 use App\Exceptions\ReemplazoNoPermitido;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Inscripciones\AplicarCodigoRequest;
 use App\Http\Requests\Inscripciones\CancelarOrdenRequest;
 use App\Http\Requests\Inscripciones\CargarComprobanteRequest;
 use App\Http\Requests\Inscripciones\CorregirCorreoDelResponsableRequest;
@@ -112,10 +116,8 @@ class InscripcionController extends Controller
                 'correo' => $orden->responsible_email,
                 'total' => $orden->total,
                 'participantes' => (int) $orden->getAttribute('participantes'),
-                'estado' => Presentar::estado($orden->status),
-                'pago' => Presentar::estado($orden->payment_status),
-                'vence' => $orden->reserved_until?->format('d-m-Y H:i'),
-                'vencimiento' => self::vencimiento($orden),
+                'estado' => self::estadoVisible($orden),
+                'pago' => self::pagoVisible($orden),
             ]);
 
         // Eventos que todavía admiten un invitado, con sus accesos y sus cargos.
@@ -332,14 +334,16 @@ class InscripcionController extends Controller
             'orden' => [
                 'id' => $order->id,
                 'numero' => $order->number,
-                'estado' => Presentar::estado($order->status),
-                'pago' => Presentar::estado($order->payment_status),
+                'estado' => self::estadoVisible($order),
+                'pago' => self::pagoVisible($order),
                 'tipo' => $order->kind->label(),
                 'creada_por_el_equipo' => $order->creadaPorElEquipo(),
                 'sin_correos' => ! $order->notify_client,
                 'evento' => ['id' => $order->event->id, 'nombre' => $order->event->name],
                 'confirmada' => $order->confirmed_at?->format('d-m-Y H:i'),
-                'vence' => $order->reserved_until?->format('d-m-Y H:i'),
+                'vence' => $order->payment_status === PaymentStatus::Aprobado && $order->reserved_until !== null
+                    ? 'No vence: ya está pagada'
+                    : $order->reserved_until?->format('d-m-Y H:i'),
                 'vencimiento' => self::vencimiento($order),
                 'total' => $order->total,
                 'subtotal' => $order->subtotal,
@@ -471,6 +475,15 @@ class InscripcionController extends Controller
             // Para el cliente que pagó tarde. Si ya no hay cupos, lo dice al intentarlo.
             'reactivacion' => $puedeReemplazar && $order->status === OrderStatus::Vencida
                 ? ['impedimento' => ReactivarReserva::impedimento($order), 'plazo' => $order->event->calcularVencimientoReserva()->format('d-m-Y H:i')]
+                : null,
+            // Aplicar o quitar el código desde el panel: solo en confirmadas que no son invitado.
+            'codigo' => $puedeReemplazar && in_array($order->status, [OrderStatus::Reservada, OrderStatus::Finalizada], true) && $order->kind !== OrderKind::Invitado
+                ? [
+                    'aplicado' => $order->discount_code_id !== null ? $order->discountCode?->formateado() : null,
+                    'quitar_bloqueado' => $order->payment_status === PaymentStatus::Aprobado
+                        ? 'La inscripción ya está pagada: no se puede quitar el código.'
+                        : null,
+                ]
                 : null,
             'opciones' => [
                 'tiposDocumento' => collect(InvoiceDocumentType::cases())->mapWithKeys(fn (InvoiceDocumentType $t): array => [$t->value => $t->label()])->all(),
@@ -649,6 +662,42 @@ class InscripcionController extends Controller
         return back();
     }
 
+    public function aplicarCodigo(AplicarCodigoRequest $request, Order $order, AplicarCodigoDesdePanel $aplicar): RedirectResponse
+    {
+        try {
+            $orden = $aplicar($order, $request->validated('codigo'), $request->user());
+        } catch (CodigoNoAplicable $e) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Código aplicado: '.$orden->discountCode->formateado().'. Total nuevo $'.number_format($orden->total, 0, ',', '.').'.'
+                .($orden->payment_status === PaymentStatus::Aprobado ? ' La inscripción quedó pagada.' : ''),
+        ]);
+
+        return back();
+    }
+
+    public function quitarCodigo(Order $order, QuitarCodigoDesdePanel $quitar, Request $request): RedirectResponse
+    {
+        Gate::authorize('update', $order);
+
+        try {
+            $orden = $quitar($order, $request->user());
+        } catch (CodigoNoAplicable $e) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Código quitado. Total nuevo $'.number_format($orden->total, 0, ',', '.').'.']);
+
+        return back();
+    }
+
     public function reactivar(Order $order, ReactivarReserva $reactivar): RedirectResponse
     {
         Gate::authorize('update', $order);
@@ -704,6 +753,36 @@ class InscripcionController extends Controller
     }
 
     /**
+     * Reservada con el pago completo ya es una inscripción hecha: se ve «Inscrito», en azul.
+     *
+     * @return array{value: string|int, label: string, color: string}
+     */
+    private static function estadoVisible(Order $orden): array
+    {
+        if ($orden->status === OrderStatus::Reservada && $orden->payment_status === PaymentStatus::Aprobado) {
+            return ['value' => 'enrolled', 'label' => 'Inscrito', 'color' => 'success'];
+        }
+
+        return Presentar::estado($orden->status);
+    }
+
+    /**
+     * Pago pendiente en rojo, pero solo cuando ya hay inscripción: un borrador no debe nada todavía.
+     *
+     * @return array{value: string|int, label: string, color: string}
+     */
+    private static function pagoVisible(Order $orden): array
+    {
+        $pago = Presentar::estado($orden->payment_status);
+
+        if ($orden->payment_status === PaymentStatus::Pendiente && $orden->status !== OrderStatus::Borrador) {
+            $pago['color'] = 'danger';
+        }
+
+        return $pago;
+    }
+
+    /**
      * Cómo leer el vencimiento de una reserva, en una palabra para el color.
      *
      * @return array{tono: string, nota: string|null}|null
@@ -711,6 +790,10 @@ class InscripcionController extends Controller
     private static function vencimiento(Order $orden): ?array
     {
         if ($orden->status !== OrderStatus::Reservada || $orden->reserved_until === null) {
+            return null;
+        }
+
+        if ($orden->payment_status === PaymentStatus::Aprobado) {
             return null;
         }
 

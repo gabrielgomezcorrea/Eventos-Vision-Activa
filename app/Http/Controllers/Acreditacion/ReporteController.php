@@ -34,7 +34,7 @@ class ReporteController extends Controller
         $evento = $this->evento($filtros['evento'] ?? null);
 
         $props = [
-            'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
+            'eventos' => Event::query()->publicados()->orderBy('name')->pluck('name', 'id'),
             'evento' => $evento?->id,
             'filtros' => [
                 'estado' => $filtros['estado'] ?? null,
@@ -65,11 +65,11 @@ class ReporteController extends Controller
     private function evento(?int $id): ?Event
     {
         if ($id !== null) {
-            return Event::query()->find($id);
+            return Event::query()->publicados()->find($id);
         }
 
         return Event::query()->where('status', 'published')->whereDate('starts_on', '>=', today())->orderBy('starts_on')->first()
-            ?? Event::query()->orderByDesc('starts_on')->orderByDesc('id')->first();
+            ?? Event::query()->publicados()->orderByDesc('starts_on')->orderByDesc('id')->first();
     }
 
     /** @return Builder<Participant> */

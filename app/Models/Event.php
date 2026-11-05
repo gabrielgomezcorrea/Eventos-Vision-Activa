@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Factories\EventFactory;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -205,6 +206,17 @@ class Event extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(Invitation::class);
+    }
+
+    /**
+     * Solo eventos publicados: borradores y cerrados no aparecen en el trabajo diario.
+     *
+     * @param  Builder<Event>  $consulta
+     * @return Builder<Event>
+     */
+    public function scopePublicados(Builder $consulta): Builder
+    {
+        return $consulta->where('status', EventStatus::Publicado->value);
     }
 
     /** @return HasMany<DiscountCode, $this> */

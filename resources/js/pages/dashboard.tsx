@@ -25,14 +25,6 @@ import {
     ChartTooltipContent,
 } from '@/components/ui/chart';
 import type { ChartConfig } from '@/components/ui/chart';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
@@ -45,18 +37,6 @@ type Tarjeta = {
     tono: string;
     icono: string;
     href: string | null;
-};
-
-type Jornada = {
-    id: number;
-    evento_id: number;
-    evento: string;
-    jornada: string;
-    fecha: string | null;
-    capacidad: number;
-    tomados: number;
-    disponibles: number | null;
-    ocupacion: number | null;
 };
 
 type Dia = { fecha: string; inscripciones: number; pagadas: number };
@@ -83,7 +63,6 @@ type Acreditacion = {
 type Props = {
     tarjetas: Tarjeta[];
     puerta: { eventos: EventoPuerta[]; ultimas: Acreditacion[] } | null;
-    jornadas: Jornada[] | null;
     actividad: Dia[] | null;
 };
 
@@ -103,23 +82,6 @@ const tonos: Record<string, string> = {
     info: 'text-sky-600',
     gray: 'text-foreground',
 };
-
-/** Verde con holgura, ámbar con 10 o menos, rojo agotado. */
-function colorDisponibles(disponibles: number | null): string {
-    if (disponibles === null) {
-        return 'bg-muted text-muted-foreground';
-    }
-
-    if (disponibles === 0) {
-        return 'bg-red-100 text-red-800';
-    }
-
-    if (disponibles <= 10) {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-emerald-100 text-emerald-800';
-}
 
 function TarjetaResumen({ tarjeta }: { tarjeta: Tarjeta }) {
     const Icono = iconos[tarjeta.icono] ?? Inbox;
@@ -278,71 +240,6 @@ function GraficoActividad({ actividad }: { actividad: Dia[] }) {
     );
 }
 
-function CuposPorJornada({ jornadas }: { jornadas: Jornada[] }) {
-    return (
-        <Card className="gap-0 py-0">
-            <CardHeader className="border-b py-4">
-                <CardTitle>Cupos por jornada</CardTitle>
-            </CardHeader>
-            {jornadas.length === 0 ? (
-                <p className="text-muted-foreground px-6 py-8 text-center text-sm">
-                    Sin jornadas con cupo limitado en eventos publicados.
-                </p>
-            ) : (
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="pl-6">Evento</TableHead>
-                            <TableHead>Jornada</TableHead>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead className="text-center">
-                                Tomados
-                            </TableHead>
-                            <TableHead className="text-center">
-                                Disponibles
-                            </TableHead>
-                            <TableHead className="pr-6 text-right">
-                                Ocupación
-                            </TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {jornadas.map((j) => (
-                            <TableRow key={j.id}>
-                                <TableCell className="pl-6 font-medium">
-                                    {j.evento}
-                                </TableCell>
-                                <TableCell>{j.jornada}</TableCell>
-                                <TableCell className="text-muted-foreground">
-                                    {j.fecha ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-center tabular-nums">
-                                    {j.tomados} de {j.capacidad}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <span
-                                        className={cn(
-                                            'inline-block rounded-md px-2 py-0.5 text-xs font-medium tabular-nums',
-                                            colorDisponibles(j.disponibles),
-                                        )}
-                                    >
-                                        {j.disponibles ?? '—'}
-                                    </span>
-                                </TableCell>
-                                <TableCell className="pr-6 text-right tabular-nums">
-                                    {j.ocupacion === null
-                                        ? '—'
-                                        : `${j.ocupacion} %`}
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            )}
-        </Card>
-    );
-}
-
 function AvanceEvento({ evento }: { evento: EventoPuerta }) {
     const faltan = Math.max(evento.esperados - evento.acreditados, 0);
     const avance =
@@ -474,12 +371,7 @@ function Puerta({
     );
 }
 
-export default function Dashboard({
-    tarjetas,
-    puerta,
-    jornadas,
-    actividad,
-}: Props) {
+export default function Dashboard({ tarjetas, puerta, actividad }: Props) {
     return (
         <>
             <Head title="Escritorio" />
@@ -510,8 +402,6 @@ export default function Dashboard({
                 {actividad !== null && (
                     <GraficoActividad actividad={actividad} />
                 )}
-
-                {jornadas !== null && <CuposPorJornada jornadas={jornadas} />}
             </div>
         </>
     );

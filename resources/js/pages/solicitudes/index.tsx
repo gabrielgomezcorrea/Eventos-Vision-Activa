@@ -1,6 +1,6 @@
 import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
 import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
 import { EstadoBadge } from '@/components/estado-badge';
@@ -51,6 +51,8 @@ type Props = {
     exportacion: OpcionesExportacion | null;
 };
 
+const CLAVE_PENDIENTES = 'solicitudes.solo-pendientes';
+
 export default function SolicitudesIndex({
     solicitudes,
     filtros,
@@ -66,15 +68,38 @@ export default function SolicitudesIndex({
         ],
     });
 
+    // El interruptor «solo las que faltan por seguir» se recuerda en este
+    // navegador: si la URL no lo trae, se aplica lo último que se eligió.
+    useEffect(() => {
+        const guardado = localStorage.getItem(CLAVE_PENDIENTES);
+
+        if (
+            guardado !== null &&
+            !new URLSearchParams(window.location.search).has('pendientes') &&
+            (guardado === '1') !== filtros.pendientes
+        ) {
+            filtrar({ pendientes: guardado === '1' });
+        }
+        // Solo al abrir la pantalla.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     function filtrar(cambios: Partial<Filtros>) {
         const todos = { ...filtros, ...cambios };
+
+        if (cambios.pendientes !== undefined) {
+            localStorage.setItem(
+                CLAVE_PENDIENTES,
+                cambios.pendientes ? '1' : '0',
+            );
+        }
 
         router.get(
             SolicitudController.index.url(),
             {
                 ...(todos.buscar ? { buscar: todos.buscar } : {}),
                 ...(todos.evento ? { evento: todos.evento } : {}),
-                ...(todos.pendientes ? { pendientes: 1 } : {}),
+                pendientes: todos.pendientes ? 1 : 0,
                 ...(todos.cargo ? { cargo: todos.cargo } : {}),
                 ...(todos.seguimiento
                     ? { seguimiento: todos.seguimiento }

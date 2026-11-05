@@ -102,8 +102,12 @@
                 </div>
             @endif
             {{-- Código de descuento: arriba y a la vista mientras se completa la
-                 inscripción; con todo completo se oculta. --}}
-            @if ($orden->esBorrador() && ! $listaParaConfirmar && $orden->kind !== \App\Enums\OrderKind::Invitado)
+                 inscripción; con todo completo se oculta. Ya confirmada, solo
+                 muestra el código aplicado (lo quita el equipo, no el cliente). --}}
+            @if ($orden->kind !== \App\Enums\OrderKind::Invitado && (
+                ($orden->esBorrador() && ! $listaParaConfirmar)
+                || (! $orden->esBorrador() && $orden->discountCode)
+            ))
                 @include('publico.portal._codigo-lado')
             @endif
 
