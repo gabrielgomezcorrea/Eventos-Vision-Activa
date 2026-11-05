@@ -791,11 +791,11 @@ class InscripcionController extends Controller
         $validator = Validator::make(['proof' => $archivo] + $request->except('proof'), [
             'amount' => ['required', 'integer', 'min:1', 'max:'.max(1, $saldo)],
             'paid_on' => ['required', 'date', 'before_or_equal:today'],
-            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
+            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:10240'],
         ], [
             'proof.required' => 'Adjunta el comprobante de la transferencia.',
-            'proof.mimes' => 'El comprobante debe ser un PDF o una imagen.',
-            'proof.max' => 'El archivo no puede superar los 5 MB.',
+            'proof.mimes' => 'El comprobante debe ser un PDF o una foto (JPG, PNG, WEBP o HEIC).',
+            'proof.max' => 'El archivo no puede superar los 10 MB.',
             'paid_on.before_or_equal' => 'La fecha de transferencia no puede ser futura.',
             'amount.max' => 'El monto no puede superar el saldo pendiente de $'.number_format($saldo, 0, ',', '.').'.',
         ], [

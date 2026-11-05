@@ -447,6 +447,28 @@ class PanelInscripcionesTest extends TestCase
         $this->assertSame(1, $this->orden->invoiceRecords()->count());
     }
 
+    public function test_una_persona_natural_con_un_abono_parcial_recibe_su_boleta_en_foto(): void
+    {
+        $this->orden->forceFill(['kind' => OrderKind::Particular])->save();
+        $abono = $this->orden->payments()->create(['method' => 'bank_transfer', 'status' => PaymentStatus::Aprobado, 'amount' => 40000]);
+        $contabilidad = $this->usuario(Rol::Contabilidad);
+
+        $this->actingAs($contabilidad)->get(route('inscripciones.show', $this->orden))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('puede.registrarFactura', true)
+                ->where('opciones.tipoDocumentoSugerido', 'receipt'));
+
+        $this->actingAs($contabilidad)
+            ->post(route('inscripciones.factura', $this->orden), [
+                'document_type' => 'receipt', 'number' => '555', 'issued_on' => now()->toDateString(),
+                'amount' => 40000, 'payment_id' => $abono->id,
+                'archivo' => UploadedFile::fake()->create('boleta.jpg', 300, 'image/jpeg'),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $this->orden->invoiceRecords()->count());
+    }
+
     public function test_la_factura_se_envia_al_responsable_y_a_la_entidad_pagadora(): void
     {
         config(['facturacion.copia_administracion' => 'administracion@test.cl']);

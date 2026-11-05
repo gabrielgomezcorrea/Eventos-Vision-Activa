@@ -34,7 +34,7 @@ class RegistrarFacturaRequest extends FormRequest
             'issued_on' => ['required', 'date', 'before_or_equal:today'],
             'amount' => ['required', 'integer', 'min:0'],
             'payment_id' => ['nullable', Rule::in($this->orden()->payments()->where('status', PaymentStatus::Aprobado->value)->pluck('id')->all())],
-            'archivo' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
+            'archivo' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:10240'],
             // A quién se envía lo decide el sistema: al responsable y a la
             // entidad pagadora, con copia a administración. Escribir el
             // destinatario a mano era la forma de equivocarse.
@@ -55,7 +55,7 @@ class RegistrarFacturaRequest extends FormRequest
             'issued_on' => 'fecha de emisión',
             'amount' => 'monto',
             'payment_id' => 'abono',
-            'archivo' => 'PDF del documento',
+            'archivo' => 'archivo del documento',
             'sent_to' => 'enviada a',
             'notes' => 'observaciones',
         ];

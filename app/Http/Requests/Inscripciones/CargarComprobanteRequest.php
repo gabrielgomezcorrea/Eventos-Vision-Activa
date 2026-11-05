@@ -25,7 +25,7 @@ class CargarComprobanteRequest extends FormRequest
         return [
             'amount' => ['required', 'integer', 'min:1'],
             'paid_on' => ['required', 'date', 'before_or_equal:today'],
-            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
+            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:10240'],
         ];
     }
 

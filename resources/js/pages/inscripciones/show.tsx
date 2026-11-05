@@ -101,6 +101,7 @@ type Props = {
         estado: Estado;
         pago: Estado;
         tipo: string;
+        invitado: boolean;
         creada_por_el_equipo: boolean;
         sin_correos: boolean;
         evento: { id: number; nombre: string };
@@ -194,6 +195,7 @@ type Props = {
     opciones: {
         abonos: Record<string, string>;
         tiposDocumento: Record<string, string>;
+        tipoDocumentoSugerido: string;
         correoFacturacion: string | null;
         hoy: string;
     };
@@ -446,15 +448,15 @@ function CargarComprobante({
                     id="proof"
                     type="file"
                     required
-                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                     onChange={(e) => {
                         const archivo = e.target.files?.[0] ?? null;
                         const muyGrande =
-                            archivo !== null && archivo.size > 5 * 1024 * 1024;
+                            archivo !== null && archivo.size > 10 * 1024 * 1024;
 
                         setErrorArchivo(
                             muyGrande
-                                ? 'El comprobante no puede pesar más de 5 MB.'
+                                ? 'El comprobante no puede pesar más de 10 MB.'
                                 : null,
                         );
                         form.setData('proof', muyGrande ? null : archivo);
@@ -489,7 +491,7 @@ function RegistrarFactura({
         enviar: boolean;
         notes: string;
     }>({
-        document_type: 'invoice',
+        document_type: opciones.tipoDocumentoSugerido,
         number: '',
         issued_on: opciones.hoy,
         amount: String(total),
@@ -511,11 +513,11 @@ function RegistrarFactura({
     return (
         <Panel
             titulo="Registrar un documento tributario"
-            descripcion="La factura se emite en el sistema contable. Aquí solo se deja constancia."
+            descripcion="El documento se emite en el sistema contable. Aquí solo se deja constancia."
             trigger={
                 <Button variant="outline">
                     <FileText />
-                    Registrar factura
+                    Registrar factura o boleta
                 </Button>
             }
             abierto={abierto}
@@ -620,14 +622,14 @@ function RegistrarFactura({
                 </Campo>
             </div>
             <Campo
-                label="PDF del documento (opcional)"
+                label="Archivo del documento (opcional)"
                 htmlFor="archivo"
                 error={form.errors.archivo}
             >
                 <Input
                     id="archivo"
                     type="file"
-                    accept="application/pdf"
+                    accept="application/pdf,image/jpeg,image/png,image/webp,.heic,.heif"
                     onChange={(e) =>
                         form.setData('archivo', e.target.files?.[0] ?? null)
                     }
@@ -1389,7 +1391,19 @@ export default function InscripcionShow({
                                 />
                             )}
                         </Dato>
-                        <Dato etiqueta="Tipo">{orden.tipo}</Dato>
+                        <Dato etiqueta="Tipo">
+                            {orden.invitado ? (
+                                <EstadoBadge
+                                    estado={{
+                                        value: 'invitado',
+                                        label: orden.tipo,
+                                        color: 'purple',
+                                    }}
+                                />
+                            ) : (
+                                orden.tipo
+                            )}
+                        </Dato>
                         <Dato etiqueta="Confirmada">{orden.confirmada}</Dato>
                         <Dato etiqueta="Reserva vence">
                             {orden.vence && (

@@ -166,9 +166,29 @@ class ComprobanteWebTest extends TestCase
             'amount' => 90000,
             'paid_on' => now()->toDateString(),
             'proof' => UploadedFile::fake()->create('script.php', 10, 'application/x-php'),
-        ])->assertOk()->assertSee('debe ser un PDF o una imagen');
+        ])->assertOk()->assertSee('debe ser un PDF o una foto');
 
         $this->assertSame(0, $this->orden->fresh()->payments()->count());
+    }
+
+    public function test_acepta_una_foto_heic_de_iphone_de_8_mb(): void
+    {
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'paid_on' => now()->toDateString(),
+            'proof' => UploadedFile::fake()->create('IMG_0042.HEIC', 8 * 1024, 'image/heic'),
+        ])->assertRedirect();
+
+        $this->assertSame(PaymentStatus::EnValidacion, $this->orden->fresh()->payment_status);
+    }
+
+    public function test_rechaza_un_archivo_de_mas_de_10_mb(): void
+    {
+        $this->post($this->ruta('comprobante'), [
+            'amount' => 90000,
+            'paid_on' => now()->toDateString(),
+            'proof' => UploadedFile::fake()->create('scan.pdf', 10 * 1024 + 1, 'application/pdf'),
+        ])->assertOk()->assertSee('no puede superar los 10 MB');
     }
 
     public function test_rechaza_una_fecha_de_transferencia_futura(): void

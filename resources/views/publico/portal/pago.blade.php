@@ -188,13 +188,13 @@
                             <input type="hidden" name="proof_guardado" value="{{ $valores['proof_guardado'] }}">
                             <div class="ayuda" style="margin:0 0 6px">{{ $valores['proof_nombre'] ?? 'comprobante' }}</div>
                         @endif
-                        <input type="file" id="proof-{{ $orden->id }}" name="proof" accept=".pdf,.jpg,.jpeg,.png,.webp"
-                               data-max-mb="5"
+                        <input type="file" id="proof-{{ $orden->id }}" name="proof" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                               data-max-mb="10"
                                @if ($errores->has('proof')) aria-invalid="true" @endif>
                         @if ($errores->has('proof'))
                             <div class="error-campo">{{ $errores->first('proof') }}</div>
                         @else
-                            <div class="ayuda">PDF, JPG, PNG o WEBP · máx. 5 MB</div>
+                            <div class="ayuda">PDF o foto (JPG, PNG, WEBP, HEIC) · máx. 10 MB</div>
                         @endif
                     </div>
                 </div>

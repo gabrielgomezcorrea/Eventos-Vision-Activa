@@ -28,6 +28,7 @@ type OrdenFila = {
     responsable: string | null;
     correo: string | null;
     total: number;
+    invitado: boolean;
     participantes: number;
     estado: Estado;
     pago: Estado;
@@ -557,6 +558,17 @@ export default function InscripcionesIndex({
                                         </span>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
+                                        {orden.invitado && (
+                                            <span className="mr-2">
+                                                <EstadoBadge
+                                                    estado={{
+                                                        value: 'invitado',
+                                                        label: 'Invitado especial',
+                                                        color: 'purple',
+                                                    }}
+                                                />
+                                            </span>
+                                        )}
                                         {clp(orden.total)}
                                         <span className="text-muted-foreground block text-xs">
                                             {orden.participantes}{' '}

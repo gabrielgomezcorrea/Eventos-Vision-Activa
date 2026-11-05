@@ -116,6 +116,7 @@ class InscripcionController extends Controller
                 'responsable' => $orden->responsableNombreCompleto(),
                 'correo' => $orden->responsible_email,
                 'total' => $orden->total,
+                'invitado' => $orden->kind === OrderKind::Invitado,
                 'participantes' => (int) $orden->getAttribute('participantes'),
                 'estado' => self::estadoVisible($orden),
                 'pago' => self::pagoVisible($orden),
@@ -338,6 +339,7 @@ class InscripcionController extends Controller
                 'estado' => self::estadoVisible($order),
                 'pago' => self::pagoVisible($order),
                 'tipo' => $order->kind->label(),
+                'invitado' => $order->kind === OrderKind::Invitado,
                 'creada_por_el_equipo' => $order->creadaPorElEquipo(),
                 'sin_correos' => ! $order->notify_client,
                 'evento' => ['id' => $order->event->id, 'nombre' => $order->event->name],
@@ -461,7 +463,7 @@ class InscripcionController extends Controller
                 : null,
             'puede' => [
                 'cargarComprobante' => $order->admiteComprobante() && $usuario->can(Permiso::CargarComprobante->value),
-                'registrarFactura' => $usuario->can(Permiso::GestionarFacturas->value) && $order->payment_status->liberaCredenciales(),
+                'registrarFactura' => $usuario->can(Permiso::GestionarFacturas->value) && $order->pagado() > 0,
                 'reemplazar' => $puedeReemplazar,
                 'editarNotas' => $puedeReemplazar,
                 'verCredenciales' => $puedeVerCredenciales,
@@ -496,6 +498,8 @@ class InscripcionController extends Controller
                         $pago->id => $pago->created_at->format('d-m-Y').' · $'.number_format($pago->amount, 0, ',', '.'),
                     ])->all(),
                 'hoy' => now()->format('Y-m-d'),
+                // Una persona natural recibe boleta, no factura.
+                'tipoDocumentoSugerido' => $order->kind === OrderKind::Particular ? InvoiceDocumentType::Boleta->value : InvoiceDocumentType::Factura->value,
             ],
         ]);
     }

@@ -9,6 +9,7 @@ const colores: Record<string, string> = {
         'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
     danger: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
     info: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
+    purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
 };
 
 /** Estado con color semántico y siempre con texto: el color solo no basta. */

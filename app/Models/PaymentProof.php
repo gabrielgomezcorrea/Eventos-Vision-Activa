@@ -49,6 +49,8 @@ class PaymentProof extends Model
 
     public function esImagen(): bool
     {
-        return str_starts_with((string) $this->mime_type, 'image/');
+        // HEIC (foto de iPhone) no se dibuja en Chrome ni en Firefox: se descarga.
+        return str_starts_with((string) $this->mime_type, 'image/')
+            && ! in_array($this->mime_type, ['image/heic', 'image/heif'], true);
     }
 }
