@@ -49,7 +49,6 @@ class DescuentoDeCodigo
      */
     public static function porJornada(DiscountCode $codigo, Order $orden): int
     {
-        $codigo->loadMissing('preciosPorAcceso');
         $orden->loadMissing('participantesVigentes.accessType');
 
         return (int) $orden->participantesVigentes->sum(

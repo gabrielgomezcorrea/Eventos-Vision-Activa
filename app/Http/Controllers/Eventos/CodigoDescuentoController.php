@@ -59,12 +59,7 @@ class CodigoDescuentoController extends Controller
                     'value' => $codigo->value,
                     'etiqueta' => $codigo->etiqueta(),
                     'precios' => $codigo->type === TipoDescuento::PorJornada
-                        ? $codigo->preciosPorAcceso->map(fn ($acceso): array => [
-                            'id' => $acceso->id,
-                            'nombre' => $acceso->name,
-                            'precio' => (int) $acceso->pivot->price,
-                            'precio_label' => '$'.number_format((int) $acceso->pivot->price, 0, ',', '.'),
-                        ])->values()->all()
+                        ? self::preciosDelCodigo($codigo)
                         : [],
                     'max_people' => $codigo->max_people,
                     'expires_on' => $codigo->expires_at->format('Y-m-d'),
@@ -94,6 +89,24 @@ class CodigoDescuentoController extends Controller
                 'usosPorPersona' => DiscountCode::USOS_POR_PERSONA,
             ],
         ]);
+    }
+
+    /** @return list<array{id: int, nombre: string, precio: int, precio_label: string}> */
+    private static function preciosDelCodigo(DiscountCode $codigo): array
+    {
+        $filas = [];
+
+        foreach ($codigo->preciosPorAcceso as $acceso) {
+            $precio = $codigo->precioEspecialPara($acceso->id) ?? 0;
+            $filas[] = [
+                'id' => $acceso->id,
+                'nombre' => $acceso->name,
+                'precio' => $precio,
+                'precio_label' => '$'.number_format($precio, 0, ',', '.'),
+            ];
+        }
+
+        return $filas;
     }
 
     /** @return array{value: string, label: string, color: string} */
@@ -144,7 +157,7 @@ class CodigoDescuentoController extends Controller
                 'evento' => $event->name,
                 'descuento' => $codigo->etiqueta(),
                 'maximo' => $codigo->max_people,
-                ...($codigo->type === TipoDescuento::PorJornada ? ['precios' => $codigo->preciosPorAcceso->pluck('pivot.price', 'name')->all()] : []),
+                ...($codigo->type === TipoDescuento::PorJornada ? ['precios' => collect(self::preciosDelCodigo($codigo))->pluck('precio', 'nombre')->all()] : []),
             ],
         );
 

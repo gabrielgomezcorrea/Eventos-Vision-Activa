@@ -30,17 +30,22 @@ class CodigoDescuentoRequest extends FormRequest
         // «Por jornada» no tiene valor propio: el precio va en cada fila.
         if ($this->input('type') === TipoDescuento::PorJornada->value) {
             $datos += ['value' => 0];
-            $filas = collect($this->input('prices', []))
-                ->filter(fn ($fila): bool => is_array($fila))
-                ->map(fn (array $fila): array => [
+            $filas = [];
+
+            foreach ($this->array('prices') as $fila) {
+                if (! is_array($fila)) {
+                    continue;
+                }
+
+                $filas[] = [
                     'access_type_id' => $fila['access_type_id'] ?? null,
                     // Pesos enteros: llegan con puntos o "$" si los copiaron de una lista.
                     'price' => isset($fila['price']) && is_scalar($fila['price'])
                         ? (preg_replace('/[^\d]/', '', (string) $fila['price']) ?? '')
                         : null,
-                ])
-                ->values()
-                ->all();
+                ];
+            }
+
             $datos += ['prices' => $filas];
         }
 
@@ -88,12 +93,14 @@ class CodigoDescuentoRequest extends FormRequest
                 return;
             }
 
+            /** @var array<int, array{access_type_id: int|string, price: int|string}> $filas */
+            $filas = $this->array('prices');
             $accesos = AccessType::query()
-                ->whereIn('id', collect($this->input('prices'))->pluck('access_type_id'))
+                ->whereIn('id', array_column($filas, 'access_type_id'))
                 ->get()
                 ->keyBy('id');
 
-            foreach ($this->input('prices') as $i => $fila) {
+            foreach ($filas as $i => $fila) {
                 $acceso = $accesos->get((int) $fila['access_type_id']);
 
                 if ($acceso !== null && (int) $fila['price'] > (int) $acceso->price) {

@@ -33,6 +33,9 @@ class DiscountCode extends Model
 
     protected $guarded = [];
 
+    /** @var array<int, int>|null */
+    private ?array $preciosEspeciales = null;
+
     /** Usos por persona: en todos sus recorridos del evento o en uno solo. */
     public const USOS_POR_PERSONA = [
         'unlimited' => 'Sin límite de uso',
@@ -80,12 +83,25 @@ class DiscountCode extends Model
         return $this->belongsToMany(AccessType::class)->withPivot('price')->withTimestamps();
     }
 
+    /**
+     * Precio especial por acceso (id del acceso => pesos). Se lee una vez: los
+     * precios de un código no se editan después de crearlo.
+     *
+     * @return array<int, int>
+     */
+    public function preciosPorAccesoId(): array
+    {
+        return $this->preciosEspeciales ??= DB::table('access_type_discount_code')
+            ->where('discount_code_id', $this->getKey())
+            ->pluck('price', 'access_type_id')
+            ->map(fn ($precio): int => (int) $precio)
+            ->all();
+    }
+
     /** El precio especial que el código le pone a un acceso, o null si no lo lista. */
     public function precioEspecialPara(int $accessTypeId): ?int
     {
-        $acceso = $this->preciosPorAcceso->firstWhere('id', $accessTypeId);
-
-        return $acceso === null ? null : (int) $acceso->pivot->price;
+        return $this->preciosPorAccesoId()[$accessTypeId] ?? null;
     }
 
     public function disponibles(): int
