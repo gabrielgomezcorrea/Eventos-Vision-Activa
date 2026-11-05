@@ -47,6 +47,7 @@ use App\Models\Participant;
 use App\Models\Payment;
 use App\Models\Ticket;
 use App\Support\Auditor;
+use App\Support\DescuentoDeCodigo;
 use App\Support\GeneradorQr;
 use App\Support\Presentar;
 use App\Support\Rut;
@@ -384,7 +385,7 @@ class InscripcionController extends Controller
                 'establecimiento' => $p->establishment?->name,
                 'establishment_id' => $p->establishment_id,
                 'acceso' => $p->accessType?->name,
-                'valor' => $p->unit_price,
+                'valor' => $this->precioConCodigo($order, $p) ?? $p->unit_price,
                 'estado' => Presentar::estado($p->status),
                 'reemplazado_por' => $p->replacedBy?->nombre_completo,
                 // Lo mismo que verifica ReemplazarParticipante, dicho antes de
@@ -810,5 +811,10 @@ class InscripcionController extends Controller
         }
 
         return null;
+    }
+
+    private function precioConCodigo(Order $order, Participant $p): ?int
+    {
+        return DescuentoDeCodigo::precioConCodigo($order->discountCode, $order, $p);
     }
 }

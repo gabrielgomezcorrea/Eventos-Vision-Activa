@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Solicitudes;
 
 use App\Models\ProgramRequest;
+use App\Models\ProgramRequestNote;
 use Illuminate\Foundation\Http\FormRequest;
 
 class GuardarNotaRequest extends FormRequest
@@ -21,12 +22,20 @@ class GuardarNotaRequest extends FormRequest
         if (is_string($this->input('body'))) {
             $this->merge(['body' => trim($this->input('body'))]);
         }
+
+        // Sin texto, la marca se anota con su propio nombre.
+        if (blank($this->input('body')) && $this->input('tipo') === ProgramRequestNote::NO_PARTICIPARA) {
+            $this->merge(['body' => 'No participará']);
+        }
     }
 
     /** @return array<string, array<int, string>> */
     public function rules(): array
     {
-        return ['body' => ['required', 'string', 'min:2', 'max:2000']];
+        return [
+            'body' => ['required', 'string', 'min:2', 'max:2000'],
+            'tipo' => ['nullable', 'in:'.ProgramRequestNote::NO_PARTICIPARA.','.ProgramRequestNote::VUELVE_A_SEGUIMIENTO],
+        ];
     }
 
     /** @return array<string, string> */

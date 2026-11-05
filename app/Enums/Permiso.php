@@ -36,6 +36,9 @@ enum Permiso: string
     // Códigos de descuento: regalan cupos, solo Administración.
     case GestionarDescuentos = 'gestionar_descuentos';
 
+    // Ver los códigos en la ficha del evento, sin crearlos ni tocarlos (Coordinación).
+    case VerDescuentos = 'ver_descuentos';
+
     // Invitaciones personales e invitado especial: también Coordinación, que no puede crear códigos.
     case GestionarInvitaciones = 'gestionar_invitaciones';
 

@@ -173,7 +173,7 @@ class EventoController extends Controller
                     ['value' => EventStatus::Cerrado->value, 'label' => EventStatus::Cerrado->label(), 'descripcion' => 'Deja de aceptar inscripciones nuevas. Las que ya existen no se tocan.'],
                 ],
             ],
-            'codigos' => $usuario->can('viewAny', DiscountCode::class)
+            'codigos' => $usuario->can(Permiso::VerDescuentos->value)
                 ? $event->discountCodes()->latest('id')->get()->map(
                     fn (DiscountCode $codigo): string => implode(' · ', [
                         $codigo->formateado(),
@@ -191,7 +191,8 @@ class EventoController extends Controller
             'puede' => [
                 'editar' => $usuario->can('update', $event),
                 'eliminar' => $usuario->can('delete', $event),
-                'descuentos' => $usuario->can('viewAny', DiscountCode::class),
+                'descuentos' => $usuario->can(Permiso::VerDescuentos->value),
+                'gestionar_descuentos' => $usuario->can('viewAny', DiscountCode::class),
                 'invitaciones' => $usuario->can('viewAny', Invitation::class),
             ],
         ]);

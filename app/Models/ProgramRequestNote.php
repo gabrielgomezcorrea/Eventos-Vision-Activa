@@ -14,11 +14,25 @@ use Illuminate\Support\Carbon;
  * @property int $program_request_id
  * @property int|null $user_id
  * @property string $body
+ * @property string|null $kind null = nota de seguimiento, `declined` o `resumed`
  * @property Carbon $created_at
  */
 class ProgramRequestNote extends Model
 {
+    public const NO_PARTICIPARA = 'declined';
+
+    public const VUELVE_A_SEGUIMIENTO = 'resumed';
+
     protected $guarded = [];
+
+    public function etiquetaDelTipo(): ?string
+    {
+        return match ($this->kind) {
+            self::NO_PARTICIPARA => 'No participará',
+            self::VUELVE_A_SEGUIMIENTO => 'Vuelve a seguimiento',
+            default => null,
+        };
+    }
 
     /** @return BelongsTo<ProgramRequest, $this> */
     public function programRequest(): BelongsTo

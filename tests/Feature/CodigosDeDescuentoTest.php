@@ -192,7 +192,7 @@ class CodigosDeDescuentoTest extends TestCase
                 ->where('sugerido', fn (string $codigo) => preg_match('/^[A-Z0-9]{4}-[A-Z0-9]{4}$/', $codigo) === 1));
     }
 
-    public function test_la_ficha_del_evento_lista_sus_codigos_solo_a_administracion(): void
+    public function test_la_ficha_del_evento_lista_sus_codigos_a_administracion_y_coordinacion(): void
     {
         $evento = Event::factory()->create();
         $codigo = DiscountCode::factory()->create(['event_id' => $evento->id]);
@@ -203,7 +203,11 @@ class CodigosDeDescuentoTest extends TestCase
 
         $this->actingAs($this->usuarioConRol(Rol::Coordinacion))
             ->get(route('eventos.show', $evento))
-            ->assertInertia(fn ($pagina) => $pagina->has('codigos', 0));
+            ->assertInertia(fn ($pagina) => $pagina->has('codigos', 1)->where('puede.gestionar_descuentos', false));
+
+        $this->actingAs($this->usuarioConRol(Rol::Contabilidad))
+            ->get(route('eventos.show', $evento))
+            ->assertForbidden();
     }
 
     public function test_solo_administracion_ve_y_crea_codigos(): void

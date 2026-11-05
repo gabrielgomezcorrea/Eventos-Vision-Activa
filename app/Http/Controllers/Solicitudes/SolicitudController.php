@@ -14,6 +14,7 @@ use App\Http\Requests\Solicitudes\GuardarNotaRequest;
 use App\Mail\ProgramaDelEvento;
 use App\Models\Event;
 use App\Models\ProgramRequest;
+use App\Models\ProgramRequestNote;
 use App\Support\Auditor;
 use App\Support\Forms\ProgramFormField;
 use App\Support\Presentar;
@@ -22,6 +23,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
@@ -42,7 +44,7 @@ class SolicitudController extends Controller
             'evento' => ['nullable', 'integer'],
             'pendientes' => ['nullable', 'boolean'],
             'cargo' => ['nullable', 'string', 'max:120'],
-            'seguimiento' => ['nullable', 'in:sin,con'],
+            'seguimiento' => ['nullable', 'in:sin,con,no_participara'],
         ]);
 
         // Por defecto solo las que faltan por seguir; se apaga con `pendientes=0`.
@@ -59,11 +61,13 @@ class SolicitudController extends Controller
                     ->orWhere('institution', 'like', "%{$buscar}%"),
             ))
             ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento))
-            ->when($soloPendientes, fn (Builder $q) => $q->whereNull('converted_at'))
+            // Buscar las que no participarán no choca con la casilla de pendientes, que las oculta.
+            ->when($soloPendientes && ($filtros['seguimiento'] ?? null) !== 'no_participara', fn (Builder $q) => $q->whereNull('converted_at')->whereNull('declined_at'))
             ->when($filtros['cargo'] ?? null, fn (Builder $q, string $cargo) => $q->where('position', $cargo))
             // Sin seguimiento: nadie la ha contactado ni se ha inscrito todavía.
             ->when(($filtros['seguimiento'] ?? null) === 'sin', fn (Builder $q) => $q->whereDoesntHave('notes')->whereNull('converted_at'))
             ->when(($filtros['seguimiento'] ?? null) === 'con', fn (Builder $q) => $q->whereHas('notes'))
+            ->when(($filtros['seguimiento'] ?? null) === 'no_participara', fn (Builder $q) => $q->whereNotNull('declined_at')->whereNull('converted_at'))
             ->latest()
             ->paginate(15)
             ->withQueryString()
@@ -131,6 +135,7 @@ class SolicitudController extends Controller
                 ],
                 'estado' => self::estado($programRequest),
                 'inscrita' => $programRequest->yaConvertida(),
+                'no_participara' => $programRequest->noParticipara(),
                 'llego' => Presentar::fechaYHora($programRequest->created_at),
                 'programa_enviado' => $programRequest->program_sent_at ? Presentar::fechaYHora($programRequest->program_sent_at) : null,
                 'se_inscribio' => $programRequest->converted_at ? Presentar::fechaYHora($programRequest->converted_at) : null,
@@ -150,6 +155,7 @@ class SolicitudController extends Controller
                 'fecha' => Presentar::fecha($nota->created_at).' - '.$nota->created_at->format('H:i:s'),
                 'autor' => $nota->user?->name,
                 'texto' => $nota->body,
+                'tipo' => $nota->etiquetaDelTipo(),
             ])->values()->all(),
             'respuestas' => self::respuestas($programRequest),
             // Valores del lápiz de "Datos del solicitante", tal como están guardados.
@@ -198,12 +204,27 @@ class SolicitudController extends Controller
 
     public function guardarNota(GuardarNotaRequest $request, ProgramRequest $programRequest): RedirectResponse
     {
-        $programRequest->notes()->create([
-            'user_id' => $request->user()->getKey(),
-            'body' => $request->validated('body'),
-        ]);
+        $tipo = $request->validated('tipo');
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Nota guardada.']);
+        DB::transaction(function () use ($request, $programRequest, $tipo): void {
+            $programRequest->notes()->create([
+                'user_id' => $request->user()->getKey(),
+                'body' => $request->validated('body'),
+                'kind' => $tipo,
+            ]);
+
+            match ($tipo) {
+                ProgramRequestNote::NO_PARTICIPARA => $programRequest->forceFill(['declined_at' => now()])->save(),
+                ProgramRequestNote::VUELVE_A_SEGUIMIENTO => $programRequest->forceFill(['declined_at' => null])->save(),
+                default => null,
+            };
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => match ($tipo) {
+            ProgramRequestNote::NO_PARTICIPARA => 'Marcada como «No participará».',
+            ProgramRequestNote::VUELVE_A_SEGUIMIENTO => 'Volvió a seguimiento.',
+            default => 'Nota guardada.',
+        }]);
 
         return back();
     }

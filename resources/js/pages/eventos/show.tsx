@@ -132,6 +132,7 @@ type Props = {
         editar: boolean;
         eliminar: boolean;
         descuentos: boolean;
+        gestionar_descuentos: boolean;
         invitaciones: boolean;
     };
 };
@@ -1045,12 +1046,14 @@ export default function EventoShow({
                     <SeccionFicha
                         titulo="Códigos de descuento"
                         accion={
-                            <IrA
-                                href={CodigoDescuentoController.index.url(
-                                    evento.id,
-                                )}
-                                texto="Ir a códigos de descuento"
-                            />
+                            puede.gestionar_descuentos ? (
+                                <IrA
+                                    href={CodigoDescuentoController.index.url(
+                                        evento.id,
+                                    )}
+                                    texto="Ir a códigos de descuento"
+                                />
+                            ) : undefined
                         }
                     >
                         <Lista

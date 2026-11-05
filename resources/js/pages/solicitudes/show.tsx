@@ -38,6 +38,7 @@ type Props = {
         evento: { id: number; nombre: string } | null;
         estado: Estado;
         inscrita: boolean;
+        no_participara: boolean;
         inscripcion_id: number | null;
         llego: string;
         programa_enviado: string | null;
@@ -418,6 +419,24 @@ export default function SolicitudShow({
                 <NotasConFecha
                     url={SolicitudController.guardarNota.url(solicitud.id)}
                     notas={notas}
+                    tipos={
+                        solicitud.inscrita
+                            ? []
+                            : solicitud.no_participara
+                              ? [
+                                    {
+                                        value: 'resumed',
+                                        label: 'Vuelve a seguimiento',
+                                    },
+                                ]
+                              : [
+                                    {
+                                        value: 'declined',
+                                        label: 'No participará',
+                                        texto: 'No participará',
+                                    },
+                                ]
+                    }
                 />
 
                 {solicitud.internal_notes && (

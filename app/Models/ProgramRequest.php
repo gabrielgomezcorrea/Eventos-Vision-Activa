@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $marketing_consented_at
  * @property Carbon|null $program_sent_at
  * @property Carbon|null $converted_at
+ * @property Carbon|null $declined_at
  */
 class ProgramRequest extends Model
 {
@@ -43,6 +44,7 @@ class ProgramRequest extends Model
             'marketing_consented_at' => 'datetime',
             'program_sent_at' => 'datetime',
             'converted_at' => 'datetime',
+            'declined_at' => 'datetime',
             'program_sent_count' => 'integer',
         ];
     }
@@ -126,6 +128,12 @@ class ProgramRequest extends Model
         return $this->origin === self::ORIGEN_DIRECTO;
     }
 
+    /** Dijo que no va. Si igual se inscribe, manda «Ya se inscribió». */
+    public function noParticipara(): bool
+    {
+        return $this->declined_at !== null && $this->converted_at === null;
+    }
+
     public function yaConvertida(): bool
     {
         return $this->converted_at !== null;
@@ -141,6 +149,7 @@ class ProgramRequest extends Model
     {
         return match (true) {
             $this->converted_at !== null => 'Ya se inscribió',
+            $this->noParticipara() => 'No participará',
             $this->tieneNotas() => 'Contactada',
             $this->program_sent_at !== null => 'Programa enviado',
             default => 'Nueva',
@@ -151,6 +160,7 @@ class ProgramRequest extends Model
     {
         return match (true) {
             $this->converted_at !== null => 'info',
+            $this->noParticipara() => 'gray',
             $this->tieneNotas() => 'success',
             $this->program_sent_at !== null => 'warning',
             default => 'danger',

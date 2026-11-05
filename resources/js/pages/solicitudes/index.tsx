@@ -200,6 +200,7 @@ export default function SolicitudesIndex({
                         <option value="">Seguimiento: todas</option>
                         <option value="sin">Sin seguimiento</option>
                         <option value="con">Con seguimiento</option>
+                        <option value="no_participara">No participará</option>
                     </NativeSelect>
                     <label className="flex items-center gap-2 px-2 text-sm">
                         <Checkbox

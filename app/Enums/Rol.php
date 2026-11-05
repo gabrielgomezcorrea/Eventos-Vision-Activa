@@ -59,6 +59,7 @@ enum Rol: string
                 Permiso::VerAcreditacion,
                 Permiso::VerAuditoria,
                 Permiso::GestionarInvitaciones,
+                Permiso::VerDescuentos,
                 Permiso::VerReporteAcreditacion,
             ],
 

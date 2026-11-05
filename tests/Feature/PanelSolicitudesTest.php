@@ -167,6 +167,47 @@ class PanelSolicitudesTest extends TestCase
         $this->assertSame('Nueva', $this->solicitud->fresh()->estado());
     }
 
+    public function test_no_participara_sale_de_pendientes_con_nota_por_defecto_y_se_deshace(): void
+    {
+        $this->actingAs($this->usuario(Rol::Coordinacion));
+        $correos = fn (array $q) => collect($this->get(route('solicitudes.index', $q))->viewData('page')['props']['solicitudes']['data'])->pluck('correo')->all();
+
+        $this->post(route('solicitudes.notas.store', $this->solicitud), ['body' => '', 'tipo' => 'declined'])->assertRedirect();
+
+        $marcada = $this->solicitud->fresh();
+        $this->assertNotNull($marcada->declined_at);
+        $this->assertSame('No participará', $marcada->estado());
+        $this->assertSame('No participará', $marcada->notes()->first()->body);
+        $this->assertSame([], $correos([]), 'Ya no está entre las pendientes.');
+        $this->assertSame(['marta@colegio.cl'], $correos(['seguimiento' => 'no_participara']));
+        $this->assertSame(['marta@colegio.cl'], $correos(['pendientes' => 0]), 'No se borra.');
+
+        $this->post(route('solicitudes.notas.store', $this->solicitud), ['body' => 'Cambió de idea', 'tipo' => 'resumed']);
+
+        $this->assertNull($this->solicitud->fresh()->declined_at);
+        $this->assertSame('Contactada', $this->solicitud->fresh()->estado());
+        $this->assertSame(['marta@colegio.cl'], $correos([]));
+    }
+
+    public function test_si_igual_se_inscribe_manda_ya_se_inscribio_y_un_tipo_inventado_se_rechaza(): void
+    {
+        $this->actingAs($this->usuario(Rol::Coordinacion));
+
+        $this->post(route('solicitudes.notas.store', $this->solicitud), ['body' => 'Hola', 'tipo' => 'borrar'])->assertSessionHasErrors('tipo');
+
+        $this->solicitud->forceFill(['declined_at' => now(), 'converted_at' => now()])->save();
+        $this->assertSame('Ya se inscribió', $this->solicitud->fresh()->estado());
+    }
+
+    public function test_contabilidad_no_marca_no_participara(): void
+    {
+        $this->actingAs($this->usuario(Rol::Contabilidad))
+            ->post(route('solicitudes.notas.store', $this->solicitud), ['body' => '', 'tipo' => 'declined'])
+            ->assertForbidden();
+
+        $this->assertNull($this->solicitud->fresh()->declined_at);
+    }
+
     /** Una persona de prueba que llegó hasta el pago: inscripción confirmada con un comprobante en disco. */
     private function conInscripcionYPago(string $correo): Order
     {

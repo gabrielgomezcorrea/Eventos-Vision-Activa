@@ -107,6 +107,11 @@ class CodigoDesdePanelTest extends TestCase
         $this->assertSame(1, $codigo->fresh()->used_people);
         Mail::assertNothingQueued();
         Mail::assertNothingSent();
+
+        $this->actingAs($this->usuarioConRol(Rol::Coordinacion))
+            ->get(route('inscripciones.show', $resultado))
+            ->assertInertia(fn ($page) => $page
+                ->where('participantes.0.valor', 140000));
     }
 
     public function test_con_porcentaje_baja_el_total_y_sigue_pendiente_sin_credenciales(): void
