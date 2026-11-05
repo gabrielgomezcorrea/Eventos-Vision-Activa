@@ -14,6 +14,7 @@ use App\Support\CodigoDeDescuento;
 use App\Support\Presentar;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,7 +29,7 @@ class CodigoDescuentoController extends Controller
     {
         Gate::authorize('viewAny', DiscountCode::class);
 
-        $codigos = $event->discountCodes()->latest('id')->get();
+        $codigos = $event->discountCodes()->with('preciosPorAcceso')->latest('id')->get();
 
         return Inertia::render('eventos/codigos', [
             'evento' => ['id' => $event->id, 'name' => $event->name],
@@ -57,6 +58,14 @@ class CodigoDescuentoController extends Controller
                     'type' => $codigo->type->value,
                     'value' => $codigo->value,
                     'etiqueta' => $codigo->etiqueta(),
+                    'precios' => $codigo->type === TipoDescuento::PorJornada
+                        ? $codigo->preciosPorAcceso->map(fn ($acceso): array => [
+                            'id' => $acceso->id,
+                            'nombre' => $acceso->name,
+                            'precio' => (int) $acceso->pivot->price,
+                            'precio_label' => '$'.number_format((int) $acceso->pivot->price, 0, ',', '.'),
+                        ])->values()->all()
+                        : [],
                     'max_people' => $codigo->max_people,
                     'expires_on' => $codigo->expires_at->format('Y-m-d'),
                     'vence' => $codigo->expires_at->format('d-m-Y'),
@@ -69,11 +78,18 @@ class CodigoDescuentoController extends Controller
             // Cada carga trae uno nuevo: el modal abre con un código ya listo.
             'sugerido' => CodigoDeDescuento::formatear(CodigoDeDescuento::generar()),
             'hoy' => now()->format('Y-m-d'),
+            'accesos' => $event->accessTypes()->orderBy('position')->get()->map(fn ($acceso): array => [
+                'id' => $acceso->id,
+                'name' => $acceso->name,
+                'price' => (int) $acceso->price,
+                'price_label' => '$'.number_format((int) $acceso->price, 0, ',', '.'),
+            ])->all(),
             'opciones' => [
                 'tiposDescuento' => [
                     'full' => 'Descuento completo',
                     TipoDescuento::Porcentaje->value => 'Porcentaje',
                     TipoDescuento::Monto->value => 'Monto fijo',
+                    TipoDescuento::PorJornada->value => 'Por jornada',
                 ],
                 'usosPorPersona' => DiscountCode::USOS_POR_PERSONA,
             ],
@@ -103,20 +119,33 @@ class CodigoDescuentoController extends Controller
 
     public function store(CodigoDescuentoRequest $request, Event $event): RedirectResponse
     {
-        $codigo = $event->discountCodes()->create([
-            'code' => $request->validated('code'),
-            'type' => $request->validated('type'),
-            'value' => $request->validated('value'),
-            'max_people' => $request->validated('max_people'),
-            'uses_per_person' => $request->validated('uses_per_person'),
-            'expires_at' => Carbon::parse($request->validated('expires_on'))->endOfDay(),
-            'created_by' => $request->user()->getKey(),
-        ]);
+        $codigo = DB::transaction(function () use ($request, $event): DiscountCode {
+            $codigo = $event->discountCodes()->create([
+                'code' => $request->validated('code'),
+                'type' => $request->validated('type'),
+                'value' => $request->validated('value'),
+                'max_people' => $request->validated('max_people'),
+                'uses_per_person' => $request->validated('uses_per_person'),
+                'expires_at' => Carbon::parse($request->validated('expires_on'))->endOfDay(),
+                'created_by' => $request->user()->getKey(),
+            ]);
+
+            foreach ($request->validated('prices') ?? [] as $fila) {
+                $codigo->preciosPorAcceso()->attach($fila['access_type_id'], ['price' => (int) $fila['price']]);
+            }
+
+            return $codigo;
+        });
 
         Auditor::registrar(
             sobre: $codigo,
             accion: 'codigo_descuento.creado',
-            propiedades: ['evento' => $event->name, 'descuento' => $codigo->etiqueta(), 'maximo' => $codigo->max_people],
+            propiedades: [
+                'evento' => $event->name,
+                'descuento' => $codigo->etiqueta(),
+                'maximo' => $codigo->max_people,
+                ...($codigo->type === TipoDescuento::PorJornada ? ['precios' => $codigo->preciosPorAcceso->pluck('pivot.price', 'name')->all()] : []),
+            ],
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Código creado: '.$codigo->formateado()]);

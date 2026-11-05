@@ -263,7 +263,11 @@
                     <tr>
                         <td>{{ $participante->nombre_completo }}</td>
                         <td><span class="chip">{{ $participante->accessType?->name ?? '-' }}</span></td>
-                        <td style="text-align:right">${{ number_format($borrador ? ($participante->accessType?->precioVigente() ?? 0) : $participante->unit_price, 0, ',', '.') }}</td>
+                        @php
+                            $normal = $borrador ? ($participante->accessType?->precioVigente() ?? 0) : $participante->unit_price;
+                            $conCodigo = \App\Support\DescuentoDeCodigo::precioConCodigo($orden->discountCode, $orden, $participante);
+                        @endphp
+                        <td style="text-align:right">@if ($conCodigo !== null)<s style="color:var(--texto-suave)">${{ number_format($normal, 0, ',', '.') }}</s> <strong style="color:var(--exito)">${{ number_format($conCodigo, 0, ',', '.') }}</strong>@else${{ number_format($normal, 0, ',', '.') }}@endif</td>
                     </tr>
                 @empty
                     <tr><td>-</td><td>-</td><td style="text-align:right">-</td></tr>

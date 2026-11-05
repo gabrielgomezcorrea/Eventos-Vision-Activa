@@ -50,7 +50,8 @@
                 <strong>{{ $participante->nombre_completo }}</strong>
                 <span class="ayuda" style="margin:0">
                     {{ collect([$participante->rut, $participante->accessType?->name ?? '-', $variosColegios ? null : $participante->establishment?->name])->filter()->implode(' · ') }}
-                    · ${{ number_format($valorDe($participante), 0, ',', '.') }}
+                    @php $conCodigo = \App\Support\DescuentoDeCodigo::precioConCodigo($orden->discountCode, $orden, $participante); @endphp
+                    · @if ($conCodigo !== null)<s style="color:var(--texto-suave)">${{ number_format($valorDe($participante), 0, ',', '.') }}</s> <strong style="color:var(--exito)">${{ number_format($conCodigo, 0, ',', '.') }}</strong>@else${{ number_format($valorDe($participante), 0, ',', '.') }}@endif
                 </span>
                     <details class="desplegable-chico">
                         <summary>{{ $participante->access_type_id === null ? 'Elegir acceso' : 'Cambiar acceso' }}</summary>

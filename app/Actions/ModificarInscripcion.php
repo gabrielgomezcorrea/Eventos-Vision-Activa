@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\Participant;
 use App\Models\PayerEntity;
 use App\Support\Auditor;
+use App\Support\DescuentoDeCodigo;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -257,9 +258,11 @@ class ModificarInscripcion
         if ($codigo !== null) {
             // Porcentaje: sobre el nuevo subtotal. Monto fijo: conserva la parte que
             // le tocó al confirmar (el recorrido ya usó su monto), sin pasar del subtotal.
-            $descuento = $codigo->type === TipoDescuento::Porcentaje
-                ? $codigo->calcular($subtotal)
-                : min((int) $orden->discount_amount, $subtotal);
+            $descuento = match ($codigo->type) {
+                TipoDescuento::Porcentaje => $codigo->calcular($subtotal),
+                TipoDescuento::PorJornada => DescuentoDeCodigo::porJornada($codigo, $orden),
+                default => min((int) $orden->discount_amount, $subtotal),
+            };
             $etiqueta = 'Código '.$codigo->formateado().' ('.$codigo->etiqueta().')';
         } else {
             $tramo = $orden->event->tramoDeDescuento($orden->participantesParaDescuento());

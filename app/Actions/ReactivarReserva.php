@@ -3,11 +3,13 @@
 namespace App\Actions;
 
 use App\Enums\OrderStatus;
+use App\Enums\TipoDescuento;
 use App\Exceptions\CuposInsuficientes;
 use App\Exceptions\ReactivacionNoPermitida;
 use App\Models\DiscountCode;
 use App\Models\Order;
 use App\Support\Auditor;
+use App\Support\DescuentoDeCodigo;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -79,7 +81,9 @@ class ReactivarReserva
 
             $subtotal = (int) $fresca->participantesVigentes->sum(fn ($p) => $p->unit_price);
             $tramo = $codigo === null ? $fresca->event->tramoDeDescuento($fresca->participantesVigentes->count()) : null;
-            $descuento = $codigo?->calcular($subtotal) ?? $tramo?->calcular($subtotal) ?? 0;
+            $descuento = $codigo?->type === TipoDescuento::PorJornada
+                ? DescuentoDeCodigo::porJornada($codigo, $fresca)
+                : ($codigo?->calcular($subtotal) ?? $tramo?->calcular($subtotal) ?? 0);
 
             $fresca->forceFill([
                 'status' => OrderStatus::Reservada,

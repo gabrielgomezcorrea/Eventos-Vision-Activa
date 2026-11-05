@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\OrderStatus;
 use App\Enums\Rol;
+use App\Models\AccessType;
 use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\Order;
@@ -66,6 +67,67 @@ class CodigosDeDescuentoTest extends TestCase
         $codigo = DiscountCode::sole();
         $this->assertSame(100, $codigo->value);
         $this->assertSame('Descuento completo', $codigo->etiqueta());
+    }
+
+    /** @return array{0: Event, 1: AccessType, 2: AccessType} */
+    private function eventoConAccesos(): array
+    {
+        $evento = Event::factory()->create();
+        $a = $evento->accessTypes()->create(['name' => 'Jornada 1', 'position' => 1, 'price' => 120000]);
+        $b = $evento->accessTypes()->create(['name' => 'Ambas Jornadas', 'position' => 2, 'price' => 180000]);
+
+        return [$evento, $a, $b];
+    }
+
+    public function test_administracion_crea_un_codigo_por_jornada_con_sus_precios(): void
+    {
+        [$evento, $a, $b] = $this->eventoConAccesos();
+
+        $this->actingAs($this->usuarioConRol(Rol::Administrador))
+            ->post(route('eventos.codigos.store', $evento), $this->datos([
+                'type' => 'per_access', 'value' => '',
+                'prices' => [
+                    ['access_type_id' => $a->id, 'price' => '$80.000'],
+                    ['access_type_id' => $b->id, 'price' => '140000'],
+                ],
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $codigo = DiscountCode::sole();
+        $this->assertSame(0, $codigo->value);
+        $this->assertSame('Precio por jornada', $codigo->etiqueta());
+        $this->assertSame(80000, $codigo->precioEspecialPara($a->id));
+        $this->assertSame(140000, $codigo->precioEspecialPara($b->id));
+    }
+
+    public function test_por_jornada_rechaza_precio_mayor_acceso_ajeno_repetido_y_sin_filas(): void
+    {
+        [$evento, $a] = $this->eventoConAccesos();
+        $ajeno = Event::factory()->create()->accessTypes()->create(['name' => 'Otro', 'position' => 1, 'price' => 1000]);
+        $admin = $this->usuarioConRol(Rol::Administrador);
+        $enviar = fn (array $filas) => $this->actingAs($admin)
+            ->post(route('eventos.codigos.store', $evento), $this->datos(['type' => 'per_access', 'prices' => $filas]));
+
+        $enviar([['access_type_id' => $a->id, 'price' => 120001]])
+            ->assertSessionHasErrors(['prices.0.price' => 'El precio especial no puede ser mayor que el precio normal de Jornada 1 ($120.000).']);
+        $enviar([['access_type_id' => $ajeno->id, 'price' => 500]])->assertSessionHasErrors('prices.0.access_type_id');
+        $enviar([['access_type_id' => $a->id, 'price' => 100], ['access_type_id' => $a->id, 'price' => 100]])
+            ->assertSessionHasErrors(['prices.0.access_type_id' => 'Ese acceso ya está en la lista.']);
+        $enviar([])->assertSessionHasErrors(['prices' => 'Agregue al menos una jornada con su precio.']);
+        $enviar([['access_type_id' => $a->id, 'price' => 0]])->assertSessionHasNoErrors();
+
+        $this->assertSame(1, DiscountCode::count());
+    }
+
+    public function test_solo_administracion_crea_un_codigo_por_jornada(): void
+    {
+        [$evento, $a] = $this->eventoConAccesos();
+
+        foreach ([Rol::Coordinacion, Rol::Contabilidad] as $rol) {
+            $this->actingAs($this->usuarioConRol($rol))
+                ->post(route('eventos.codigos.store', $evento), $this->datos(['type' => 'per_access', 'prices' => [['access_type_id' => $a->id, 'price' => 100]]]))
+                ->assertForbidden();
+        }
     }
 
     public function test_el_maximo_de_personas_va_de_1_a_99(): void

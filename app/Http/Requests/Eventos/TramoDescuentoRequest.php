@@ -30,7 +30,7 @@ class TramoDescuentoRequest extends FormRequest
                     ->where('event_id', $this->evento()->getKey())
                     ->ignore($this->tramo()?->getKey()),
             ],
-            'type' => ['required', Rule::enum(TipoDescuento::class)],
+            'type' => ['required', Rule::in([TipoDescuento::Porcentaje->value, TipoDescuento::Monto->value])],
             'value' => ['required', 'integer', 'min:1', $this->input('type') === 'percent' ? 'max:100' : 'max:100000000'],
         ];
     }

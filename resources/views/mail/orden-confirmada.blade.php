@@ -28,7 +28,8 @@ Los cupos quedan reservados hasta el
 | Participante | Acceso | Valor |
 |:--|:--|--:|
 @foreach ($orden->participantesVigentes as $p)
-| {{ $p->nombre_completo }} | {{ $p->accessType?->name }} | ${{ number_format($p->unit_price, 0, ',', '.') }} |
+@php $conCodigo = \App\Support\DescuentoDeCodigo::precioConCodigo($orden->discountCode, $orden, $p); @endphp
+| {{ $p->nombre_completo }} | {{ $p->accessType?->name }} | {!! $conCodigo !== null ? '<s>$'.number_format($p->unit_price, 0, ',', '.').'</s> **$'.number_format($conCodigo, 0, ',', '.').'**' : '$'.number_format($p->unit_price, 0, ',', '.') !!} |
 @endforeach
 </x-mail::table>
 

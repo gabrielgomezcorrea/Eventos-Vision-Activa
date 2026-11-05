@@ -1,5 +1,5 @@
 import { Head, Link, router, setLayoutProps, useForm } from '@inertiajs/react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import CodigoDescuentoController from '@/actions/App/Http/Controllers/Eventos/CodigoDescuentoController';
@@ -57,6 +57,12 @@ type Codigo = {
     type: string;
     value: number;
     etiqueta: string;
+    precios: {
+        id: number;
+        nombre: string;
+        precio: number;
+        precio_label: string;
+    }[];
     max_people: number;
     usado_por: number;
     uses_per_person: string;
@@ -67,8 +73,13 @@ type Codigo = {
     estado: Estado;
 };
 
+type Acceso = { id: number; name: string; price: number; price_label: string };
+
+type FilaPrecio = { access_type_id: string; price: string };
+
 type Props = {
     evento: { id: number; name: string };
+    accesos: Acceso[];
     codigos: Codigo[];
     sugerido: string;
     hoy: string;
@@ -78,6 +89,111 @@ type Props = {
     };
 };
 
+/** «Por jornada»: una fila por acceso con su precio final por persona. */
+function FilasPorJornada({
+    accesos,
+    filas,
+    errores,
+    onCambiar,
+    onAgregar,
+    onQuitar,
+}: {
+    accesos: Acceso[];
+    filas: FilaPrecio[];
+    errores: Record<string, string>;
+    onCambiar: (indice: number, cambios: Partial<FilaPrecio>) => void;
+    onAgregar: () => void;
+    onQuitar: (indice: number) => void;
+}) {
+    if (accesos.length === 0) {
+        return (
+            <p className="text-muted-foreground text-sm">
+                Este evento todavía no tiene accesos.
+            </p>
+        );
+    }
+
+    const elegidos = filas.map((fila) => fila.access_type_id);
+
+    return (
+        <div className="space-y-3">
+            {errores.prices && (
+                <p className="text-sm text-red-600">{errores.prices}</p>
+            )}
+            {filas.map((fila, indice) => (
+                <div key={indice} className="space-y-1">
+                    <div className="flex items-start gap-2">
+                        <NativeSelect
+                            aria-label="Acceso"
+                            value={fila.access_type_id}
+                            onChange={(e) =>
+                                onCambiar(indice, {
+                                    access_type_id: e.target.value,
+                                })
+                            }
+                            required
+                        >
+                            <option value="">Elige un acceso</option>
+                            {accesos
+                                .filter(
+                                    (acceso) =>
+                                        String(acceso.id) ===
+                                            fila.access_type_id ||
+                                        !elegidos.includes(String(acceso.id)),
+                                )
+                                .map((acceso) => (
+                                    <option key={acceso.id} value={acceso.id}>
+                                        {acceso.name} — {acceso.price_label}
+                                    </option>
+                                ))}
+                        </NativeSelect>
+                        <Input
+                            aria-label="Precio especial en pesos"
+                            type="number"
+                            min={0}
+                            placeholder="Precio $"
+                            className="w-36"
+                            value={fila.price}
+                            onChange={(e) =>
+                                onCambiar(indice, { price: e.target.value })
+                            }
+                            required
+                        />
+                        {filas.length > 1 && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Quitar esta jornada"
+                                onClick={() => onQuitar(indice)}
+                            >
+                                <Trash2 />
+                            </Button>
+                        )}
+                    </div>
+                    {(errores[`prices.${indice}.access_type_id`] ||
+                        errores[`prices.${indice}.price`]) && (
+                        <p className="text-sm text-red-600">
+                            {errores[`prices.${indice}.access_type_id`] ??
+                                errores[`prices.${indice}.price`]}
+                        </p>
+                    )}
+                </div>
+            ))}
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={filas.length >= accesos.length}
+                onClick={onAgregar}
+            >
+                <Plus />
+                Agregar jornada
+            </Button>
+        </div>
+    );
+}
+
 /** Crear pide lo mínimo y nace con un código ya generado: se puede usar tal cual. */
 function NuevoCodigo({
     eventoId,
@@ -85,18 +201,29 @@ function NuevoCodigo({
     hoy,
     tipos,
     usos,
+    accesos,
 }: {
     eventoId: number;
+    accesos: Acceso[];
     sugerido: string;
     hoy: string;
     tipos: Record<string, string>;
     usos: Record<string, string>;
 }) {
     const [abierto, setAbierto] = useState(false);
-    const form = useForm({
+    const form = useForm<{
+        code: string;
+        type: string;
+        value: string;
+        prices: FilaPrecio[];
+        max_people: string;
+        uses_per_person: string;
+        expires_on: string;
+    }>({
         code: sugerido,
         type: 'full',
         value: '',
+        prices: [{ access_type_id: '', price: '' }],
         max_people: '',
         uses_per_person: 'unlimited',
         expires_on: '',
@@ -110,8 +237,24 @@ function NuevoCodigo({
         });
     }
 
+    const porJornada = form.data.type === 'per_access';
+
+    function cambiarFila(indice: number, cambios: Partial<FilaPrecio>) {
+        form.setData(
+            'prices',
+            form.data.prices.map((fila, i) =>
+                i === indice ? { ...fila, ...cambios } : fila,
+            ),
+        );
+    }
+
     function crear(e: FormEvent) {
         e.preventDefault();
+        // Las filas de precios solo viajan con «Por jornada».
+        form.transform((datos) => ({
+            ...datos,
+            prices: datos.type === 'per_access' ? datos.prices : [],
+        }));
         form.post(CodigoDescuentoController.store.url(eventoId), {
             preserveScroll: true,
             onSuccess: () => {
@@ -196,7 +339,7 @@ function NuevoCodigo({
                                 ))}
                             </NativeSelect>
                         </Campo>
-                        {form.data.type !== 'full' && (
+                        {form.data.type !== 'full' && !porJornada && (
                             <Campo
                                 label={
                                     form.data.type === 'percent'
@@ -224,6 +367,29 @@ function NuevoCodigo({
                             </Campo>
                         )}
                     </div>
+
+                    {porJornada && (
+                        <FilasPorJornada
+                            accesos={accesos}
+                            filas={form.data.prices}
+                            errores={form.errors as Record<string, string>}
+                            onCambiar={cambiarFila}
+                            onAgregar={() =>
+                                form.setData('prices', [
+                                    ...form.data.prices,
+                                    { access_type_id: '', price: '' },
+                                ])
+                            }
+                            onQuitar={(indice) =>
+                                form.setData(
+                                    'prices',
+                                    form.data.prices.filter(
+                                        (_, i) => i !== indice,
+                                    ),
+                                )
+                            }
+                        />
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <Campo
@@ -345,8 +511,16 @@ function PersonasDelCodigo({ codigo }: { codigo: Codigo }) {
     );
 }
 
+/** «Jornada 1: $80.000 · Ambas Jornadas: $140.000» */
+function resumenDePrecios(codigo: Codigo): string {
+    return codigo.precios
+        .map((fila) => `${fila.nombre}: ${fila.precio_label}`)
+        .join(' · ');
+}
+
 export default function CodigosDeDescuento({
     evento,
+    accesos,
     codigos,
     sugerido,
     hoy,
@@ -380,6 +554,7 @@ export default function CodigosDeDescuento({
                             eventoId={evento.id}
                             sugerido={sugerido}
                             hoy={hoy}
+                            accesos={accesos}
                             tipos={opciones.tiposDescuento}
                             usos={opciones.usosPorPersona}
                         />
@@ -409,6 +584,11 @@ export default function CodigosDeDescuento({
                                         </TableCell>
                                         <TableCell>
                                             {codigo.etiqueta}
+                                            {codigo.precios.length > 0 && (
+                                                <span className="text-muted-foreground block text-xs">
+                                                    {resumenDePrecios(codigo)}
+                                                </span>
+                                            )}
                                             <span className="text-muted-foreground block text-xs">
                                                 {codigo.usos_texto}
                                             </span>
@@ -442,6 +622,14 @@ export default function CodigosDeDescuento({
                                                 >
                                                     {(f) => (
                                                         <>
+                                                            {codigo.precios
+                                                                .length > 0 && (
+                                                                <p className="text-sm">
+                                                                    {resumenDePrecios(
+                                                                        codigo,
+                                                                    )}
+                                                                </p>
+                                                            )}
                                                             <Campo
                                                                 label="¿Cuántas personas pueden usarlo?"
                                                                 htmlFor={`max-${codigo.id}`}

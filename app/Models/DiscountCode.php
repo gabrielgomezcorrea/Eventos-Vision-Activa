@@ -8,6 +8,7 @@ use App\Support\CodigoDeDescuento;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +70,24 @@ class DiscountCode extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * Precio especial por acceso (solo en el tipo «Por jornada»).
+     *
+     * @return BelongsToMany<AccessType, $this>
+     */
+    public function preciosPorAcceso(): BelongsToMany
+    {
+        return $this->belongsToMany(AccessType::class)->withPivot('price')->withTimestamps();
+    }
+
+    /** El precio especial que el código le pone a un acceso, o null si no lo lista. */
+    public function precioEspecialPara(int $accessTypeId): ?int
+    {
+        $acceso = $this->preciosPorAcceso->firstWhere('id', $accessTypeId);
+
+        return $acceso === null ? null : (int) $acceso->pivot->price;
+    }
+
     public function disponibles(): int
     {
         return max(0, $this->max_people - $this->used_people);
@@ -100,6 +119,10 @@ class DiscountCode extends Model
     /** Cómo se le explica a quien lo ve: "10%" o "$50.000". */
     public function etiqueta(): string
     {
+        if ($this->type === TipoDescuento::PorJornada) {
+            return 'Precio por jornada';
+        }
+
         if ($this->type === TipoDescuento::Porcentaje && $this->value === 100) {
             return 'Descuento completo';
         }
@@ -114,6 +137,11 @@ class DiscountCode extends Model
      */
     public function calcular(int $subtotal): int
     {
+        // «Por jornada» depende de cada persona: lo calcula DescuentoDeCodigo.
+        if ($this->type === TipoDescuento::PorJornada) {
+            return 0;
+        }
+
         $rebaja = $this->type === TipoDescuento::Porcentaje
             ? (int) floor($subtotal * $this->value / 100)
             : $this->value;

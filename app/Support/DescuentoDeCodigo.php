@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\TipoDescuento;
 use App\Models\DiscountCode;
 use App\Models\Order;
+use App\Models\Participant;
 
 /**
  * Cuánto descuenta un código en una inscripción.
@@ -29,11 +30,65 @@ class DescuentoDeCodigo
             return $codigo->calcular($subtotal);
         }
 
+        if ($codigo->type === TipoDescuento::PorJornada) {
+            return self::porJornada($codigo, $orden);
+        }
+
         if ($asignado !== null) {
             return max(0, min($asignado, $subtotal));
         }
 
         return max(0, min(self::montoDisponible($codigo, $orden), $subtotal));
+    }
+
+    /**
+     * «Por jornada»: por cada participante vigente, lo que su precio vigente
+     * (normal o anticipado) supera al precio especial de su acceso. Sin acceso
+     * o con un acceso que el código no lista, paga lo normal. Si el anticipado
+     * ya es más bajo que el especial, la resta da 0: se cobra el anticipado.
+     */
+    public static function porJornada(DiscountCode $codigo, Order $orden): int
+    {
+        $codigo->loadMissing('preciosPorAcceso');
+        $orden->loadMissing('participantesVigentes.accessType');
+
+        return (int) $orden->participantesVigentes->sum(
+            fn ($participante): int => self::rebajaDe($codigo, $orden, $participante),
+        );
+    }
+
+    /**
+     * Lo que paga este participante con el código «Por jornada», o null si el
+     * código no le cambia el precio (otro tipo, acceso no listado o un precio
+     * vigente que ya es igual o más bajo).
+     */
+    public static function precioConCodigo(?DiscountCode $codigo, Order $orden, Participant $participante): ?int
+    {
+        if ($codigo?->type !== TipoDescuento::PorJornada) {
+            return null;
+        }
+
+        $rebaja = self::rebajaDe($codigo, $orden, $participante);
+
+        return $rebaja > 0 ? self::vigenteDe($orden, $participante) - $rebaja : null;
+    }
+
+    private static function vigenteDe(Order $orden, Participant $participante): int
+    {
+        return $orden->esBorrador()
+            ? (int) ($participante->accessType?->precioVigente() ?? 0)
+            : (int) $participante->unit_price;
+    }
+
+    private static function rebajaDe(DiscountCode $codigo, Order $orden, Participant $participante): int
+    {
+        if ($participante->access_type_id === null) {
+            return 0;
+        }
+
+        $especial = $codigo->precioEspecialPara($participante->access_type_id);
+
+        return $especial === null ? 0 : max(0, self::vigenteDe($orden, $participante) - $especial);
     }
 
     /**

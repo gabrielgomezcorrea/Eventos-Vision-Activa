@@ -3,11 +3,13 @@
 namespace App\Http\Requests\Eventos;
 
 use App\Enums\TipoDescuento;
+use App\Models\AccessType;
 use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Support\CodigoDeDescuento;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class CodigoDescuentoRequest extends FormRequest
 {
@@ -25,6 +27,23 @@ class CodigoDescuentoRequest extends FormRequest
             $datos += ['type' => TipoDescuento::Porcentaje->value, 'value' => 100];
         }
 
+        // «Por jornada» no tiene valor propio: el precio va en cada fila.
+        if ($this->input('type') === TipoDescuento::PorJornada->value) {
+            $datos += ['value' => 0];
+            $filas = collect($this->input('prices', []))
+                ->filter(fn ($fila): bool => is_array($fila))
+                ->map(fn (array $fila): array => [
+                    'access_type_id' => $fila['access_type_id'] ?? null,
+                    // Pesos enteros: llegan con puntos o "$" si los copiaron de una lista.
+                    'price' => isset($fila['price']) && is_scalar($fila['price'])
+                        ? (preg_replace('/[^\d]/', '', (string) $fila['price']) ?? '')
+                        : null,
+                ])
+                ->values()
+                ->all();
+            $datos += ['prices' => $filas];
+        }
+
         $this->merge($datos);
     }
 
@@ -34,23 +53,70 @@ class CodigoDescuentoRequest extends FormRequest
         /** @var Event $evento */
         $evento = $this->route('event');
 
+        $porJornada = $this->input('type') === TipoDescuento::PorJornada->value;
+
         return [
             'code' => [
                 ...CodigoDeDescuento::regla($evento),
                 Rule::unique('discount_codes', 'code')->where('event_id', $evento->getKey()),
             ],
             'type' => ['required', Rule::enum(TipoDescuento::class)],
-            'value' => ['required', 'integer', 'min:1', $this->input('type') === 'percent' ? 'max:100' : 'max:100000000'],
+            'value' => $porJornada
+                ? ['integer']
+                : ['required', 'integer', 'min:1', $this->input('type') === 'percent' ? 'max:100' : 'max:100000000'],
+            'prices' => $porJornada ? ['required', 'array', 'min:1'] : ['prohibited'],
+            'prices.*.access_type_id' => [
+                'required', 'integer', 'distinct',
+                Rule::exists('access_types', 'id')->where('event_id', $evento->getKey()),
+            ],
+            'prices.*.price' => ['required', 'integer', 'min:0', 'max:100000000'],
             'max_people' => ['required', 'integer', 'min:1', 'max:99'],
             'uses_per_person' => ['required', Rule::in(array_keys(DiscountCode::USOS_POR_PERSONA))],
             'expires_on' => ['required', 'date', 'after_or_equal:today'],
         ];
     }
 
+    /**
+     * El precio especial va de $0 al precio normal del acceso.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validador): void {
+            if ($this->input('type') !== TipoDescuento::PorJornada->value || $validador->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $accesos = AccessType::query()
+                ->whereIn('id', collect($this->input('prices'))->pluck('access_type_id'))
+                ->get()
+                ->keyBy('id');
+
+            foreach ($this->input('prices') as $i => $fila) {
+                $acceso = $accesos->get((int) $fila['access_type_id']);
+
+                if ($acceso !== null && (int) $fila['price'] > (int) $acceso->price) {
+                    $validador->errors()->add(
+                        "prices.{$i}.price",
+                        'El precio especial no puede ser mayor que el precio normal de '.$acceso->name.' ($'.number_format((int) $acceso->price, 0, ',', '.').').',
+                    );
+                }
+            }
+        }];
+    }
+
     /** @return array<string, string> */
     public function messages(): array
     {
         return [
+            'prices.required' => 'Agregue al menos una jornada con su precio.',
+            'prices.min' => 'Agregue al menos una jornada con su precio.',
+            'prices.*.access_type_id.distinct' => 'Ese acceso ya está en la lista.',
+            'prices.*.access_type_id.required' => 'Elige el acceso.',
+            'prices.*.access_type_id.exists' => 'Ese acceso no es de este evento.',
+            'prices.*.price.required' => 'Escribe el precio.',
+            'prices.*.price.integer' => 'El precio debe ser un número entero, sin puntos ni decimales.',
             'code.unique' => 'Ya existe ese código en este evento.',
             'value.max' => $this->input('type') === 'percent'
                 ? 'Un porcentaje no puede pasar de 100.'
