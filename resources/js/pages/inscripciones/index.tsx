@@ -19,35 +19,38 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import type { Estado, Paginado } from '@/types';
 
 type OrdenFila = {
     id: number;
     numero: string | null;
+    detalle: string | null;
     entidad: string | null;
+    evento: string | null;
+    solicitante: { nombre: string; via: string } | null;
     responsable: string | null;
     correo: string | null;
-    total: number;
+    total: number | null;
     invitado: boolean;
     participantes: number;
     estado: Estado;
-    pago: Estado;
 };
 
 type Filtros = {
-    buscar?: string;
-    evento?: string;
-    estado?: string;
-    pago?: string;
-    vista?: string;
+    buscar: string | null;
+    evento: number | null;
+    vista: string;
 };
+
+type Vista = Estado & { cantidad: number; descripcion: string };
 
 type Props = {
     ordenes: Paginado<OrdenFila>;
     filtros: Filtros;
+    vistas: Vista[];
+    borradoresVacios: number;
     eventos: Record<string, string>;
-    estados: Record<string, string>;
-    pagos: Record<string, string>;
     invitados: {
         cargos: Record<string, string[]>;
         accesos: Record<string, Record<string, string>>;
@@ -355,9 +358,9 @@ function NuevoInvitado({
 export default function InscripcionesIndex({
     ordenes,
     filtros,
+    vistas,
+    borradoresVacios,
     eventos,
-    estados,
-    pagos,
     invitados,
     nuevaInscripcion,
 }: Props) {
@@ -369,12 +372,13 @@ export default function InscripcionesIndex({
         ],
     });
 
-    function filtrar(cambios: Filtros) {
-        const query = Object.fromEntries(
-            Object.entries({ ...filtros, ...cambios }).filter(
-                ([, valor]) => valor,
-            ),
-        );
+    function filtrar(cambios: Partial<Filtros>) {
+        const todos = { ...filtros, ...cambios };
+        const query = {
+            ...(todos.buscar ? { buscar: todos.buscar } : {}),
+            ...(todos.evento ? { evento: todos.evento } : {}),
+            vista: todos.vista,
+        };
 
         router.get(InscripcionController.index.url(), query, {
             preserveState: true,
@@ -388,7 +392,7 @@ export default function InscripcionesIndex({
         filtrar({ buscar });
     }
 
-    const hayFiltros = Object.values(filtros).some(Boolean);
+    const hayBusqueda = Boolean(filtros.buscar || filtros.evento);
 
     return (
         <>
@@ -415,6 +419,43 @@ export default function InscripcionesIndex({
                     </div>
                 </div>
 
+                <div
+                    role="group"
+                    aria-label="Vista"
+                    className="grid grid-cols-2 gap-2 lg:grid-cols-5"
+                >
+                    {vistas.map((vista) => {
+                        const elegida = vista.value === filtros.vista;
+
+                        return (
+                            <button
+                                key={vista.value}
+                                type="button"
+                                aria-pressed={elegida}
+                                onClick={() => filtrar({ vista: vista.value })}
+                                className={cn(
+                                    'bg-card flex items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left shadow-xs transition-colors',
+                                    elegida
+                                        ? 'border-primary ring-primary ring-1'
+                                        : 'hover:bg-muted/50',
+                                )}
+                            >
+                                <span className="min-w-0">
+                                    <span className="block font-medium">
+                                        {vista.label}
+                                    </span>
+                                    <span className="text-muted-foreground block text-xs">
+                                        {vista.descripcion}
+                                    </span>
+                                </span>
+                                <span className="text-2xl font-semibold tabular-nums">
+                                    {vista.cantidad}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                     <form
                         onSubmit={buscarOrden}
@@ -434,7 +475,13 @@ export default function InscripcionesIndex({
                         aria-label="Evento"
                         className="w-auto max-w-64"
                         value={filtros.evento ?? ''}
-                        onChange={(e) => filtrar({ evento: e.target.value })}
+                        onChange={(e) =>
+                            filtrar({
+                                evento: e.target.value
+                                    ? Number(e.target.value)
+                                    : null,
+                            })
+                        }
                     >
                         <option value="">Todos los eventos</option>
                         {Object.entries(eventos).map(([id, nombre]) => (
@@ -443,51 +490,15 @@ export default function InscripcionesIndex({
                             </option>
                         ))}
                     </NativeSelect>
-                    <NativeSelect
-                        aria-label="Estado"
-                        className="w-auto"
-                        value={filtros.estado ?? ''}
-                        onChange={(e) => filtrar({ estado: e.target.value })}
-                    >
-                        <option value="">Todos los estados</option>
-                        {Object.entries(estados).map(([valor, texto]) => (
-                            <option key={valor} value={valor}>
-                                {texto}
-                            </option>
-                        ))}
-                    </NativeSelect>
-                    <NativeSelect
-                        aria-label="Pago"
-                        className="w-auto"
-                        value={filtros.pago ?? ''}
-                        onChange={(e) => filtrar({ pago: e.target.value })}
-                    >
-                        <option value="">Cualquier pago</option>
-                        {Object.entries(pagos).map(([valor, texto]) => (
-                            <option key={valor} value={valor}>
-                                {texto}
-                            </option>
-                        ))}
-                    </NativeSelect>
-                    <NativeSelect
-                        aria-label="Reservas"
-                        className="w-auto"
-                        value={filtros.vista ?? ''}
-                        onChange={(e) => filtrar({ vista: e.target.value })}
-                    >
-                        <option value="">Todas las reservas</option>
-                        <option value="por_vencer">Por vencer (48 h)</option>
-                        <option value="vencidas">Vencidas sin procesar</option>
-                    </NativeSelect>
-                    {hayFiltros && (
+                    {hayBusqueda && (
                         <Button
                             variant="ghost"
                             onClick={() => {
                                 setBuscar('');
-                                router.get(InscripcionController.index.url());
+                                filtrar({ buscar: null, evento: null });
                             }}
                         >
-                            Quitar filtros
+                            Quitar búsqueda
                         </Button>
                     )}
                 </div>
@@ -499,12 +510,12 @@ export default function InscripcionesIndex({
                                 <TableHead className="pl-5">
                                     N° inscripción
                                 </TableHead>
+                                <TableHead>Solicitante</TableHead>
                                 <TableHead>Entidad pagadora</TableHead>
                                 <TableHead className="text-right">
                                     Total
                                 </TableHead>
                                 <TableHead>Estado</TableHead>
-                                <TableHead>Pago</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -514,9 +525,9 @@ export default function InscripcionesIndex({
                                         colSpan={5}
                                         className="text-muted-foreground py-12 text-center"
                                     >
-                                        {hayFiltros
-                                            ? 'Ninguna inscripción coincide con los filtros.'
-                                            : 'Todavía no hay inscripciones.'}
+                                        {hayBusqueda
+                                            ? 'Ninguna inscripción de esta vista coincide con la búsqueda.'
+                                            : 'No hay inscripciones en esta vista.'}
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -542,6 +553,32 @@ export default function InscripcionesIndex({
                                         >
                                             {orden.numero ?? 'Borrador'}
                                         </Link>
+                                        {orden.detalle && (
+                                            <span className="block text-xs font-medium text-amber-700">
+                                                {orden.detalle}
+                                            </span>
+                                        )}
+                                        {orden.evento && (
+                                            <span className="text-muted-foreground block max-w-48 truncate text-xs">
+                                                {orden.evento}
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {orden.solicitante ? (
+                                            <>
+                                                <span className="block max-w-56 truncate">
+                                                    {orden.solicitante.nombre}
+                                                </span>
+                                                <span className="text-muted-foreground block text-xs">
+                                                    {orden.solicitante.via}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className="text-muted-foreground">
+                                                —
+                                            </span>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         {orden.entidad ? (
@@ -550,7 +587,7 @@ export default function InscripcionesIndex({
                                             </span>
                                         ) : (
                                             <span className="text-muted-foreground block max-w-56 truncate">
-                                                Sin entidad pagadora
+                                                Aún no registra entidad pagadora
                                             </span>
                                         )}
                                         <span className="text-muted-foreground block max-w-56 truncate text-xs">
@@ -558,18 +595,17 @@ export default function InscripcionesIndex({
                                         </span>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {orden.invitado && (
-                                            <span className="mr-2">
-                                                <EstadoBadge
-                                                    estado={{
-                                                        value: 'invitado',
-                                                        label: 'Invitado especial',
-                                                        color: 'purple',
-                                                    }}
-                                                />
+                                        {orden.invitado ? (
+                                            <span className="font-medium text-purple-700">
+                                                Invitado especial
                                             </span>
+                                        ) : orden.total === null ? (
+                                            <span className="text-muted-foreground">
+                                                Sin confirmar
+                                            </span>
+                                        ) : (
+                                            clp(orden.total)
                                         )}
-                                        {clp(orden.total)}
                                         <span className="text-muted-foreground block text-xs">
                                             {orden.participantes}{' '}
                                             {orden.participantes === 1
@@ -580,9 +616,6 @@ export default function InscripcionesIndex({
                                     <TableCell>
                                         <EstadoBadge estado={orden.estado} />
                                     </TableCell>
-                                    <TableCell>
-                                        <EstadoBadge estado={orden.pago} />
-                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -590,6 +623,14 @@ export default function InscripcionesIndex({
                 </div>
 
                 <Paginacion pagina={ordenes} />
+
+                {borradoresVacios > 0 && (
+                    <p className="text-muted-foreground text-xs">
+                        {borradoresVacios === 1
+                            ? '1 enlace abierto sin datos no se muestra: nadie escribió nada todavía.'
+                            : `${borradoresVacios} enlaces abiertos sin datos no se muestran: nadie escribió nada todavía.`}
+                    </p>
+                )}
             </div>
         </>
     );

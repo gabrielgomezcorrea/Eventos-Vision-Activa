@@ -41,7 +41,6 @@ class ComprobanteController extends Controller
             'buscar' => ['nullable', 'string', 'max:120'],
             'estado' => ['nullable', Rule::in([self::TODOS, ...array_column(PaymentStatus::cases(), 'value')])],
             'evento' => ['nullable', 'integer'],
-            'diferencia' => ['nullable', 'boolean'],
         ]);
 
         $estado = $filtros['estado'] ?? PaymentStatus::EnValidacion->value;
@@ -52,10 +51,6 @@ class ComprobanteController extends Controller
             ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->whereIn(
                 'order_id',
                 Order::query()->where('event_id', $evento)->select('id'),
-            ))
-            ->when($filtros['diferencia'] ?? false, fn (Builder $q) => $q->whereHas(
-                'order',
-                fn (Builder $o) => $o->whereColumn('orders.total', '!=', 'payments.amount'),
             ))
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->whereHas(
                 'order',
@@ -87,11 +82,18 @@ class ComprobanteController extends Controller
                 'buscar' => $filtros['buscar'] ?? null,
                 'estado' => $estado,
                 'evento' => $filtros['evento'] ?? null,
-                'diferencia' => (bool) ($filtros['diferencia'] ?? false),
             ],
             'estados' => collect(PaymentStatus::cases())
                 ->mapWithKeys(fn (PaymentStatus $s): array => [$s->value => $s->label()])
                 ->all(),
+            // One short line under each card, so nobody has to guess what it holds.
+            'descripciones' => [
+                PaymentStatus::Pendiente->value => 'Abonos que aún no traen comprobante.',
+                PaymentStatus::EnValidacion->value => 'Esperan que Contabilidad los revise.',
+                PaymentStatus::Observado->value => 'Falta que el cliente corrija algo.',
+                PaymentStatus::Rechazado->value => 'No sirvieron como pago.',
+                PaymentStatus::Aprobado->value => 'Revisados y aceptados.',
+            ],
             // Cuántos hay en cada estado, para ver de un vistazo qué falta sin
             // tener que ir probando filtros uno por uno.
             'resumen' => collect(PaymentStatus::cases())

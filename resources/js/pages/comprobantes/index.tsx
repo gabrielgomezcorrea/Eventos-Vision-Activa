@@ -7,7 +7,6 @@ import { EstadoBadge } from '@/components/estado-badge';
 import { NativeSelect } from '@/components/native-select';
 import { cn } from '@/lib/utils';
 import { Paginacion } from '@/components/paginacion';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
     Table,
@@ -36,7 +35,6 @@ type Filtros = {
     buscar: string | null;
     estado: string;
     evento: number | null;
-    diferencia: boolean;
 };
 
 type Props = {
@@ -44,6 +42,7 @@ type Props = {
     filtros: Filtros;
     estados: Record<string, string>;
     resumen: Record<string, number>;
+    descripciones: Record<string, string>;
     eventos: Record<string, string>;
 };
 
@@ -54,6 +53,7 @@ export default function ComprobantesIndex({
     filtros,
     estados,
     resumen,
+    descripciones,
     eventos,
 }: Props) {
     const [buscar, setBuscar] = useState(filtros.buscar ?? '');
@@ -73,7 +73,6 @@ export default function ComprobantesIndex({
                 estado: todos.estado,
                 ...(todos.buscar ? { buscar: todos.buscar } : {}),
                 ...(todos.evento ? { evento: todos.evento } : {}),
-                ...(todos.diferencia ? { diferencia: 1 } : {}),
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -113,8 +112,11 @@ export default function ComprobantesIndex({
                                         : 'hover:border-primary/40',
                                 )}
                             >
-                                <span className="text-muted-foreground block text-sm">
+                                <span className="block text-sm font-medium">
                                     {texto}
+                                </span>
+                                <span className="text-muted-foreground block text-xs">
+                                    {descripciones[valor]}
                                 </span>
                                 <span className="mt-1 block text-2xl font-semibold tabular-nums">
                                     {resumen[valor] ?? 0}
@@ -176,15 +178,6 @@ export default function ComprobantesIndex({
                             </option>
                         ))}
                     </NativeSelect>
-                    <label className="flex items-center gap-2 px-2 text-sm">
-                        <Checkbox
-                            checked={filtros.diferencia}
-                            onCheckedChange={(valor) =>
-                                filtrar({ diferencia: valor === true })
-                            }
-                        />
-                        Con diferencia de monto
-                    </label>
                 </div>
 
                 <div className="bg-card rounded-xl border shadow-xs">
@@ -194,12 +187,12 @@ export default function ComprobantesIndex({
                                 <TableHead className="pl-5">
                                     N° inscripción
                                 </TableHead>
-                                <TableHead>Evento</TableHead>
                                 <TableHead className="text-right">
                                     Monto informado
                                 </TableHead>
                                 <TableHead>Transferido</TableHead>
                                 <TableHead>Estado</TableHead>
+                                <TableHead>Evento</TableHead>
                                 <TableHead>Recibido</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -242,9 +235,6 @@ export default function ComprobantesIndex({
                                             {pago.responsable}
                                         </span>
                                     </TableCell>
-                                    <TableCell className="max-w-56 truncate">
-                                        {pago.evento}
-                                    </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                         <span
                                             className={
@@ -270,6 +260,9 @@ export default function ComprobantesIndex({
                                     </TableCell>
                                     <TableCell>
                                         <EstadoBadge estado={pago.estado} />
+                                    </TableCell>
+                                    <TableCell className="max-w-48 truncate">
+                                        {pago.evento}
                                     </TableCell>
                                     <TableCell>
                                         {pago.recibido}

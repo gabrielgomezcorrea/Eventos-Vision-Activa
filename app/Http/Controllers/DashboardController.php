@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EtapaDeSeguimiento;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
+use App\Enums\VistaDeInscripciones;
 use App\Models\Accreditation;
 use App\Models\Event;
 use App\Models\Order;
@@ -47,15 +49,15 @@ class DashboardController extends Controller
 
             $observados = Order::whereHas('event', fn (Builder $q) => $q->publicados())->where('payment_status', PaymentStatus::Observado)->count();
 
-            $tarjetas[] = self::tarjeta('Reservas por vencer', $porVencer, 'En las próximas 48 horas', $porVencer > 0 ? 'danger' : 'gray', 'clock', route('inscripciones.index'));
-            $tarjetas[] = self::tarjeta('Pagos observados', $observados, 'Esperando respuesta del cliente', $observados > 0 ? 'warning' : 'gray', 'alert', route('inscripciones.index'));
-            $tarjetas[] = self::tarjeta('Inscripciones pagadas', Order::whereHas('event', fn (Builder $q) => $q->publicados())->where('payment_status', PaymentStatus::Aprobado)->count(), 'Con credenciales emitidas', 'success', 'check', route('inscripciones.index'));
+            $tarjetas[] = self::tarjeta('Reservas por vencer', $porVencer, 'En las próximas 48 horas', $porVencer > 0 ? 'danger' : 'gray', 'clock', route('inscripciones.index', ['vista' => VistaDeInscripciones::PorPagar->value]));
+            $tarjetas[] = self::tarjeta('Pagos observados', $observados, 'Esperando respuesta del cliente', $observados > 0 ? 'warning' : 'gray', 'alert', route('inscripciones.index', ['vista' => VistaDeInscripciones::PorPagar->value]));
+            $tarjetas[] = self::tarjeta('Inscripciones pagadas', Order::whereHas('event', fn (Builder $q) => $q->publicados())->where('payment_status', PaymentStatus::Aprobado)->count(), 'Con credenciales emitidas', 'success', 'check', route('inscripciones.index', ['vista' => VistaDeInscripciones::Pagadas->value]));
         }
 
         // Solicitudes tiene permiso propio: sin esto, Contabilidad veía una
         // tarjeta que la llevaba a una pantalla que no puede abrir.
         if ($usuario->can(Permiso::VerSolicitudes->value)) {
-            $tarjetas[] = self::tarjeta('Solicitudes sin seguimiento', ProgramRequest::whereHas('event', fn (Builder $q) => $q->publicados())->whereDoesntHave('notes')->whereNull('converted_at')->count(), 'Nadie las ha contactado y no se han inscrito', 'info', 'inbox', route('solicitudes.index', ['seguimiento' => 'sin']));
+            $tarjetas[] = self::tarjeta('Solicitudes sin seguimiento', ProgramRequest::whereHas('event', fn (Builder $q) => $q->publicados())->enEtapa(EtapaDeSeguimiento::Solicito)->whereDoesntHave('notes')->count(), 'Nadie las ha contactado y no han llenado datos', 'info', 'inbox', route('solicitudes.index', ['etapa' => EtapaDeSeguimiento::Solicito->value, 'seguimiento' => 'sin']));
         }
 
         // Quien solo trabaja en la puerta no tiene colas de oficina: su

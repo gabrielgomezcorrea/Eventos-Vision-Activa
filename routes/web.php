@@ -123,6 +123,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('solicitudes', [SolicitudController::class, 'index'])->name('solicitudes.index');
     Route::get('solicitudes/exportar', ExportarContactosController::class)->name('solicitudes.exportar');
+    Route::get('solicitudes/exportar/etapa', [ExportarContactosController::class, 'etapa'])->name('solicitudes.exportar.etapa');
     Route::get('solicitudes/exportar/cantidad', [ExportarContactosController::class, 'cantidad'])->name('solicitudes.exportar.cantidad');
     Route::get('solicitudes/{programRequest}', [SolicitudController::class, 'show'])->name('solicitudes.show');
     Route::patch('solicitudes/{programRequest}', [SolicitudController::class, 'update'])->name('solicitudes.update');

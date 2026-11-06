@@ -19,6 +19,7 @@ use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
+use App\Enums\VistaDeInscripciones;
 use App\Exceptions\CancelacionNoPermitida;
 use App\Exceptions\CodigoNoAplicable;
 use App\Exceptions\ComprobanteNoAceptado;
@@ -78,16 +79,13 @@ class InscripcionController extends Controller
         $filtros = $request->validate([
             'buscar' => ['nullable', 'string', 'max:120'],
             'evento' => ['nullable', 'integer'],
-            'estado' => ['nullable', Rule::enum(OrderStatus::class)],
-            'pago' => ['nullable', Rule::enum(PaymentStatus::class)],
-            'vista' => ['nullable', 'in:por_vencer,vencidas'],
+            'vista' => ['nullable', Rule::enum(VistaDeInscripciones::class)],
         ]);
 
-        $sinResolver = [PaymentStatus::EnValidacion->value, PaymentStatus::Aprobado->value];
+        // Opens on what is owed: it is what someone has to chase today.
+        $vista = VistaDeInscripciones::tryFrom($filtros['vista'] ?? '') ?? VistaDeInscripciones::PorPagar;
 
-        $ordenes = Order::query()
-            ->withCount('participantesVigentes as participantes')
-            ->with(['payerEntity:id,name', 'establishments:id,name'])
+        $base = fn (): Builder => Order::query()
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where(
                 fn (Builder $o) => $o->where('number', 'like', "%{$buscar}%")
                     ->orWhere('responsible_name', 'like', "%{$buscar}%")
@@ -95,31 +93,33 @@ class InscripcionController extends Controller
                     ->orWhere('responsible_email', 'like', "%{$buscar}%")
                     ->orWhereHas('payerEntity', fn (Builder $p) => $p->where('name', 'like', "%{$buscar}%")),
             ))
-            ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento))
-            ->when($filtros['estado'] ?? null, fn (Builder $q, string $estado) => $q->where('status', $estado))
-            ->when($filtros['pago'] ?? null, fn (Builder $q, string $pago) => $q->where('payment_status', $pago))
-            ->when(($filtros['vista'] ?? null) === 'por_vencer', fn (Builder $q) => $q
-                ->where('status', OrderStatus::Reservada)
-                ->whereNotIn('payment_status', $sinResolver)
-                ->whereBetween('reserved_until', [now(), now()->addHours(48)]))
-            ->when(($filtros['vista'] ?? null) === 'vencidas', fn (Builder $q) => $q
-                ->where('status', OrderStatus::Reservada)
-                ->whereNotIn('payment_status', $sinResolver)
-                ->where('reserved_until', '<', now()))
+            ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento));
+
+        $ordenes = $base()
+            ->enVista($vista)
+            ->withCount('participantesVigentes as participantes')
+            ->withSum(['payments as aprobado' => fn (Builder $q) => $q->where('status', PaymentStatus::Aprobado->value)], 'amount')
+            ->with([
+                'payerEntity:id,name', 'establishments:id,name', 'event:id,name',
+                'programRequest:id,first_name,last_name,email,origin',
+                'parent:id,number', 'group.orders:id,group_id,number',
+            ])
             ->latest()
             ->paginate(15)
             ->withQueryString()
             ->through(fn (Order $orden): array => [
                 'id' => $orden->id,
                 'numero' => $orden->number,
+                'detalle' => self::detalleDe($orden),
                 'entidad' => $orden->payerEntity?->name ?? $orden->establishments->first()?->name,
+                'evento' => $orden->event?->name,
+                'solicitante' => self::solicitanteDe($orden),
                 'responsable' => $orden->responsableNombreCompleto(),
                 'correo' => $orden->responsible_email,
-                'total' => $orden->total,
+                'total' => $orden->esBorrador() ? null : $orden->total,
                 'invitado' => $orden->kind === OrderKind::Invitado,
                 'participantes' => (int) $orden->getAttribute('participantes'),
-                'estado' => self::estadoVisible($orden),
-                'pago' => self::pagoVisible($orden),
+                'estado' => self::estadoDeLaFila($orden),
             ]);
 
         // Eventos que todavía admiten un invitado, con sus accesos y sus cargos.
@@ -129,10 +129,19 @@ class InscripcionController extends Controller
 
         return Inertia::render('inscripciones/index', [
             'ordenes' => $ordenes,
-            'filtros' => (object) array_filter($filtros),
+            'filtros' => [
+                'buscar' => $filtros['buscar'] ?? null,
+                'evento' => $filtros['evento'] ?? null,
+                'vista' => $vista->value,
+            ],
+            // How many in each card with the current search and event.
+            'vistas' => collect(VistaDeInscripciones::cases())->map(fn (VistaDeInscripciones $v): array => [
+                ...Presentar::estado($v),
+                'descripcion' => $v->descripcion(),
+                'cantidad' => $base()->enVista($v)->count(),
+            ])->all(),
+            'borradoresVacios' => $base()->borradorVacio()->count(),
             'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
-            'estados' => collect(OrderStatus::cases())->mapWithKeys(fn (OrderStatus $s): array => [$s->value => $s->label()])->all(),
-            'pagos' => collect(PaymentStatus::cases())->mapWithKeys(fn (PaymentStatus $s): array => [$s->value => $s->label()])->all(),
             // Invitados sin costo: Administración y Coordinación, y solo para eventos con
             // accesos activos, que es lo que define el cupo que van a ocupar.
             'invitados' => $request->user()->can(Permiso::GestionarInvitaciones->value)
@@ -149,6 +158,87 @@ class InscripcionController extends Controller
                 ? ['eventos' => Event::query()->where('status', EventStatus::Publicado->value)->orderBy('name')->pluck('name', 'id')]
                 : null,
         ]);
+    }
+
+    /**
+     * One badge for the list, merging the enrollment and its payment: two
+     * badges side by side made people read two answers to one question.
+     * The record's own page still shows both.
+     *
+     * @return array{value: string, label: string, color: string}
+     */
+    private static function estadoDeLaFila(Order $orden): array
+    {
+        $estado = fn (string $valor, string $texto, string $color): array => ['value' => $valor, 'label' => $texto, 'color' => $color];
+
+        if ($orden->kind === OrderKind::Invitado && $orden->payment_status === PaymentStatus::Aprobado) {
+            return $estado('guest', 'Invitado especial', 'purple');
+        }
+
+        return match (true) {
+            $orden->status === OrderStatus::Borrador => $estado('draft', 'En proceso', 'gray'),
+            $orden->payment_status === PaymentStatus::Aprobado => $estado('enrolled', 'Inscrito', 'success'),
+            $orden->status === OrderStatus::Vencida => $estado('expired', 'Reserva vencida', 'warning'),
+            $orden->status === OrderStatus::Cancelada => $estado('cancelled', 'Cancelada', 'gray'),
+            $orden->payment_status === PaymentStatus::EnValidacion => $estado('in_review', 'Pago en revisión', 'info'),
+            $orden->payment_status === PaymentStatus::Observado => $estado('observed', 'Pago observado', 'warning'),
+            $orden->payment_status === PaymentStatus::Rechazado => $estado('rejected', 'Pago rechazado', 'danger'),
+            (int) $orden->getAttribute('aprobado') > 0 => $estado('partial', 'Pagó una parte', 'warning'),
+            default => $estado('pending', 'Por pagar', 'danger'),
+        };
+    }
+
+    /**
+     * One line under the number saying what the row is: where a draft came
+     * from, or when a reservation runs out.
+     */
+    private static function detalleDe(Order $orden): ?string
+    {
+        if ($orden->esBorrador()) {
+            if ($orden->parent !== null) {
+                return 'Más participantes de '.($orden->parent->number ?? 'otra inscripción');
+            }
+
+            $hermana = $orden->group?->orders->first(fn (Order $o): bool => $o->isNot($orden) && $o->number !== null);
+
+            if ($hermana !== null) {
+                return 'Otro colegio de '.$hermana->number;
+            }
+
+            return $orden->creadaPorElEquipo() ? 'Creada por el equipo' : null;
+        }
+
+        return self::vencimiento($orden)['nota'] ?? null;
+    }
+
+    /**
+     * Quién inició el trámite y por qué puerta entró: por el formulario del
+     * programa se conoce su nombre; por las otras vías solo su correo.
+     *
+     * @return array{nombre: string, via: string}|null
+     */
+    private static function solicitanteDe(Order $orden): ?array
+    {
+        if ($orden->kind === OrderKind::Invitado) {
+            return null;
+        }
+
+        $solicitud = $orden->programRequest;
+        $correo = $solicitud?->email ?? $orden->responsible_email;
+
+        if ($correo === null || $correo === '') {
+            return null;
+        }
+
+        if ($orden->creadaPorElEquipo()) {
+            return ['nombre' => $correo, 'via' => 'Creada por el equipo'];
+        }
+
+        if ($solicitud !== null && ! $solicitud->esDirecta()) {
+            return ['nombre' => $solicitud->nombreParaMostrar(), 'via' => 'Formulario del programa'];
+        }
+
+        return ['nombre' => $correo, 'via' => 'Inscripción directa'];
     }
 
     /**

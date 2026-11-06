@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Solicitudes;
 use App\Actions\EliminarSolicitudConTodo;
 use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\ExportarContactos;
+use App\Enums\EtapaDeSeguimiento;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
@@ -26,6 +27,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -42,73 +44,71 @@ class SolicitudController extends Controller
         $filtros = $request->validate([
             'buscar' => ['nullable', 'string', 'max:120'],
             'evento' => ['nullable', 'integer'],
-            'pendientes' => ['nullable', 'boolean'],
-            'cargo' => ['nullable', 'string', 'max:120'],
-            'seguimiento' => ['nullable', 'in:sin,con,no_participara'],
+            'etapa' => ['nullable', Rule::enum(EtapaDeSeguimiento::class)],
+            // Solo llega desde la tarjeta del Escritorio y de la ficha del evento.
+            'seguimiento' => ['nullable', 'in:sin'],
         ]);
 
-        // Por defecto solo las que faltan por seguir; se apaga con `pendientes=0`.
-        $soloPendientes = (bool) ($filtros['pendientes'] ?? true);
+        // Por defecto, quienes faltan por seguir: es el trabajo del día.
+        $etapa = EtapaDeSeguimiento::tryFrom($filtros['etapa'] ?? '') ?? EtapaDeSeguimiento::Solicito;
+        $sinContactar = ($filtros['seguimiento'] ?? null) === 'sin' && $etapa === EtapaDeSeguimiento::Solicito;
 
-        $solicitudes = ProgramRequest::query()
-            ->with('event', 'orders:id,program_request_id,responsible_name,responsible_lastname,responsible_phone,responsible_position,responsible_institution')
+        $base = fn (): Builder => ProgramRequest::query()->delListado($filtros);
+
+        $solicitudes = $base()
+            ->enEtapa($etapa)
+            ->when($sinContactar, fn (Builder $q) => $q->whereDoesntHave('notes'))
+            ->with('event')
             ->withCount('notes')
             ->withMax('notes', 'created_at')
-            ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where(
-                fn (Builder $s) => $s->where('first_name', 'like', "%{$buscar}%")
-                    ->orWhere('last_name', 'like', "%{$buscar}%")
-                    ->orWhere('email', 'like', "%{$buscar}%")
-                    ->orWhere('institution', 'like', "%{$buscar}%"),
-            ))
-            ->when($filtros['evento'] ?? null, fn (Builder $q, int $evento) => $q->where('event_id', $evento))
-            // Buscar las que no participarán no choca con la casilla de pendientes, que las oculta.
-            ->when($soloPendientes && ($filtros['seguimiento'] ?? null) !== 'no_participara', fn (Builder $q) => $q->whereNull('converted_at')->whereNull('declined_at'))
-            ->when($filtros['cargo'] ?? null, fn (Builder $q, string $cargo) => $q->where('position', $cargo))
-            // Sin seguimiento: nadie la ha contactado ni se ha inscrito todavía.
-            ->when(($filtros['seguimiento'] ?? null) === 'sin', fn (Builder $q) => $q->whereDoesntHave('notes')->whereNull('converted_at'))
-            ->when(($filtros['seguimiento'] ?? null) === 'con', fn (Builder $q) => $q->whereHas('notes'))
-            ->when(($filtros['seguimiento'] ?? null) === 'no_participara', fn (Builder $q) => $q->whereNotNull('declined_at')->whereNull('converted_at'))
             ->latest()
             ->paginate(15)
-            ->withQueryString()
-            ->through(fn (ProgramRequest $solicitud): array => [
-                'id' => $solicitud->id,
-                'recibida' => Presentar::fecha($solicitud->created_at),
-                'recibida_hora' => $solicitud->created_at->format('H:i'),
-                'persona' => $solicitud->nombreParaMostrar(),
-                'directa' => $solicitud->esDirecta(),
-                'cargo' => $solicitud->position,
-                'correo' => $solicitud->email,
-                'telefono' => $solicitud->phone,
-                'institucion' => $solicitud->institucionParaMostrar(),
-                'evento' => $solicitud->event?->name,
-                'estado' => self::estado($solicitud),
-                'ultima_nota' => $solicitud->getAttribute('notes_max_created_at') === null ? null : Carbon::parse($solicitud->getAttribute('notes_max_created_at'))->format('d-m H:i'),
-            ]);
+            ->withQueryString();
+
+        $ordenes = ProgramRequest::ordenesDe($solicitudes->getCollection());
+
+        $solicitudes->through(fn (ProgramRequest $solicitud): array => [
+            'id' => $solicitud->id,
+            'recibida' => Presentar::fecha($solicitud->created_at),
+            'recibida_hora' => $solicitud->created_at->format('H:i'),
+            'persona' => $solicitud->nombreParaMostrar(),
+            'directa' => $solicitud->esDirecta(),
+            'cargo' => $solicitud->datoOResponsable('position', 'responsible_position'),
+            'correo' => $solicitud->email,
+            'telefono' => $solicitud->datoOResponsable('phone', 'responsible_phone'),
+            'institucion' => $solicitud->institucionParaMostrar(),
+            'evento' => $solicitud->event?->name,
+            'estado' => Presentar::estado($etapa),
+            'detalle' => match ($etapa) {
+                EtapaDeSeguimiento::Solicito => $solicitud->seguimiento(),
+                EtapaDeSeguimiento::PreInscrito => ProgramRequest::detalleDePreInscrito($ordenes[$solicitud->id] ?? collect()),
+                default => null,
+            },
+            'ultima_nota' => $solicitud->getAttribute('notes_max_created_at') === null ? null : Carbon::parse($solicitud->getAttribute('notes_max_created_at'))->format('d-m H:i'),
+        ]);
 
         return Inertia::render('solicitudes/index', [
             'solicitudes' => $solicitudes,
             'filtros' => [
                 'buscar' => $filtros['buscar'] ?? null,
                 'evento' => $filtros['evento'] ?? null,
-                'pendientes' => $soloPendientes,
-                'cargo' => $filtros['cargo'] ?? null,
-                'seguimiento' => $filtros['seguimiento'] ?? null,
+                'etapa' => $etapa->value,
+                'sin_contactar' => $sinContactar,
             ],
+            // Cuántas hay en cada etapa con la búsqueda y el evento de ahora:
+            // así se ve dónde quedó alguien sin tener que probar cada botón.
+            'etapas' => collect(EtapaDeSeguimiento::cases())->map(fn (EtapaDeSeguimiento $e): array => [
+                ...Presentar::estado($e),
+                'label' => $e->plural(),
+                'descripcion' => $e->descripcion(),
+                'cantidad' => $base()->enEtapa($e)->count(),
+            ])->all(),
             'eventos' => Event::query()->orderBy('name')->pluck('name', 'id'),
             'exportacion' => $request->user()->can(Permiso::ExportarContactos->value) ? [
                 'cargos' => ProgramFormField::todosLosCargos(),
                 'tipos' => ExportarContactos::TIPOS,
                 'pagos' => collect(PaymentStatus::cases())->mapWithKeys(fn (PaymentStatus $e): array => [$e->value => $e->label()]),
             ] : null,
-            // Los cargos que existen de verdad en la base, no la lista teórica:
-            // filtrar por uno que nadie eligió devuelve una pantalla vacía y
-            // parece que el filtro está roto.
-            'cargos' => ProgramRequest::query()
-                ->whereNotNull('position')
-                ->distinct()
-                ->orderBy('position')
-                ->pluck('position'),
         ]);
     }
 
@@ -133,12 +133,12 @@ class SolicitudController extends Controller
                     'id' => $programRequest->event->id,
                     'nombre' => $programRequest->event->name,
                 ],
-                'estado' => self::estado($programRequest),
-                'inscrita' => $programRequest->yaConvertida(),
+                'estado' => Presentar::estado($etapa = $programRequest->etapa()),
+                'inscrita' => $etapa === EtapaDeSeguimiento::Inscrito,
                 'no_participara' => $programRequest->noParticipara(),
                 'llego' => Presentar::fechaYHora($programRequest->created_at),
                 'programa_enviado' => $programRequest->program_sent_at ? Presentar::fechaYHora($programRequest->program_sent_at) : null,
-                'se_inscribio' => $programRequest->converted_at ? Presentar::fechaYHora($programRequest->converted_at) : null,
+                'confirmo' => $programRequest->converted_at ? Presentar::fechaYHora($programRequest->converted_at) : null,
                 'desde' => $programRequest->source_url,
                 // Los tres juntos: por separado no dicen nada y ocuparían tres
                 // líneas de la ficha para responder una sola pregunta.
@@ -277,26 +277,6 @@ class SolicitudController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => "Solicitud de {$nombre} eliminada con {$resultado['inscripciones']} inscripción(es) y todo lo relacionado."]);
 
         return to_route('solicitudes.index');
-    }
-
-    /**
-     * Derivado de las fechas, no guardado: una columna de estado que hay que
-     * sincronizar con esas mismas fechas termina contradiciéndolas.
-     *
-     * @return array{value: string, label: string, color: string}
-     */
-    private static function estado(ProgramRequest $solicitud): array
-    {
-        return [
-            'value' => match (true) {
-                $solicitud->converted_at !== null => 'inscrita',
-                $solicitud->tieneNotas() => 'contactada',
-                $solicitud->program_sent_at !== null => 'enviado',
-                default => 'nueva',
-            },
-            'label' => $solicitud->estado(),
-            'color' => $solicitud->colorDelEstado(),
-        ];
     }
 
     /**

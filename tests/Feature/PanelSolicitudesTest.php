@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Actions\ConfirmarOrden;
+use App\Enums\EtapaDeSeguimiento;
 use App\Enums\EventStatus;
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
 use App\Mail\ProgramaDelEvento;
@@ -140,63 +142,137 @@ class PanelSolicitudesTest extends TestCase
         $this->assertSame(0, ProgramRequestNote::count());
     }
 
-    public function test_el_filtro_de_seguimiento_y_el_estado_contactada(): void
+    /** Correos del listado en una etapa, con los filtros dados. */
+    private function correosEn(string $etapa, array $q = []): array
     {
-        $evento = $this->solicitud->event;
-        $contactada = ProgramRequest::create(['event_id' => $evento->id, 'first_name' => 'Luis', 'last_name' => 'Soto', 'email' => 'luis@colegio.cl', 'consented_at' => now()]);
-        $contactada->notes()->create(['body' => 'Llamé']);
-        $inscrita = ProgramRequest::create(['event_id' => $evento->id, 'first_name' => 'Eva', 'last_name' => 'Paz', 'email' => 'eva@colegio.cl', 'consented_at' => now(), 'converted_at' => now()]);
-
-        $this->actingAs($this->usuario(Rol::Coordinacion));
-
-        $correos = fn (array $q) => collect($this->get(route('solicitudes.index', $q))->viewData('page')['props']['solicitudes']['data'])->pluck('correo')->sort()->values()->all();
-
-        // Sin seguimiento: sin notas y sin inscribirse (Marta). Eva ya se inscribió.
-        $this->assertSame(['marta@colegio.cl'], $correos(['seguimiento' => 'sin']));
-        $this->assertSame(['luis@colegio.cl'], $correos(['seguimiento' => 'con']));
-        // Por defecto ya viene en «solo las que faltan por seguir»; `pendientes=0` las muestra todas.
-        $this->assertSame(['luis@colegio.cl', 'marta@colegio.cl'], $correos([]));
-        $this->assertCount(3, $correos(['pendientes' => 0]));
-
-        // «Solo las que faltan por seguir»: las que aún no se inscriben (Marta y Luis), no Eva.
-        $this->assertSame(['luis@colegio.cl', 'marta@colegio.cl'], $correos(['pendientes' => 1]));
-        $this->assertSame(['marta@colegio.cl'], $correos(['pendientes' => 1, 'seguimiento' => 'sin']));
-
-        $this->assertSame('Contactada', $contactada->fresh()->estado());
-        $this->assertSame('Ya se inscribió', $inscrita->fresh()->estado());
-        $this->assertSame('Nueva', $this->solicitud->fresh()->estado());
+        return collect($this->get(route('solicitudes.index', ['etapa' => $etapa, ...$q]))->viewData('page')['props']['solicitudes']['data'])
+            ->pluck('correo')->sort()->values()->all();
     }
 
-    public function test_no_participara_sale_de_pendientes_con_nota_por_defecto_y_se_deshace(): void
+    /** Una orden de esta persona en el evento de la solicitud. */
+    private function ordenDe(string $correo, array $datos = []): Order
+    {
+        return Order::create([
+            'event_id' => $this->solicitud->event_id,
+            'responsible_name' => '',
+            'responsible_email' => $correo,
+            ...$datos,
+        ]);
+    }
+
+    public function test_cada_persona_cae_en_una_sola_etapa_segun_lo_que_hizo(): void
+    {
+        $evento = $this->solicitud->event;
+        $nueva = fn (string $correo) => ProgramRequest::create(['event_id' => $evento->id, 'first_name' => 'X', 'email' => $correo, 'consented_at' => now()]);
+
+        // Solicitó: Marta (nada), Luis (contactado) y Ana (solo hizo clic: borrador vacío).
+        $luis = $nueva('luis@colegio.cl');
+        $luis->notes()->create(['body' => 'Llamé']);
+        $nueva('ana@colegio.cl');
+        $this->ordenDe('ana@colegio.cl');
+
+        // Pre inscrito: escribió datos, confirmó sin pagar, abonó en revisión, o se le venció.
+        $nueva('borrador@colegio.cl');
+        $this->ordenDe('borrador@colegio.cl', ['responsible_name' => 'Rosa']);
+        $nueva('confirmo@colegio.cl');
+        $this->ordenDe('confirmo@colegio.cl', ['status' => OrderStatus::Reservada]);
+        $nueva('revision@colegio.cl');
+        $this->ordenDe('revision@colegio.cl', ['status' => OrderStatus::Reservada, 'payment_status' => PaymentStatus::EnValidacion]);
+        $nueva('vencida@colegio.cl');
+        $this->ordenDe('vencida@colegio.cl', ['status' => OrderStatus::Vencida]);
+        // Un colegio pagado y otro no: sigue pre inscrito hasta pagar todo.
+        $nueva('mitad@colegio.cl');
+        $this->ordenDe('mitad@colegio.cl', ['status' => OrderStatus::Reservada, 'payment_status' => PaymentStatus::Aprobado]);
+        $this->ordenDe('mitad@colegio.cl', ['status' => OrderStatus::Reservada]);
+
+        // Inscrito: todo pagado, aunque después abrió un borrador para otro colegio.
+        $nueva('pagado@colegio.cl');
+        $this->ordenDe('pagado@colegio.cl', ['status' => OrderStatus::Reservada, 'payment_status' => PaymentStatus::Aprobado]);
+        $this->ordenDe('pagado@colegio.cl', ['responsible_name' => 'Eva']);
+
+        // No participará: marcada y con una reserva vencida; confirmar sin pagar pesa más que la marca.
+        $nueva('no@colegio.cl')->forceFill(['declined_at' => now()])->save();
+        $this->ordenDe('no@colegio.cl', ['status' => OrderStatus::Vencida]);
+        $nueva('volvio@colegio.cl')->forceFill(['declined_at' => now()])->save();
+        $this->ordenDe('volvio@colegio.cl', ['status' => OrderStatus::Reservada]);
+
+        $this->actingAs($this->usuario(Rol::Coordinacion));
+
+        $this->assertSame(['ana@colegio.cl', 'luis@colegio.cl', 'marta@colegio.cl'], $this->correosEn('solicito'));
+        $this->assertSame(['ana@colegio.cl', 'marta@colegio.cl'], $this->correosEn('solicito', ['seguimiento' => 'sin']));
+        $this->assertSame(['borrador@colegio.cl', 'confirmo@colegio.cl', 'mitad@colegio.cl', 'revision@colegio.cl', 'vencida@colegio.cl', 'volvio@colegio.cl'], $this->correosEn('pre_inscrito'));
+        $this->assertSame(['pagado@colegio.cl'], $this->correosEn('inscrito'));
+        $this->assertSame(['no@colegio.cl'], $this->correosEn('no_participara'));
+        // Sin etapa en la URL abre en «Solicitó»: es el trabajo del día.
+        $this->assertSame(['ana@colegio.cl', 'luis@colegio.cl', 'marta@colegio.cl'], $this->correosEn(''));
+
+        // Las cantidades de los botones suman a todos, sin repetir a nadie.
+        $etapas = collect($this->get(route('solicitudes.index'))->viewData('page')['props']['etapas'])->pluck('cantidad', 'value');
+        $this->assertSame(['solicito' => 3, 'pre_inscrito' => 6, 'inscrito' => 1, 'no_participara' => 1], $etapas->all());
+        $this->assertSame(ProgramRequest::count(), $etapas->sum());
+
+        // La ficha dice lo mismo que el listado.
+        $this->assertSame(EtapaDeSeguimiento::PreInscrito, ProgramRequest::firstWhere('email', 'volvio@colegio.cl')->etapa());
+        $this->assertSame(EtapaDeSeguimiento::Inscrito, ProgramRequest::firstWhere('email', 'pagado@colegio.cl')->etapa());
+        $this->assertSame('Contactada', $luis->fresh()->seguimiento());
+
+        $detalles = collect($this->get(route('solicitudes.index', ['etapa' => 'pre_inscrito']))->viewData('page')['props']['solicitudes']['data'])->pluck('detalle', 'correo');
+        $this->assertSame('Dejó la inscripción a medias', $detalles['borrador@colegio.cl']);
+        $this->assertSame('Pago en revisión', $detalles['revision@colegio.cl']);
+        $this->assertSame('Reserva vencida', $detalles['vencida@colegio.cl']);
+    }
+
+    public function test_no_participara_sale_del_seguimiento_con_nota_por_defecto_y_se_deshace(): void
     {
         $this->actingAs($this->usuario(Rol::Coordinacion));
-        $correos = fn (array $q) => collect($this->get(route('solicitudes.index', $q))->viewData('page')['props']['solicitudes']['data'])->pluck('correo')->all();
 
         $this->post(route('solicitudes.notas.store', $this->solicitud), ['body' => '', 'tipo' => 'declined'])->assertRedirect();
 
         $marcada = $this->solicitud->fresh();
         $this->assertNotNull($marcada->declined_at);
-        $this->assertSame('No participará', $marcada->estado());
+        $this->assertSame(EtapaDeSeguimiento::NoParticipara, $marcada->etapa());
         $this->assertSame('No participará', $marcada->notes()->first()->body);
-        $this->assertSame([], $correos([]), 'Ya no está entre las pendientes.');
-        $this->assertSame(['marta@colegio.cl'], $correos(['seguimiento' => 'no_participara']));
-        $this->assertSame(['marta@colegio.cl'], $correos(['pendientes' => 0]), 'No se borra.');
+        $this->assertSame([], $this->correosEn('solicito'));
+        $this->assertSame(['marta@colegio.cl'], $this->correosEn('no_participara'), 'No se borra.');
 
         $this->post(route('solicitudes.notas.store', $this->solicitud), ['body' => 'Cambió de idea', 'tipo' => 'resumed']);
 
         $this->assertNull($this->solicitud->fresh()->declined_at);
-        $this->assertSame('Contactada', $this->solicitud->fresh()->estado());
-        $this->assertSame(['marta@colegio.cl'], $correos([]));
+        $this->assertSame(EtapaDeSeguimiento::Solicito, $this->solicitud->fresh()->etapa());
+        $this->assertSame(['marta@colegio.cl'], $this->correosEn('solicito'));
     }
 
-    public function test_si_igual_se_inscribe_manda_ya_se_inscribio_y_un_tipo_inventado_se_rechaza(): void
+    public function test_si_igual_paga_queda_inscrito_y_un_tipo_inventado_se_rechaza(): void
     {
         $this->actingAs($this->usuario(Rol::Coordinacion));
 
         $this->post(route('solicitudes.notas.store', $this->solicitud), ['body' => 'Hola', 'tipo' => 'borrar'])->assertSessionHasErrors('tipo');
 
-        $this->solicitud->forceFill(['declined_at' => now(), 'converted_at' => now()])->save();
-        $this->assertSame('Ya se inscribió', $this->solicitud->fresh()->estado());
+        $this->solicitud->forceFill(['declined_at' => now()])->save();
+        $this->ordenDe('marta@colegio.cl', ['status' => OrderStatus::Reservada, 'payment_status' => PaymentStatus::Aprobado]);
+        $this->assertSame(EtapaDeSeguimiento::Inscrito, $this->solicitud->fresh()->etapa());
+    }
+
+    public function test_descargar_la_etapa_trae_lo_que_se_ve(): void
+    {
+        $evento = $this->solicitud->event;
+        $this->ordenDe('marta@colegio.cl', ['responsible_name' => 'Marta', 'responsible_phone' => '56912345678', 'status' => OrderStatus::Reservada]);
+        // Entró directo: sin teléfono ni nombre propios, igual sale en la lista.
+        ProgramRequest::create(['event_id' => $evento->id, 'first_name' => '', 'email' => 'directa@colegio.cl', 'consented_at' => now(), 'origin' => ProgramRequest::ORIGEN_DIRECTO]);
+        $this->ordenDe('directa@colegio.cl', ['responsible_name' => 'Pedro']);
+
+        $csv = fn (array $q) => $this->actingAs($this->usuario(Rol::Administrador))
+            ->get(route('solicitudes.exportar.etapa', $q))->assertOk()->streamedContent();
+
+        $todos = $csv(['etapa' => 'pre_inscrito']);
+        $this->assertStringContainsString('marta@colegio.cl;Marta;Rojas;56912345678', $todos);
+        $this->assertStringContainsString('"Pre inscrito";"Confirmó, falta pagar"', $todos);
+        $this->assertStringContainsString('directa@colegio.cl;Pedro', $todos);
+
+        $this->assertStringNotContainsString('marta@colegio.cl', $csv(['etapa' => 'solicito']));
+
+        $this->actingAs($this->usuario(Rol::Contabilidad))
+            ->get(route('solicitudes.exportar.etapa', ['etapa' => 'pre_inscrito']))->assertForbidden();
     }
 
     public function test_contabilidad_no_marca_no_participara(): void

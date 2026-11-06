@@ -42,7 +42,7 @@ type Props = {
         inscripcion_id: number | null;
         llego: string;
         programa_enviado: string | null;
-        se_inscribio: string | null;
+        confirmo: string | null;
         desde: string | null;
         campana: string | null;
         internal_notes: string | null;
@@ -403,8 +403,8 @@ export default function SolicitudShow({
                         <Dato etiqueta="Programa enviado">
                             {solicitud.programa_enviado ?? 'Todavía no'}
                         </Dato>
-                        <Dato etiqueta="Se inscribió">
-                            {solicitud.se_inscribio ?? 'Todavía no'}
+                        <Dato etiqueta="Confirmó su inscripción">
+                            {solicitud.confirmo ?? 'Todavía no'}
                         </Dato>
                         <Dato etiqueta="Campaña">
                             {solicitud.campana ?? 'Sin campaña'}

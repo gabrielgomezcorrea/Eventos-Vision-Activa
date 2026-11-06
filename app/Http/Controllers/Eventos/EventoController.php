@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Eventos;
 
 use App\Console\Commands\RecordarReservas;
+use App\Enums\EtapaDeSeguimiento;
 use App\Enums\EventModality;
 use App\Enums\EventStatus;
 use App\Enums\OrderStatus;
+use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Permiso;
 use App\Enums\ReservationDurationUnit;
@@ -22,8 +24,10 @@ use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\EventSession;
 use App\Models\Invitation;
+use App\Models\Participant;
 use App\Models\Payment;
 use App\Support\Forms\ProgramFormField;
+use App\Support\Presentar;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -45,11 +49,26 @@ class EventoController extends Controller
             'modalidad' => ['nullable', Rule::enum(EventModality::class)],
         ]);
 
-        $eventos = Event::query()
-            ->withCount(['sessions', 'accessTypes'])
+        // Opens on the published ones: they are the ones being worked on.
+        $estado = EventStatus::tryFrom($filtros['estado'] ?? '') ?? EventStatus::Publicado;
+
+        $base = fn (): Builder => Event::query()
             ->when($filtros['buscar'] ?? null, fn (Builder $q, string $buscar) => $q->where('name', 'like', "%{$buscar}%"))
-            ->when($filtros['estado'] ?? null, fn (Builder $q, string $estado) => $q->where('status', $estado))
-            ->when($filtros['modalidad'] ?? null, fn (Builder $q, string $modalidad) => $q->where('modality', $modalidad))
+            ->when($filtros['modalidad'] ?? null, fn (Builder $q, string $modalidad) => $q->where('modality', $modalidad));
+
+        $eventos = $base()
+            ->where('status', $estado->value)
+            ->withCount(['sessions', 'accessTypes'])
+            // People with a fully paid enrollment: the events that already
+            // have them go first, so the busy ones are one click away.
+            ->addSelect(['inscritos' => Participant::query()
+                ->join('orders', 'orders.id', '=', 'participants.order_id')
+                ->whereColumn('orders.event_id', 'events.id')
+                ->where('orders.status', '!=', OrderStatus::Borrador->value)
+                ->where('orders.payment_status', PaymentStatus::Aprobado->value)
+                ->where('participants.status', '!=', ParticipantStatus::Reemplazado->value)
+                ->selectRaw('count(*)')])
+            ->orderByDesc('inscritos')
             ->latest()
             ->paginate(15)
             ->withQueryString()
@@ -62,13 +81,31 @@ class EventoController extends Controller
                 'fecha' => $evento->starts_on?->format('d-m-Y'),
                 'jornadas' => $evento->sessions_count,
                 'accesos' => $evento->access_types_count,
+                'inscritos' => (int) $evento->getAttribute('inscritos'),
                 'reserva' => self::plazo($evento),
             ]);
 
         return Inertia::render('eventos/index', [
             'eventos' => $eventos,
-            'filtros' => (object) array_filter($filtros),
-            'estados' => EventStatus::options(),
+            'filtros' => [
+                'buscar' => $filtros['buscar'] ?? null,
+                'estado' => $estado->value,
+                'modalidad' => $filtros['modalidad'] ?? null,
+            ],
+            'estados' => collect(EventStatus::cases())->map(fn (EventStatus $e): array => [
+                ...Presentar::estado($e),
+                'label' => match ($e) {
+                    EventStatus::Borrador => 'Borradores',
+                    EventStatus::Publicado => 'Publicados',
+                    EventStatus::Cerrado => 'Cerrados',
+                },
+                'descripcion' => match ($e) {
+                    EventStatus::Borrador => 'Aún no reciben inscripciones.',
+                    EventStatus::Publicado => 'Reciben inscripciones ahora.',
+                    EventStatus::Cerrado => 'Ya no reciben inscripciones.',
+                },
+                'cantidad' => $base()->where('status', $e->value)->count(),
+            ])->all(),
             'modalidades' => EventModality::options(),
             'puedeCrear' => $request->user()->can('create', Event::class),
         ]);
@@ -346,7 +383,7 @@ class EventoController extends Controller
     {
         return [
             'solicitudes' => $evento->programRequests()->count(),
-            'solicitudes_sin_seguir' => $evento->programRequests()->whereDoesntHave('notes')->whereNull('converted_at')->count(),
+            'solicitudes_sin_seguir' => $evento->programRequests()->enEtapa(EtapaDeSeguimiento::Solicito)->whereDoesntHave('notes')->count(),
             'inscripciones' => $evento->orders()->whereNotNull('number')->count(),
             'pagadas' => $evento->orders()->where('payment_status', PaymentStatus::Aprobado)->count(),
             'por_vencer' => $evento->orders()

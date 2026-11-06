@@ -9,8 +9,10 @@ use App\Enums\OrderKind;
 use App\Enums\OrderStatus;
 use App\Enums\ParticipantStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\VistaDeInscripciones;
 use App\Support\DescuentoDeCodigo;
 use Database\Factories\OrderFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -106,6 +108,57 @@ class Order extends Model
     public function creadaPor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /**
+     * The card an order belongs to in Inscripciones. They exclude each other:
+     * paid first, then lost seats, then the review queue, then what is owed.
+     * Drafts only count once someone wrote something (or the team created
+     * them, because the team has to fill them in).
+     *
+     * @param  Builder<self>  $consulta
+     * @return Builder<self>
+     */
+    public function scopeEnVista(Builder $consulta, VistaDeInscripciones $vista): Builder
+    {
+        $confirmadas = [OrderStatus::Reservada->value, OrderStatus::Finalizada->value];
+        $perdidas = [OrderStatus::Vencida->value, OrderStatus::Cancelada->value];
+
+        return match ($vista) {
+            VistaDeInscripciones::Pagadas => $consulta
+                ->where('status', '!=', OrderStatus::Borrador->value)
+                ->where('payment_status', PaymentStatus::Aprobado->value),
+            VistaDeInscripciones::VencidasYCanceladas => $consulta
+                ->whereIn('status', $perdidas)
+                ->where('payment_status', '!=', PaymentStatus::Aprobado->value),
+            VistaDeInscripciones::EnRevision => $consulta
+                ->whereIn('status', $confirmadas)
+                ->where('payment_status', PaymentStatus::EnValidacion->value),
+            VistaDeInscripciones::PorPagar => $consulta
+                ->whereIn('status', $confirmadas)
+                ->whereNotIn('payment_status', [PaymentStatus::Aprobado->value, PaymentStatus::EnValidacion->value]),
+            VistaDeInscripciones::EnProceso => $consulta
+                ->where('status', OrderStatus::Borrador->value)
+                ->whereNot(fn (Builder $q) => $q->borradorVacio()),
+        };
+    }
+
+    /**
+     * A draft nobody wrote anything in: born when a link is opened (also by
+     * the mail provider's link scanner). Not an enrollment, so it is hidden.
+     *
+     * @param  Builder<self>  $consulta
+     * @return Builder<self>
+     */
+    public function scopeBorradorVacio(Builder $consulta): Builder
+    {
+        return $consulta
+            ->where('status', OrderStatus::Borrador->value)
+            ->whereNull('created_by_user_id')
+            ->whereNull('payer_entity_id')
+            ->where(fn (Builder $q) => $q->whereNull('responsible_name')->orWhere('responsible_name', ''))
+            ->whereDoesntHave('participants')
+            ->whereDoesntHave('establishments');
     }
 
     /** La inscripción la inició el equipo desde el panel, no el cliente. */

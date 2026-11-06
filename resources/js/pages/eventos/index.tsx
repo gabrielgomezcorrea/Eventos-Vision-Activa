@@ -27,6 +27,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import type { Estado, Paginado } from '@/types';
 
 type EventoFila = {
@@ -38,19 +39,22 @@ type EventoFila = {
     fecha: string | null;
     jornadas: number;
     accesos: number;
+    inscritos: number;
     reserva: string;
 };
 
 type Filtros = {
-    buscar?: string;
-    estado?: string;
-    modalidad?: string;
+    buscar: string | null;
+    estado: string;
+    modalidad: string | null;
 };
+
+type EstadoCard = Estado & { cantidad: number; descripcion: string };
 
 type Props = {
     eventos: Paginado<EventoFila>;
     filtros: Filtros;
-    estados: Record<string, string>;
+    estados: EstadoCard[];
     modalidades: Record<string, string>;
     puedeCrear: boolean;
 };
@@ -192,7 +196,7 @@ export default function EventosIndex({
         breadcrumbs: [{ title: 'Eventos', href: EventoController.index() }],
     });
 
-    function filtrar(cambios: Filtros) {
+    function filtrar(cambios: Partial<Filtros>) {
         const query = Object.fromEntries(
             Object.entries({ ...filtros, ...cambios }).filter(
                 ([, valor]) => valor,
@@ -211,9 +215,7 @@ export default function EventosIndex({
         filtrar({ buscar });
     }
 
-    const hayFiltros = Boolean(
-        filtros.buscar || filtros.estado || filtros.modalidad,
-    );
+    const hayFiltros = Boolean(filtros.buscar || filtros.modalidad);
 
     return (
         <>
@@ -224,6 +226,45 @@ export default function EventosIndex({
                         Eventos
                     </h1>
                     {puedeCrear && <NuevoEvento modalidades={modalidades} />}
+                </div>
+
+                <div
+                    role="group"
+                    aria-label="Estado"
+                    className="grid gap-2 sm:grid-cols-3"
+                >
+                    {estados.map((estado) => {
+                        const elegido = estado.value === filtros.estado;
+
+                        return (
+                            <button
+                                key={estado.value}
+                                type="button"
+                                aria-pressed={elegido}
+                                onClick={() =>
+                                    filtrar({ estado: estado.value })
+                                }
+                                className={cn(
+                                    'bg-card flex items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left shadow-xs transition-colors',
+                                    elegido
+                                        ? 'border-primary ring-primary ring-1'
+                                        : 'hover:bg-muted/50',
+                                )}
+                            >
+                                <span className="min-w-0">
+                                    <span className="block font-medium">
+                                        {estado.label}
+                                    </span>
+                                    <span className="text-muted-foreground block text-xs">
+                                        {estado.descripcion}
+                                    </span>
+                                </span>
+                                <span className="text-2xl font-semibold tabular-nums">
+                                    {estado.cantidad}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -242,19 +283,6 @@ export default function EventosIndex({
                         />
                     </form>
                     <NativeSelect
-                        aria-label="Estado"
-                        className="w-auto"
-                        value={filtros.estado ?? ''}
-                        onChange={(e) => filtrar({ estado: e.target.value })}
-                    >
-                        <option value="">Todos los estados</option>
-                        {Object.entries(estados).map(([valor, texto]) => (
-                            <option key={valor} value={valor}>
-                                {texto}
-                            </option>
-                        ))}
-                    </NativeSelect>
-                    <NativeSelect
                         aria-label="Modalidad"
                         className="w-auto"
                         value={filtros.modalidad ?? ''}
@@ -272,7 +300,7 @@ export default function EventosIndex({
                             variant="ghost"
                             onClick={() => {
                                 setBuscar('');
-                                router.get(EventoController.index.url());
+                                filtrar({ buscar: null, modalidad: null });
                             }}
                         >
                             Quitar filtros
@@ -288,10 +316,10 @@ export default function EventosIndex({
                                 <TableHead>Estado</TableHead>
                                 <TableHead>Modalidad</TableHead>
                                 <TableHead className="text-center">
-                                    Jornadas
+                                    Inscritos
                                 </TableHead>
                                 <TableHead className="text-center">
-                                    Accesos
+                                    Jornadas
                                 </TableHead>
                                 <TableHead>Reserva</TableHead>
                             </TableRow>
@@ -340,11 +368,17 @@ export default function EventosIndex({
                                         <EstadoBadge estado={evento.estado} />
                                     </TableCell>
                                     <TableCell>{evento.modalidad}</TableCell>
-                                    <TableCell className="text-center tabular-nums">
-                                        {evento.jornadas}
+                                    <TableCell className="text-center text-base font-semibold tabular-nums">
+                                        {evento.inscritos}
                                     </TableCell>
                                     <TableCell className="text-center tabular-nums">
-                                        {evento.accesos}
+                                        {evento.jornadas}
+                                        <span className="text-muted-foreground block text-xs">
+                                            {evento.accesos}{' '}
+                                            {evento.accesos === 1
+                                                ? 'acceso'
+                                                : 'accesos'}
+                                        </span>
                                     </TableCell>
                                     <TableCell>{evento.reserva}</TableCell>
                                 </TableRow>

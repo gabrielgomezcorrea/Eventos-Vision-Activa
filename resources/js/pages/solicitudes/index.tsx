@@ -1,14 +1,15 @@
 import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
-import { Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Download, Search, X } from 'lucide-react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
+import ExportarContactosController from '@/actions/App/Http/Controllers/Solicitudes/ExportarContactosController';
 import SolicitudController from '@/actions/App/Http/Controllers/Solicitudes/SolicitudController';
 import { EstadoBadge } from '@/components/estado-badge';
 import { ExportarContactos } from '@/components/exportar-contactos';
 import type { OpcionesExportacion } from '@/components/exportar-contactos';
 import { NativeSelect } from '@/components/native-select';
 import { Paginacion } from '@/components/paginacion';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
     Table,
@@ -18,6 +19,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import type { Estado, Paginado } from '@/types';
 
 type SolicitudFila = {
@@ -32,32 +34,39 @@ type SolicitudFila = {
     institucion: string | null;
     evento: string | null;
     estado: Estado;
+    detalle: string | null;
     ultima_nota: string | null;
 };
 
 type Filtros = {
     buscar: string | null;
     evento: number | null;
-    pendientes: boolean;
-    cargo: string | null;
-    seguimiento: string | null;
+    etapa: string;
+    sin_contactar: boolean;
 };
+
+type Etapa = Estado & { cantidad: number; descripcion: string };
 
 type Props = {
     solicitudes: Paginado<SolicitudFila>;
     filtros: Filtros;
+    etapas: Etapa[];
     eventos: Record<string, string>;
-    cargos: string[];
     exportacion: OpcionesExportacion | null;
 };
 
-const CLAVE_PENDIENTES = 'solicitudes.solo-pendientes';
+const VACIO: Record<string, string> = {
+    solicito: 'Nadie está esperando seguimiento.',
+    pre_inscrito: 'Nadie dejó su inscripción a medias.',
+    inscrito: 'Todavía no hay inscripciones pagadas.',
+    no_participara: 'Nadie se ha marcado como «No participará».',
+};
 
 export default function SolicitudesIndex({
     solicitudes,
     filtros,
+    etapas,
     eventos,
-    cargos,
     exportacion,
 }: Props) {
     const [buscar, setBuscar] = useState(filtros.buscar ?? '');
@@ -68,43 +77,19 @@ export default function SolicitudesIndex({
         ],
     });
 
-    // El interruptor «solo las que faltan por seguir» se recuerda en este
-    // navegador: si la URL no lo trae, se aplica lo último que se eligió.
-    useEffect(() => {
-        const guardado = localStorage.getItem(CLAVE_PENDIENTES);
-
-        if (
-            guardado !== null &&
-            !new URLSearchParams(window.location.search).has('pendientes') &&
-            (guardado === '1') !== filtros.pendientes
-        ) {
-            filtrar({ pendientes: guardado === '1' });
-        }
-        // Solo al abrir la pantalla.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    function consulta(todos: Filtros) {
+        return {
+            ...(todos.buscar ? { buscar: todos.buscar } : {}),
+            ...(todos.evento ? { evento: todos.evento } : {}),
+            etapa: todos.etapa,
+            ...(todos.sin_contactar ? { seguimiento: 'sin' } : {}),
+        };
+    }
 
     function filtrar(cambios: Partial<Filtros>) {
-        const todos = { ...filtros, ...cambios };
-
-        if (cambios.pendientes !== undefined) {
-            localStorage.setItem(
-                CLAVE_PENDIENTES,
-                cambios.pendientes ? '1' : '0',
-            );
-        }
-
         router.get(
             SolicitudController.index.url(),
-            {
-                ...(todos.buscar ? { buscar: todos.buscar } : {}),
-                ...(todos.evento ? { evento: todos.evento } : {}),
-                pendientes: todos.pendientes ? 1 : 0,
-                ...(todos.cargo ? { cargo: todos.cargo } : {}),
-                ...(todos.seguimiento
-                    ? { seguimiento: todos.seguimiento }
-                    : {}),
-            },
+            consulta({ ...filtros, ...cambios }),
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
@@ -114,19 +99,16 @@ export default function SolicitudesIndex({
         filtrar({ buscar });
     }
 
-    const hayFiltros = Boolean(
-        filtros.buscar ||
-        filtros.evento ||
-        filtros.pendientes ||
-        filtros.cargo ||
-        filtros.seguimiento,
-    );
+    const actual = etapas.find((e) => e.value === filtros.etapa);
+    const urlDescarga = ExportarContactosController.etapa.url({
+        query: consulta(filtros),
+    });
 
     return (
         <>
             <Head title="Solicitudes" />
             <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <h1 className="text-xl font-semibold tracking-tight">
                         Solicitudes
                     </h1>
@@ -136,6 +118,48 @@ export default function SolicitudesIndex({
                             opciones={exportacion}
                         />
                     )}
+                </div>
+
+                <div
+                    role="group"
+                    aria-label="Etapa"
+                    className="grid grid-cols-2 gap-2 lg:grid-cols-4"
+                >
+                    {etapas.map((etapa) => {
+                        const elegida = etapa.value === filtros.etapa;
+
+                        return (
+                            <button
+                                key={etapa.value}
+                                type="button"
+                                aria-pressed={elegida}
+                                onClick={() =>
+                                    filtrar({
+                                        etapa: etapa.value,
+                                        sin_contactar: false,
+                                    })
+                                }
+                                className={cn(
+                                    'bg-card flex items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left shadow-xs transition-colors',
+                                    elegida
+                                        ? 'border-primary ring-primary ring-1'
+                                        : 'hover:bg-muted/50',
+                                )}
+                            >
+                                <span className="min-w-0">
+                                    <span className="block font-medium">
+                                        {etapa.label}
+                                    </span>
+                                    <span className="text-muted-foreground block text-xs">
+                                        {etapa.descripcion}
+                                    </span>
+                                </span>
+                                <span className="text-2xl font-semibold tabular-nums">
+                                    {etapa.cantidad}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -172,45 +196,26 @@ export default function SolicitudesIndex({
                             </option>
                         ))}
                     </NativeSelect>
-                    {cargos.length > 0 && (
-                        <NativeSelect
-                            aria-label="Cargo"
-                            className="w-auto max-w-56"
-                            value={filtros.cargo ?? ''}
-                            onChange={(e) =>
-                                filtrar({ cargo: e.target.value || null })
-                            }
+                    {filtros.sin_contactar && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => filtrar({ sin_contactar: false })}
                         >
-                            <option value="">Todos los cargos</option>
-                            {cargos.map((cargo) => (
-                                <option key={cargo} value={cargo}>
-                                    {cargo}
-                                </option>
-                            ))}
-                        </NativeSelect>
+                            Solo sin contactar
+                            <X />
+                        </Button>
                     )}
-                    <NativeSelect
-                        aria-label="Seguimiento"
-                        className="w-auto"
-                        value={filtros.seguimiento ?? ''}
-                        onChange={(e) =>
-                            filtrar({ seguimiento: e.target.value || null })
-                        }
-                    >
-                        <option value="">Seguimiento: todas</option>
-                        <option value="sin">Sin seguimiento</option>
-                        <option value="con">Con seguimiento</option>
-                        <option value="no_participara">No participará</option>
-                    </NativeSelect>
-                    <label className="flex items-center gap-2 px-2 text-sm">
-                        <Checkbox
-                            checked={filtros.pendientes}
-                            onCheckedChange={(valor) =>
-                                filtrar({ pendientes: valor === true })
-                            }
-                        />
-                        Solo las que faltan por seguir
-                    </label>
+                    {exportacion && (
+                        <div className="ml-auto flex flex-wrap items-center gap-2">
+                            <Button asChild>
+                                <a href={urlDescarga}>
+                                    <Download />
+                                    Descargar {actual?.label.toLowerCase()}
+                                </a>
+                            </Button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="bg-card rounded-xl border shadow-xs">
@@ -232,9 +237,9 @@ export default function SolicitudesIndex({
                                         colSpan={6}
                                         className="text-muted-foreground py-12 text-center"
                                     >
-                                        {hayFiltros
-                                            ? 'Ninguna solicitud coincide con los filtros.'
-                                            : 'Todavía no llegan solicitudes.'}
+                                        {filtros.buscar || filtros.evento
+                                            ? 'Nadie coincide con la búsqueda en esta etapa.'
+                                            : VACIO[filtros.etapa]}
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -293,6 +298,11 @@ export default function SolicitudesIndex({
                                     </TableCell>
                                     <TableCell>
                                         <EstadoBadge estado={s.estado} />
+                                        {s.detalle && (
+                                            <span className="text-muted-foreground block text-xs">
+                                                {s.detalle}
+                                            </span>
+                                        )}
                                         {s.ultima_nota && (
                                             <span className="text-muted-foreground block text-xs">
                                                 Última nota: {s.ultima_nota}

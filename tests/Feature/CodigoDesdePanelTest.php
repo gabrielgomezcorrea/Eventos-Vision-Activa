@@ -334,7 +334,7 @@ class CodigoDesdePanelTest extends TestCase
         $solicitud = ProgramRequest::factory()->create(['event_id' => $this->evento->id, 'email' => $orden->responsible_email]);
         $orden->forceFill(['program_request_id' => $solicitud->id])->save();
 
-        $this->actingAs($this->coordinacion)->get(route('inscripciones.index'))
+        $this->actingAs($this->coordinacion)->get(route('inscripciones.index', ['vista' => 'pagadas']))
             ->assertInertia(fn ($page) => $page->where('ordenes.data.0.estado.label', 'Inscrito')->where('ordenes.data.0.estado.color', 'success'));
 
         $this->actingAs($this->coordinacion)->get(route('solicitudes.show', $solicitud))

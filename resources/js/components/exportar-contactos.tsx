@@ -80,7 +80,7 @@ export function ExportarContactos({
             <SheetTrigger asChild>
                 <Button variant="outline">
                     <Download />
-                    Exportar contactos
+                    Exportar todos los contactos
                 </Button>
             </SheetTrigger>
             <SheetContent className="w-full overflow-y-auto sm:max-w-lg">

@@ -69,9 +69,12 @@ class PanelEventosTest extends TestCase
         $this->actingAs($this->usuario(Rol::Administrador));
 
         $this->get(route('dashboard'))->assertOk();
+        // Opens on the published ones; a new event is a draft until published.
         $this->get(route('eventos.index'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->component('eventos/index')->has('eventos.data', 1));
+            ->assertInertia(fn (Assert $page) => $page->component('eventos/index')->has('eventos.data', 0)->where('estados.0.cantidad', 1));
+        $this->get(route('eventos.index', ['estado' => 'draft']))
+            ->assertInertia(fn (Assert $page) => $page->has('eventos.data', 1)->where('eventos.data.0.inscritos', 0));
         $this->get(route('eventos.show', $evento))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page

@@ -143,11 +143,15 @@ class PanelInscripcionesTest extends TestCase
             'responsible_email' => 'eva@colegio.cl',
         ]);
 
+        // The confirmed one is owed; the two drafts with data are in progress.
         $this->get(route('inscripciones.index'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
+                ->where('ordenes.data', fn ($filas) => collect($filas)->pluck('entidad')->all() === ['Fundación Educar']));
+        $this->get(route('inscripciones.index', ['vista' => 'en_proceso']))
+            ->assertInertia(fn (Assert $page) => $page
                 ->where('ordenes.data', fn ($filas) => collect($filas)->pluck('entidad')->sort()->values()->all()
-                    === collect(['Colegio Norte', 'Fundación Educar', null])->sort()->values()->all()));
+                    === collect(['Colegio Norte', null])->sort()->values()->all()));
     }
 
     public function test_la_ficha_de_un_colegio_muestra_a_sus_hermanas_del_conjunto(): void
