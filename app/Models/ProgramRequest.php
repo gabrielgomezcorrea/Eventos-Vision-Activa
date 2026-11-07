@@ -169,6 +169,22 @@ class ProgramRequest extends Model
     }
 
     /**
+     * Within «Solicitó», whether the team already wrote them a note:
+     * `sin` = Nueva solicitud, `contactado` = Contactado, null = everyone.
+     *
+     * @param  Builder<self>  $consulta
+     * @return Builder<self>
+     */
+    public function scopeDeSeguimiento(Builder $consulta, ?string $seguimiento): Builder
+    {
+        return match ($seguimiento) {
+            'sin' => $consulta->whereDoesntHave('notes'),
+            'contactado' => $consulta->whereHas('notes'),
+            default => $consulta,
+        };
+    }
+
+    /**
      * La búsqueda y el evento del listado, compartidos con su exportación para
      * que el archivo traiga exactamente lo que se ve en pantalla.
      *

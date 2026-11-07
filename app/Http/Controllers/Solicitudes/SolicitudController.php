@@ -45,19 +45,19 @@ class SolicitudController extends Controller
             'buscar' => ['nullable', 'string', 'max:120'],
             'evento' => ['nullable', 'integer'],
             'etapa' => ['nullable', Rule::enum(EtapaDeSeguimiento::class)],
-            // Solo llega desde la tarjeta del Escritorio y de la ficha del evento.
-            'seguimiento' => ['nullable', 'in:sin'],
+            // Solo aplica en «Solicitó»: sin notas (Nueva solicitud) o con notas (Contactado).
+            'seguimiento' => ['nullable', 'in:sin,contactado'],
         ]);
 
         // Por defecto, quienes faltan por seguir: es el trabajo del día.
         $etapa = EtapaDeSeguimiento::tryFrom($filtros['etapa'] ?? '') ?? EtapaDeSeguimiento::Solicito;
-        $sinContactar = ($filtros['seguimiento'] ?? null) === 'sin' && $etapa === EtapaDeSeguimiento::Solicito;
+        $seguimiento = $etapa === EtapaDeSeguimiento::Solicito ? ($filtros['seguimiento'] ?? null) : null;
 
         $base = fn (): Builder => ProgramRequest::query()->delListado($filtros);
 
         $solicitudes = $base()
             ->enEtapa($etapa)
-            ->when($sinContactar, fn (Builder $q) => $q->whereDoesntHave('notes'))
+            ->deSeguimiento($seguimiento)
             ->with('event')
             ->withCount('notes')
             ->withMax('notes', 'created_at')
@@ -67,25 +67,33 @@ class SolicitudController extends Controller
 
         $ordenes = ProgramRequest::ordenesDe($solicitudes->getCollection());
 
-        $solicitudes->through(fn (ProgramRequest $solicitud): array => [
-            'id' => $solicitud->id,
-            'recibida' => Presentar::fecha($solicitud->created_at),
-            'recibida_hora' => $solicitud->created_at->format('H:i'),
-            'persona' => $solicitud->nombreParaMostrar(),
-            'directa' => $solicitud->esDirecta(),
-            'cargo' => $solicitud->datoOResponsable('position', 'responsible_position'),
-            'correo' => $solicitud->email,
-            'telefono' => $solicitud->datoOResponsable('phone', 'responsible_phone'),
-            'institucion' => $solicitud->institucionParaMostrar(),
-            'evento' => $solicitud->event?->name,
-            'estado' => Presentar::estado($etapa),
-            'detalle' => match ($etapa) {
-                EtapaDeSeguimiento::Solicito => $solicitud->seguimiento(),
-                EtapaDeSeguimiento::PreInscrito => ProgramRequest::detalleDePreInscrito($ordenes[$solicitud->id] ?? collect()),
-                default => null,
-            },
-            'ultima_nota' => $solicitud->getAttribute('notes_max_created_at') === null ? null : Carbon::parse($solicitud->getAttribute('notes_max_created_at'))->format('d-m H:i'),
-        ]);
+        $solicitudes->through(function (ProgramRequest $solicitud) use ($etapa, $ordenes): array {
+            $contactada = $etapa === EtapaDeSeguimiento::Solicito && $solicitud->tieneNotas();
+
+            return [
+                'id' => $solicitud->id,
+                'recibida' => Presentar::fecha($solicitud->created_at),
+                'recibida_hora' => $solicitud->created_at->format('H:i'),
+                'persona' => $solicitud->nombreParaMostrar(),
+                'directa' => $solicitud->esDirecta(),
+                'cargo' => $solicitud->datoOResponsable('position', 'responsible_position'),
+                'correo' => $solicitud->email,
+                'telefono' => $solicitud->datoOResponsable('phone', 'responsible_phone'),
+                'institucion' => $solicitud->institucionParaMostrar(),
+                'evento' => $solicitud->event?->name,
+                // Already followed up: green, so the team sees who is done at a glance.
+                'estado' => $contactada
+                    ? ['value' => 'contactado', 'label' => 'Contactado', 'color' => 'success']
+                    : Presentar::estado($etapa),
+                'detalle' => match (true) {
+                    $contactada => null,
+                    $etapa === EtapaDeSeguimiento::Solicito => $solicitud->seguimiento(),
+                    $etapa === EtapaDeSeguimiento::PreInscrito => ProgramRequest::detalleDePreInscrito($ordenes[$solicitud->id] ?? collect()),
+                    default => null,
+                },
+                'ultima_nota' => $solicitud->getAttribute('notes_max_created_at') === null ? null : Carbon::parse($solicitud->getAttribute('notes_max_created_at'))->format('d-m H:i'),
+            ];
+        });
 
         return Inertia::render('solicitudes/index', [
             'solicitudes' => $solicitudes,
@@ -93,7 +101,7 @@ class SolicitudController extends Controller
                 'buscar' => $filtros['buscar'] ?? null,
                 'evento' => $filtros['evento'] ?? null,
                 'etapa' => $etapa->value,
-                'sin_contactar' => $sinContactar,
+                'seguimiento' => $seguimiento,
             ],
             // Cuántas hay en cada etapa con la búsqueda y el evento de ahora:
             // así se ve dónde quedó alguien sin tener que probar cada botón.

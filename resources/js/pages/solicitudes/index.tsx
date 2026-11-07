@@ -1,5 +1,5 @@
 import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
-import { Download, Search, X } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import ExportarContactosController from '@/actions/App/Http/Controllers/Solicitudes/ExportarContactosController';
@@ -42,7 +42,7 @@ type Filtros = {
     buscar: string | null;
     evento: number | null;
     etapa: string;
-    sin_contactar: boolean;
+    seguimiento: 'sin' | 'contactado' | null;
 };
 
 type Etapa = Estado & { cantidad: number; descripcion: string };
@@ -82,7 +82,7 @@ export default function SolicitudesIndex({
             ...(todos.buscar ? { buscar: todos.buscar } : {}),
             ...(todos.evento ? { evento: todos.evento } : {}),
             etapa: todos.etapa,
-            ...(todos.sin_contactar ? { seguimiento: 'sin' } : {}),
+            ...(todos.seguimiento ? { seguimiento: todos.seguimiento } : {}),
         };
     }
 
@@ -136,7 +136,7 @@ export default function SolicitudesIndex({
                                 onClick={() =>
                                     filtrar({
                                         etapa: etapa.value,
-                                        sin_contactar: false,
+                                        seguimiento: null,
                                     })
                                 }
                                 className={cn(
@@ -196,15 +196,24 @@ export default function SolicitudesIndex({
                             </option>
                         ))}
                     </NativeSelect>
-                    {filtros.sin_contactar && (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => filtrar({ sin_contactar: false })}
+                    {filtros.etapa === 'solicito' && (
+                        <NativeSelect
+                            aria-label="Estado"
+                            className="w-auto"
+                            value={filtros.seguimiento ?? ''}
+                            onChange={(e) =>
+                                filtrar({
+                                    seguimiento:
+                                        (e.target
+                                            .value as Filtros['seguimiento']) ||
+                                        null,
+                                })
+                            }
                         >
-                            Solo sin contactar
-                            <X />
-                        </Button>
+                            <option value="">Todos los estados</option>
+                            <option value="sin">Nueva solicitud</option>
+                            <option value="contactado">Contactado</option>
+                        </NativeSelect>
                     )}
                     {exportacion && (
                         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -237,7 +246,9 @@ export default function SolicitudesIndex({
                                         colSpan={6}
                                         className="text-muted-foreground py-12 text-center"
                                     >
-                                        {filtros.buscar || filtros.evento
+                                        {filtros.buscar ||
+                                        filtros.evento ||
+                                        filtros.seguimiento
                                             ? 'Nadie coincide con la búsqueda en esta etapa.'
                                             : VACIO[filtros.etapa]}
                                     </TableCell>

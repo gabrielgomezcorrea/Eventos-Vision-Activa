@@ -45,6 +45,7 @@ class ExportarContactosController extends Controller
             'etapa' => ['required', Rule::enum(EtapaDeSeguimiento::class)],
             'buscar' => ['nullable', 'string', 'max:120'],
             'evento' => ['nullable', 'integer'],
+            'seguimiento' => ['nullable', 'in:sin,contactado'],
         ]);
         $etapa = EtapaDeSeguimiento::from($filtros['etapa']);
 

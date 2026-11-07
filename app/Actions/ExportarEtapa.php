@@ -17,7 +17,7 @@ class ExportarEtapa
     public const COLUMNAS = ['correo', 'nombre', 'apellidos', 'telefono', 'cargo', 'institucion', 'evento', 'etapa', 'detalle', 'solicitud'];
 
     /**
-     * @param  array{buscar?: string|null, evento?: int|null}  $filtros
+     * @param  array{buscar?: string|null, evento?: int|null, seguimiento?: string|null}  $filtros
      * @return array<int, array<string, string|null>>
      */
     public function __invoke(EtapaDeSeguimiento $etapa, array $filtros): array
@@ -25,6 +25,7 @@ class ExportarEtapa
         $solicitudes = ProgramRequest::query()
             ->delListado($filtros)
             ->enEtapa($etapa)
+            ->deSeguimiento($etapa === EtapaDeSeguimiento::Solicito ? ($filtros['seguimiento'] ?? null) : null)
             ->with('event')
             ->withCount('notes')
             ->latest()

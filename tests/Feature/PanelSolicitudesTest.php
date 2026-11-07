@@ -200,6 +200,9 @@ class PanelSolicitudesTest extends TestCase
 
         $this->assertSame(['ana@colegio.cl', 'luis@colegio.cl', 'marta@colegio.cl'], $this->correosEn('solicito'));
         $this->assertSame(['ana@colegio.cl', 'marta@colegio.cl'], $this->correosEn('solicito', ['seguimiento' => 'sin']));
+        $this->assertSame(['luis@colegio.cl'], $this->correosEn('solicito', ['seguimiento' => 'contactado']));
+        $filaLuis = collect($this->get(route('solicitudes.index', ['etapa' => 'solicito']))->viewData('page')['props']['solicitudes']['data'])->firstWhere('correo', 'luis@colegio.cl');
+        $this->assertSame(['Contactado', 'success', null], [$filaLuis['estado']['label'], $filaLuis['estado']['color'], $filaLuis['detalle']]);
         $this->assertSame(['borrador@colegio.cl', 'confirmo@colegio.cl', 'mitad@colegio.cl', 'revision@colegio.cl', 'vencida@colegio.cl', 'volvio@colegio.cl'], $this->correosEn('pre_inscrito'));
         $this->assertSame(['pagado@colegio.cl'], $this->correosEn('inscrito'));
         $this->assertSame(['no@colegio.cl'], $this->correosEn('no_participara'));
