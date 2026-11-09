@@ -20,6 +20,9 @@
     $aprobado = $orden->payment_status->liberaCredenciales();
     $muestraTransferencia = $borrador || (($orden->status === \App\Enums\OrderStatus::Reservada || $orden->seReactivaAlPagar()) && ! $aprobado);
     $admiteComprobante = ! $borrador && $orden->admiteComprobante();
+    // A crédito solo sin abonos: en borrador se ofrece igual (el botón queda bloqueado como el del contado).
+    $creditoDisponible = $borrador || $orden->admitePagoACredito();
+    $formaDePago = ($valores['forma_de_pago'] ?? null) === 'credito' && $creditoDisponible ? 'credito' : 'contado';
 
     $total = $borrador ? $orden->calcularTotal() : (int) $orden->total;
     // Con varios colegios cada paso dice de cuál es.
@@ -33,6 +36,10 @@
 @if (request('comprobante') === 'recibido' && ! ($errorDeComprobante ?? null))
     <div class="aviso aviso-exito" role="status">
         <strong>Se ha subido correctamente tu comprobante.</strong> Contabilidad lo revisará y te avisaremos por correo.
+    </div>
+@elseif (request('comprobante') === 'credito' && ! ($errorDeComprobante ?? null))
+    <div class="aviso aviso-exito" role="status">
+        <strong>Recibimos tu pago a crédito.</strong> Contabilidad lo aprobará y te avisaremos por correo.
     </div>
 @endif
 
@@ -70,7 +77,21 @@
 @endif
 
 
-@if ($pago && $pago->status === \App\Enums\PaymentStatus::EnValidacion)
+@if ($pago && $pago->status === \App\Enums\PaymentStatus::EnValidacion && $pago->method === \App\Enums\PaymentMethod::Credito)
+    <div class="tarjeta">
+        <h2>Pago a crédito en revisión</h2>
+        <p class="sub">
+            Lo recibimos el {{ $pago->created_at->translatedFormat('d \d\e F, H:i') }}.
+            Contabilidad lo aprobará y te avisaremos por correo. Mientras tanto, tus cupos siguen reservados.
+        </p>
+        <table>
+            <tbody>
+                <tr><td style="width:38%;color:var(--texto-suave)">Monto</td><td>${{ number_format($pago->amount, 0, ',', '.') }}</td></tr>
+                <tr><td style="color:var(--texto-suave)">Orden de compra</td><td>{{ $pago->purchase_order ?: '—' }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+@elseif ($pago && $pago->status === \App\Enums\PaymentStatus::EnValidacion)
     <div class="tarjeta">
         <h2>Comprobante en validación</h2>
         <p class="sub">
@@ -139,17 +160,38 @@
             <p class="sub" style="margin-top:14px">{{ $event->payment_instructions }}</p>
         @endif
 
+        @php
+            // Con un pago en revisión no hay nada que llenar: se muestra cuál
+            // está en revisión y el formulario vuelve cuando Contabilidad lo revisa.
+            $enRevision = ! $borrador && ! $admiteComprobante && $orden->tieneAbonoEnRevision();
+            $abonoEnRevision = $enRevision ? $orden->payments->firstWhere('status', \App\Enums\PaymentStatus::EnValidacion) : null;
+            $creditoEnRevision = $abonoEnRevision?->method === \App\Enums\PaymentMethod::Credito;
+        @endphp
+
+        @unless ($enRevision)
+            <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--borde)">
+                <h3 class="paso" style="margin:0 0 10px">2. ¿Cómo pagarás?</h3>
+                <select id="forma-de-pago-{{ $orden->id }}" data-forma-de-pago aria-label="Forma de pago" style="max-width:360px">
+                    <option value="contado" @selected($formaDePago === 'contado')>Pago al contado</option>
+                    <option value="credito" @selected($formaDePago === 'credito') @disabled(! $creditoDisponible)>
+                        Pago a crédito{{ $creditoDisponible ? '' : ' (ya tienes abonos al contado)' }}
+                    </option>
+                </select>
+            </div>
+        @endunless
+
         <form method="POST" action="{{ $admiteComprobante ? route('inscripcion.comprobante', $parametros) : '#' }}"
-              enctype="multipart/form-data" novalidate id="comprobante" data-validar-comprobante data-saldo="{{ $borrador ? 0 : $orden->saldo() }}">
-            <h3 class="paso">2. Sube el comprobante</h3>
-            @php
-                // Con un comprobante en revisión no hay nada que llenar: se muestra
-                // cuál está en revisión y el formulario vuelve cuando Contabilidad lo revisa.
-                $enRevision = ! $borrador && ! $admiteComprobante && $orden->tieneAbonoEnRevision();
-                $abonoEnRevision = $enRevision ? $orden->payments->firstWhere('status', \App\Enums\PaymentStatus::EnValidacion) : null;
-            @endphp
-            @if ($enRevision)
-                <div class="aviso aviso-info">
+              enctype="multipart/form-data" novalidate id="comprobante" data-validar-comprobante data-saldo="{{ $borrador ? 0 : $orden->saldo() }}"
+              data-forma="contado" @if (! $enRevision && $formaDePago !== 'contado') hidden @endif>
+            @unless ($enRevision)
+                <h3 class="paso" style="border-top:0;margin-top:16px;padding-top:0">Sube el comprobante</h3>
+            @endunless
+            @if ($enRevision && $creditoEnRevision)
+                <div class="aviso aviso-info" style="margin-top:20px">
+                    <strong>Pago a crédito en revisión.</strong> Te avisaremos por correo cuando Contabilidad lo apruebe.
+                </div>
+            @elseif ($enRevision)
+                <div class="aviso aviso-info" style="margin-top:20px">
                     <strong>Comprobante en revisión.</strong> Te avisaremos por correo cuando Contabilidad lo valide.
                     @if ($abonoEnRevision)
                         <br>Monto enviado: ${{ number_format($abonoEnRevision->amount, 0, ',', '.') }} ·
@@ -226,6 +268,33 @@
             @endif
         </form>
 
+        @unless ($enRevision)
+            {{-- A crédito la inscripción hace de orden de compra: no se adjunta
+                 nada y la orden de compra propia es opcional y libre. --}}
+            <form method="POST" action="{{ $admiteComprobante ? route('inscripcion.pago-a-credito', $parametros) : '#' }}"
+                  id="pago-a-credito" data-forma="credito" @if ($formaDePago !== 'credito') hidden @endif>
+                <h3 class="paso" style="border-top:0;margin-top:16px;padding-top:0">Pago a crédito</h3>
+                <p class="sub">Esta inscripción sirve como orden de compra. No necesitas adjuntar nada.</p>
+                <div style="max-width:360px">
+                    <label for="purchase_order-{{ $orden->id }}">N° de orden de compra <span class="opcional">(opcional)</span></label>
+                    <input type="text" id="purchase_order-{{ $orden->id }}" name="purchase_order" maxlength="120"
+                           value="{{ $valores['purchase_order'] ?? '' }}" @disabled(! $borrador && ! $admiteComprobante)
+                           @if ($errores->has('purchase_order')) aria-invalid="true" @endif>
+                    @if ($errores->has('purchase_order'))
+                        <div class="error-campo">{{ $errores->first('purchase_order') }}</div>
+                    @endif
+                </div>
+                <div class="acciones" style="align-items:center">
+                    @if ($borrador)
+                        <a href="#aviso-pago" class="btn btn-primario btn-bloqueado" aria-disabled="true">Enviar pago a crédito</a>
+                    @else
+                        <button type="submit" class="btn btn-primario" @disabled(! $admiteComprobante)
+                                data-enviando-texto="Enviando…">Enviar pago a crédito</button>
+                    @endif
+                </div>
+            </form>
+        @endunless
+
         @if ($borrador)
             {{-- Va aparte porque un formulario no puede ir dentro de otro; el
                  enlace "confirmar tu inscripción" de arriba lo envía. --}}
@@ -238,11 +307,12 @@
     <div class="tarjeta">
         <h2>Comprobantes enviados</h2>
         <table>
-            <thead><tr><th>Fecha</th><th>Monto</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Forma</th><th>Monto</th><th>Estado</th></tr></thead>
             <tbody>
                 @foreach ($orden->payments as $abono)
                     <tr>
                         <td>{{ $abono->created_at->translatedFormat('d \d\e F, H:i') }}</td>
+                        <td>{{ $abono->method === \App\Enums\PaymentMethod::Credito ? 'Crédito' : 'Contado' }}</td>
                         <td>${{ number_format($abono->amount, 0, ',', '.') }}</td>
                         <td>{{ $orden->abonoReemplazado($abono) ? 'Reemplazado por un comprobante nuevo' : $abono->status->label() }}</td>
                     </tr>
@@ -310,6 +380,19 @@
 --}}
 @include('publico.portal._inscribir-mas')
 
+<script>
+(function () {
+    // Forma de pago: muestra solo el formulario de la opción elegida.
+    document.querySelectorAll('[data-forma-de-pago]').forEach(function (selector) {
+        var tarjeta = selector.closest('.tarjeta');
+        selector.addEventListener('change', function () {
+            tarjeta.querySelectorAll('form[data-forma]').forEach(function (f) {
+                f.hidden = f.dataset.forma !== selector.value;
+            });
+        });
+    });
+})();
+</script>
 <script>
 (function () {
     var form = document.querySelector('[data-validar-comprobante]');

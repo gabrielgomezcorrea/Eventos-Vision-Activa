@@ -108,7 +108,7 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         }
 
         $this->post(route('inscripcion.codigo.aplicar', ['token' => $token]), ['codigo' => $codigo->code])
-            ->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token]));
+            ->assertRedirect(route('inscripcion.portal.inscripcion', ['token' => $token, 'inscripcion' => $orden->public_id]));
 
         $this->get(route('inscripcion.portal.inscripcion', ['token' => $token]))
             ->assertSee('Descuento aplicado')->assertSee('Quitar código');
@@ -139,12 +139,47 @@ class CodigoDeDescuentoEnInscripcionTest extends TestCase
         $inscripcion()->assertDontSee('Descuento aplicado')->assertSee('$450.000', false);
     }
 
-    public function test_con_la_inscripcion_completa_la_caja_del_codigo_se_oculta(): void
+    public function test_con_la_inscripcion_completa_la_caja_del_codigo_sigue_a_la_vista(): void
     {
         $orden = $this->borrador(5); // responsable, pagador y participantes: completa
         [, $token] = MagicLink::emitir($this->evento, 'ana@colegio.cl', $orden);
 
-        $this->get(route('inscripcion.portal.programa', ['token' => $token]))->assertOk()->assertDontSee('¿Tienes un código?');
+        $this->get(route('inscripcion.portal.programa', ['token' => $token]))->assertOk()->assertSee('¿Tienes un código?');
+    }
+
+    public function test_confirmada_sin_codigo_el_cliente_lo_aplica_y_ve_el_nuevo_total_en_todas_las_pestanas(): void
+    {
+        $codigo = $this->codigo(['value' => 20]);
+        $orden = app(ConfirmarOrden::class)($this->borrador(5)); // 450.000 con el 10% por cantidad
+        [, $token] = MagicLink::emitir($this->evento, 'ana@colegio.cl', $orden);
+
+        $this->get(route('inscripcion.portal.credenciales', ['token' => $token]))->assertOk()->assertSee('¿Tienes un código?');
+
+        $this->post(route('inscripcion.codigo.aplicar', ['token' => $token]), ['codigo' => $codigo->code, 'pestana' => 'pago'])
+            ->assertRedirect(route('inscripcion.portal.pago', ['token' => $token, 'inscripcion' => $orden->public_id]));
+
+        $orden->refresh();
+        $this->assertSame($codigo->id, $orden->discount_code_id);
+        $this->assertSame(400000, $orden->total); // el código reemplaza al descuento por cantidad
+        $this->assertDatabaseHas('audit_logs', ['action' => 'orden.codigo_aplicado', 'actor_label' => 'ana@colegio.cl']);
+
+        foreach (['programa', 'inscripcion', 'pago', 'credenciales'] as $pestana) {
+            $this->get(route("inscripcion.portal.{$pestana}", ['token' => $token]))
+                ->assertOk()->assertSee('Descuento aplicado (20%)')->assertSee('Total a pagar')
+                ->assertSee('$400.000', false)->assertDontSee('Quitar código');
+        }
+    }
+
+    public function test_confirmada_con_un_codigo_invalido_muestra_el_motivo_en_la_pestana_pago(): void
+    {
+        $orden = app(ConfirmarOrden::class)($this->borrador(5));
+        [, $token] = MagicLink::emitir($this->evento, 'ana@colegio.cl', $orden);
+
+        $this->post(route('inscripcion.codigo.aplicar', ['token' => $token]), ['codigo' => 'NOEXISTE'])
+            ->assertOk()->assertSee('Este código no es válido')->assertSee('value="NOEXISTE"', false);
+
+        $this->assertNull($orden->fresh()->discount_code_id);
+        $this->assertSame(450000, $orden->fresh()->total);
     }
 
     public function test_un_codigo_invalido_muestra_el_motivo_y_conserva_lo_escrito(): void

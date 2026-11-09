@@ -107,6 +107,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('inscripciones/{order}/notas', [InscripcionController::class, 'actualizarNotas'])->name('inscripciones.notas');
     Route::post('inscripciones/{order}/comprobante', [InscripcionController::class, 'cargarComprobante'])->name('inscripciones.comprobante');
     Route::post('inscripciones/{order}/factura', [InscripcionController::class, 'registrarFactura'])->name('inscripciones.factura');
+    Route::get('inscripciones/{order}/formulario-del-cliente', [InscripcionController::class, 'abrirFormularioDelCliente'])->name('inscripciones.formulario-del-cliente');
     Route::post('inscripciones/{order}/reenviar-al-cliente', [InscripcionController::class, 'reenviarAlCliente'])->name('inscripciones.reenviar');
     Route::post('inscripciones/{order}/cancelar', [InscripcionController::class, 'cancelar'])->name('inscripciones.cancelar');
     Route::post('inscripciones/{order}/reactivar', [InscripcionController::class, 'reactivar'])->name('inscripciones.reactivar');

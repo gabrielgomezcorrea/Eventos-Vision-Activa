@@ -7,6 +7,7 @@ import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/
 import { EstadoBadge } from '@/components/estado-badge';
 import InputError from '@/components/input-error';
 import { Dato, Datos, SeccionFicha } from '@/components/seccion-ficha';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -48,6 +49,9 @@ type Props = {
         notas: string | null;
         informado_por: string | null;
         cargado_internamente: boolean;
+        forma: string;
+        credito: boolean;
+        orden_de_compra: string | null;
     };
     orden: {
         id: number;
@@ -311,15 +315,44 @@ export default function ComprobanteShow({
 
                 <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <SeccionFicha
-                        titulo={ultimo ? ultimo.nombre : 'Comprobante'}
+                        titulo={
+                            pago.credito
+                                ? 'Pago a crédito'
+                                : ultimo
+                                  ? ultimo.nombre
+                                  : 'Comprobante'
+                        }
                         className="lg:sticky lg:top-4"
                     >
-                        <Visor archivo={ultimo} />
+                        {pago.credito ? (
+                            <p className="text-muted-foreground py-16 text-center text-sm">
+                                La inscripción hace de orden de compra: no trae
+                                comprobante. Solo falta aprobarlo.
+                            </p>
+                        ) : (
+                            <Visor archivo={ultimo} />
+                        )}
                     </SeccionFicha>
 
                     <div className="flex flex-col gap-6">
                         <SeccionFicha titulo="Pago informado">
                             <Datos>
+                                <Dato etiqueta="Forma de pago">
+                                    <Badge
+                                        variant={
+                                            pago.credito
+                                                ? 'default'
+                                                : 'secondary'
+                                        }
+                                    >
+                                        {pago.forma}
+                                    </Badge>
+                                </Dato>
+                                {pago.credito && (
+                                    <Dato etiqueta="Orden de compra">
+                                        {pago.orden_de_compra ?? '-'}
+                                    </Dato>
+                                )}
                                 <Dato etiqueta="Monto informado">
                                     <span
                                         className={cn(
@@ -340,9 +373,11 @@ export default function ComprobanteShow({
                                 <Dato etiqueta="Total de la inscripción">
                                     {clp(orden.total)}
                                 </Dato>
-                                <Dato etiqueta="Fecha de transferencia">
-                                    {pago.transferido}
-                                </Dato>
+                                {!pago.credito && (
+                                    <Dato etiqueta="Fecha de transferencia">
+                                        {pago.transferido}
+                                    </Dato>
+                                )}
                                 {pago.banco && (
                                     <Dato etiqueta="Banco de origen">
                                         {pago.banco}

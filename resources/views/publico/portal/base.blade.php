@@ -101,14 +101,13 @@
                     ])
                 </div>
             @endif
-            {{-- Código de descuento: arriba y a la vista mientras se completa la
-                 inscripción; con todo completo se oculta. Ya confirmada, solo
-                 muestra el código aplicado (lo quita el equipo, no el cliente). --}}
+            {{-- Código de descuento: a la vista en todas las pestañas y etapas,
+                 también para el equipo cuando abre el formulario del cliente.
+                 Sin código se puede aplicar mientras quede algo por pagar. --}}
             @if ($orden->kind !== \App\Enums\OrderKind::Invitado && (
-                ($orden->esBorrador() && ! $listaParaConfirmar)
-                || (! $orden->esBorrador() && $orden->discountCode)
+                $orden->discountCode || $orden->esBorrador() || $debeTransferir
             ))
-                @include('publico.portal._codigo-lado')
+                @include('publico.portal._codigo-lado', ['montoAPagar' => $montoLado])
             @endif
 
             {{-- Los comprobantes que subió este colegio, con enlace para abrirlos. --}}
@@ -127,7 +126,11 @@
                         <p style="margin:0 0 8px;font-size:.9rem">
                             <strong>${{ number_format($abono->amount, 0, ',', '.') }}</strong>
                             <span class="chip {{ $claseAbono }}">{{ $textoAbono }}</span>
-                            <a href="{{ route('inscripcion.comprobante.ver', ['token' => $token, 'payment' => $abono->id]) }}" target="_blank" rel="noopener">Ver</a>
+                            @if ($abono->method === \App\Enums\PaymentMethod::Credito)
+                                <span style="color:var(--texto-suave)">A crédito</span>
+                            @else
+                                <a href="{{ route('inscripcion.comprobante.ver', ['token' => $token, 'payment' => $abono->id]) }}" target="_blank" rel="noopener">Ver</a>
+                            @endif
                         </p>
                     @endforeach
                 </div>

@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Enums\PaymentMethod;
 use App\Models\Payment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -21,7 +22,9 @@ class AvisoComprobantePorRevisar extends Mailable implements ShouldQueue
     {
         $orden = $this->pago->order;
 
-        return new Envelope(subject: "Comprobante por revisar: {$orden->number} · {$orden->event->name}");
+        $asunto = $this->pago->method === PaymentMethod::Credito ? 'Pago a crédito por aprobar' : 'Comprobante por revisar';
+
+        return new Envelope(subject: "{$asunto}: {$orden->number} · {$orden->event->name}");
     }
 
     public function content(): Content

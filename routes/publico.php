@@ -121,6 +121,9 @@ Route::prefix('/i/o/{token}')->name('inscripcion.')->group(function (): void {
     Route::post('/comprobante/{establishment?}', [InscripcionController::class, 'guardarComprobante'])
         ->middleware('throttle:20,1')
         ->name('comprobante');
+    Route::post('/pago-a-credito/{establishment?}', [InscripcionController::class, 'pagarACredito'])
+        ->middleware('throttle:20,1')
+        ->name('pago-a-credito');
 });
 
 // Credencial individual. Es la URL que lleva el QR: identificador opaco, sin

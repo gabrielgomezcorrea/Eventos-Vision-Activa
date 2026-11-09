@@ -296,6 +296,16 @@ class Order extends Model
     }
 
     /**
+     * Pago a crédito: por el total y solo si todavía no hay abonos aprobados
+     * (Gabriel, 09/11/2026). Mezclar contado y crédito en una misma
+     * inscripción dejaría a Contabilidad sin saber qué cobrar.
+     */
+    public function admitePagoACredito(): bool
+    {
+        return $this->admiteComprobante() && $this->pagado() === 0;
+    }
+
+    /**
      * Una reserva vencida no frena a quien llega a pagar: al enviar el
      * comprobante se reactiva sola si quedan cupos (Gabriel, 05/11/2026: "no
      * podemos perder clientes"). Si no quedan, el envío falla con el motivo.

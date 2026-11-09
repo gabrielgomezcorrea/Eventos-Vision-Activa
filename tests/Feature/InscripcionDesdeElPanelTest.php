@@ -100,27 +100,42 @@ class InscripcionDesdeElPanelTest extends TestCase
         $this->assertSame(0, Order::count());
     }
 
-    public function test_la_ficha_ofrece_el_mismo_enlace_que_recibio_el_cliente(): void
+    public function test_la_ficha_ofrece_abrir_el_formulario_del_cliente_en_cualquier_inscripcion(): void
     {
         $this->actingAs($this->usuarioConRol(Rol::Coordinacion));
         $this->crear();
-        $orden = Order::query()->firstOrFail();
+        $delEquipo = Order::query()->firstOrFail();
+        $normal = Order::create(['event_id' => $this->event->id, 'responsible_email' => 'a@b.cl', 'responsible_name' => 'A']);
 
-        $enviado = Mail::queued(EnlaceDeAcceso::class)->first()->url;
-
-        $this->get(route('inscripciones.show', $orden))->assertInertia(fn (Assert $page) => $page
-            ->where('enlace_cliente', $enviado)
-            ->where('orden.creada_por_el_equipo', true));
+        foreach ([$delEquipo, $normal] as $orden) {
+            $this->get(route('inscripciones.show', $orden))->assertInertia(fn (Assert $page) => $page
+                ->where('enlace_cliente', route('inscripciones.formulario-del-cliente', $orden)));
+        }
     }
 
-    public function test_una_inscripcion_normal_no_ofrece_enlace_del_cliente(): void
+    public function test_abrir_el_formulario_del_cliente_lleva_al_portal_de_esa_inscripcion(): void
     {
         $this->actingAs($this->usuarioConRol(Rol::Coordinacion));
         $orden = Order::create(['event_id' => $this->event->id, 'responsible_email' => 'a@b.cl', 'responsible_name' => 'A']);
 
-        $this->get(route('inscripciones.show', $orden))->assertInertia(fn (Assert $page) => $page
-            ->where('enlace_cliente', null)
-            ->where('orden.creada_por_el_equipo', false));
+        $destino = $this->get(route('inscripciones.formulario-del-cliente', $orden))->assertRedirect()->headers->get('Location');
+
+        $link = MagicLink::query()->latest('id')->firstOrFail();
+        $this->assertSame($orden->id, $link->order_id);
+        $this->assertSame('a@b.cl', $link->email);
+        $this->assertStringContainsString('/i/acceso/', $destino);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'orden.formulario_abierto_por_el_equipo']);
+
+        $this->get($destino)->assertRedirect();
+    }
+
+    public function test_sin_permiso_no_se_abre_el_formulario_del_cliente(): void
+    {
+        $this->actingAs($this->usuarioConRol(Rol::Acreditacion));
+        $orden = Order::create(['event_id' => $this->event->id, 'responsible_email' => 'a@b.cl', 'responsible_name' => 'A']);
+
+        $this->get(route('inscripciones.formulario-del-cliente', $orden))->assertForbidden();
+        $this->assertSame(0, MagicLink::count());
     }
 
     public function test_el_portal_acepta_participante_sin_rut_ni_acceso_y_no_cobra_hasta_elegirlo(): void

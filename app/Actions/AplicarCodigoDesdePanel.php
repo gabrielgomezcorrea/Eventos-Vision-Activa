@@ -16,20 +16,63 @@ use App\Support\CodigoDeDescuento;
 use App\Support\DescuentoDeCodigo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * El equipo aplica un código a una inscripción ya confirmada que no lo tiene
- * (el cliente lo olvidó). Misma validación y mismo cálculo que al confirmar,
+ * Aplica un código a una inscripción ya confirmada que no lo tiene: el equipo
+ * desde el panel o el cliente desde el portal (lo olvidó al confirmar). Misma validación y mismo cálculo que al confirmar,
  * pero sin devolver plata: si lo aprobado supera el nuevo total no se aplica.
  * Es interno: no manda correo. Si lo aprobado alcanza el total, queda pagada y
  * salen las credenciales, como cuando Contabilidad aprueba el último abono.
  */
 class AplicarCodigoDesdePanel
 {
-    /** @throws CodigoNoAplicable */
-    public function __invoke(Order $orden, string $ingresado, User $usuario): Order
+    /**
+     * Sin usuario lo aplica el cliente: cuenta sus intentos fallidos igual que
+     * en el borrador (`AplicarCodigoDeDescuento`) y la auditoría lleva su correo.
+     *
+     * @throws CodigoNoAplicable
+     */
+    public function __invoke(Order $orden, string $ingresado, ?User $usuario = null, ?string $actorLabel = null): Order
     {
-        $resultado = DB::transaction(function () use ($orden, $ingresado): Order {
+        $llave = 'codigo-de-descuento:'.$orden->getKey();
+
+        if ($usuario === null && RateLimiter::tooManyAttempts($llave, AplicarCodigoDeDescuento::INTENTOS)) {
+            throw CodigoNoAplicable::porque('Probaste muchos códigos. Espera unos minutos y vuelve a intentar.');
+        }
+
+        try {
+            $resultado = $this->aplicar($orden, $ingresado, $actorLabel);
+        } catch (CodigoNoAplicable $e) {
+            if ($usuario === null) {
+                RateLimiter::hit($llave, AplicarCodigoDeDescuento::BLOQUEO_SEGUNDOS);
+            }
+
+            throw $e;
+        }
+
+        if ($usuario === null) {
+            RateLimiter::clear($llave);
+        }
+
+        if ($resultado->payment_status === PaymentStatus::Aprobado) {
+            try {
+                app(EmitirTickets::class)($resultado);
+                $resultado = $resultado->fresh();
+            } catch (TicketsNoLiberables $e) {
+                Log::error('No se pudieron emitir las credenciales tras aplicar el código.', [
+                    'orden' => $resultado->number,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $resultado;
+    }
+
+    private function aplicar(Order $orden, string $ingresado, ?string $actorLabel): Order
+    {
+        return DB::transaction(function () use ($orden, $ingresado, $actorLabel): Order {
             $fresca = Order::whereKey($orden->getKey())->lockForUpdate()->firstOrFail();
 
             if (! in_array($fresca->status, [OrderStatus::Reservada, OrderStatus::Finalizada], true) || $fresca->kind === OrderKind::Invitado) {
@@ -107,23 +150,10 @@ class AplicarCodigoDesdePanel
                     'total_anterior' => $totalAnterior,
                     'total_nuevo' => $totalNuevo,
                 ],
+                actorLabel: $actorLabel,
             );
 
             return $fresca;
         });
-
-        if ($resultado->payment_status === PaymentStatus::Aprobado) {
-            try {
-                app(EmitirTickets::class)($resultado);
-                $resultado = $resultado->fresh();
-            } catch (TicketsNoLiberables $e) {
-                Log::error('No se pudieron emitir las credenciales tras aplicar el código.', [
-                    'orden' => $resultado->number,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        return $resultado;
     }
 }

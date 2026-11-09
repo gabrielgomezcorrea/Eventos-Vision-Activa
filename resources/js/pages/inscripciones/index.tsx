@@ -27,6 +27,7 @@ type OrdenFila = {
     numero: string | null;
     detalle: string | null;
     entidad: string | null;
+    colegio: string | null;
     evento: string | null;
     solicitante: { nombre: string; via: string } | null;
     responsable: string | null;
@@ -588,6 +589,11 @@ export default function InscripcionesIndex({
                                         ) : (
                                             <span className="text-muted-foreground block max-w-56 truncate">
                                                 Aún no registra entidad pagadora
+                                            </span>
+                                        )}
+                                        {orden.colegio && (
+                                            <span className="block max-w-56 truncate text-xs">
+                                                {orden.colegio}
                                             </span>
                                         )}
                                         <span className="text-muted-foreground block max-w-56 truncate text-xs">

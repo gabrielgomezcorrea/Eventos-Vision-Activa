@@ -26,6 +26,7 @@ type PagoFila = {
     monto: number;
     diferencia: number | null;
     transferido: string | null;
+    credito: boolean;
     estado: Estado;
     recibido: string;
     esperando: string | null;
@@ -244,6 +245,11 @@ export default function ComprobantesIndex({
                                             }
                                         >
                                             {clp(pago.monto)}
+                                        </span>
+                                        <span className="text-muted-foreground block text-xs">
+                                            {pago.credito
+                                                ? 'Pago a crédito'
+                                                : 'Pago al contado'}
                                         </span>
                                         {pago.diferencia !== null && (
                                             <span className="block text-xs text-amber-700 dark:text-amber-400">

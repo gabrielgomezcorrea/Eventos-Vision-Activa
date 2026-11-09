@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Comprobantes;
 
 use App\Actions\RevisarPago;
+use App\Enums\PaymentMethod;
 use App\Enums\PaymentReviewAction;
 use App\Enums\PaymentStatus;
 use App\Exceptions\RevisionNoValida;
@@ -69,6 +70,7 @@ class ComprobanteController extends Controller
                 'monto' => $pago->amount,
                 'diferencia' => $pago->tieneDiferenciaDeMonto() ? $pago->diferencia() : null,
                 'transferido' => $pago->paid_on?->format('d-m-Y'),
+                'credito' => $pago->method === PaymentMethod::Credito,
                 'estado' => Presentar::estado($pago->status),
                 'recibido' => $pago->created_at->format('d-m-Y H:i'),
                 'esperando' => $pago->esperaRevision()
@@ -125,6 +127,9 @@ class ComprobanteController extends Controller
                 'referencia' => $payment->reference,
                 'notas' => $payment->notes,
                 'informado_por' => $payment->submitted_by_label,
+                'forma' => $payment->method->label(),
+                'credito' => $payment->method === PaymentMethod::Credito,
+                'orden_de_compra' => $payment->purchase_order,
                 'cargado_internamente' => $payment->submitted_by_user_id !== null,
             ],
             'orden' => [
@@ -169,7 +174,9 @@ class ComprobanteController extends Controller
                 ->all(),
             'puedeRevisar' => $request->user()->can('update', $payment) && $payment->esperaRevision(),
             'decisiones' => [
-                ['value' => PaymentReviewAction::Aprobar->value, 'label' => 'Aprobar el pago', 'descripcion' => 'El monto está abonado y corresponde a esta inscripción. Se liberan las credenciales.'],
+                ['value' => PaymentReviewAction::Aprobar->value, 'label' => 'Aprobar el pago', 'descripcion' => $payment->method === PaymentMethod::Credito
+                    ? 'Se acepta el pago a crédito: la inscripción hace de orden de compra. Se liberan las credenciales.'
+                    : 'El monto está abonado y corresponde a esta inscripción. Se liberan las credenciales.'],
                 ['value' => PaymentReviewAction::Observar->value, 'label' => 'Pedir que lo corrija', 'descripcion' => 'Algo falta o no cuadra. El cliente recibe tu observación y puede enviar otro comprobante. Los cupos siguen reservados.'],
                 ['value' => PaymentReviewAction::Rechazar->value, 'label' => 'Rechazarlo', 'descripcion' => 'El documento no acredita el pago.'],
             ],

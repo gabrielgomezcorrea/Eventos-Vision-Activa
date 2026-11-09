@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Publico;
 
 use App\Actions\AplicarCodigoDeDescuento;
+use App\Actions\AplicarCodigoDesdePanel;
 use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\ConfirmarConjunto;
 use App\Actions\ConfirmarOrden;
@@ -10,6 +11,7 @@ use App\Actions\EmitirEnlaceDeAcceso;
 use App\Actions\IniciarInscripcionAdicional;
 use App\Actions\ModificarInscripcion;
 use App\Actions\RegistrarComprobante;
+use App\Actions\RegistrarPagoACredito;
 use App\Enums\OrderKind;
 use App\Exceptions\CambioNoPermitido;
 use App\Exceptions\CodigoNoAplicable;
@@ -664,20 +666,43 @@ class InscripcionController extends Controller
         return redirect()->route('inscripcion.portal.pago', ['token' => $token]);
     }
 
-    public function aplicarCodigo(AplicarCodigoDeDescuento $aplicar, Request $request, string $token): RedirectResponse|Renderable
+    /**
+     * El código se aplica desde la columna izquierda en cualquier pestaña y
+     * etapa. En borrador solo se asocia (los usos se toman al confirmar); ya
+     * confirmada se aplica con la misma regla que usa el equipo en el panel:
+     * recalcula el total y nunca devuelve plata.
+     */
+    public function aplicarCodigo(AplicarCodigoDeDescuento $aplicar, AplicarCodigoDesdePanel $aplicarConfirmada, Request $request, string $token): RedirectResponse|Renderable
     {
-        [$orden, $link] = $this->resolver($token);
+        $link = MagicLink::resolver($token);
+        $orden = $this->ordenDelConjunto($this->resolverParaConsulta($token), null);
+        $ingresado = (string) $request->input('codigo');
+        $pestana = in_array($request->input('pestana'), ['programa', 'inscripcion', 'pago', 'credenciales'], true)
+            ? $request->input('pestana')
+            : 'inscripcion';
 
-        try {
-            $aplicar($orden, (string) $request->input('codigo'), $link->email);
-        } catch (CodigoNoAplicable $e) {
-            return $this->vistaInscripcion($token, $orden, extra: [
-                'errorDeCodigo' => $e->getMessage(),
-                'codigoEscrito' => (string) $request->input('codigo'),
-            ]);
+        if ($orden->esBorrador() && ! $orden->puedeEditarlaElCliente()) {
+            throw EnlaceNoUtilizable::ordenNoEditable($token);
         }
 
-        return redirect()->route('inscripcion.portal.inscripcion', ['token' => $token]);
+        try {
+            $orden->esBorrador()
+                ? $aplicar($orden, $ingresado, $link->email)
+                : $aplicarConfirmada($orden, $ingresado, actorLabel: $link->email);
+        } catch (CodigoNoAplicable $e) {
+            $error = ['errorDeCodigo' => $e->getMessage(), 'codigoEscrito' => $ingresado];
+
+            return match (true) {
+                $orden->esBorrador() && $pestana === 'pago' => $this->vistaResumen($token, $orden, $error),
+                $orden->esBorrador() => $this->vistaInscripcion($token, $orden, extra: $error),
+                default => view('publico.portal.pago', $error + $this->datosDelPortal($token, $orden->fresh(self::RELACIONES_DEL_PORTAL), 'pago')),
+            };
+        }
+
+        return redirect()->route('inscripcion.portal.'.$pestana, [
+            'token' => $token,
+            'inscripcion' => $orden->public_id,
+        ]);
     }
 
     public function quitarCodigo(string $token): RedirectResponse
@@ -842,6 +867,44 @@ class InscripcionController extends Controller
         // sesión no hay mensajes flash, y recargar en silencio no dice nada.
         return redirect()->route('inscripcion.portal.pago', [
             'token' => $token, 'comprobante' => 'recibido',
+            ...($orden->group_id !== null && $orden->group->orders()->count() > 1 ? ['inscripcion' => $orden->public_id] : []),
+        ]);
+    }
+
+    /**
+     * Pago a crédito: sin archivo, con la orden de compra si el cliente quiere
+     * anotarla. Contabilidad lo recibe en la misma cola que los comprobantes.
+     */
+    public function pagarACredito(Request $request, RegistrarPagoACredito $registrar, string $token, ?Establishment $establishment = null): RedirectResponse|Renderable
+    {
+        $orden = $this->ordenDelConjunto($this->resolverParaConsulta($token), $establishment);
+
+        $validator = Validator::make($request->only('purchase_order'), [
+            'purchase_order' => ['nullable', 'string', 'max:120'],
+        ], [
+            'purchase_order.max' => 'La orden de compra no puede superar los 120 caracteres.',
+        ]);
+
+        if ($validator->fails()) {
+            return view('publico.portal.pago', $this->datosDelPortal(
+                $token, $orden, 'pago', $request->only('purchase_order') + ['forma_de_pago' => 'credito'], $validator->errors(),
+            ));
+        }
+
+        try {
+            $pago = $registrar($orden, $request->input('purchase_order'), $orden->responsible_email);
+        } catch (ComprobanteNoAceptado $e) {
+            return view('publico.portal.pago', $this->datosDelPortal(
+                $token, $orden->fresh(), 'pago', errorDeComprobante: $e->getMessage(),
+            ));
+        }
+
+        foreach (DestinatariosDeAvisos::para('notify_payment_proofs') as $destinatario) {
+            Mail::to($destinatario)->queue(new AvisoComprobantePorRevisar($pago));
+        }
+
+        return redirect()->route('inscripcion.portal.pago', [
+            'token' => $token, 'comprobante' => 'credito',
             ...($orden->group_id !== null && $orden->group->orders()->count() > 1 ? ['inscripcion' => $orden->public_id] : []),
         ]);
     }

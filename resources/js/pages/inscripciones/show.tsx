@@ -160,6 +160,8 @@ type Props = {
               monto: number;
               recibido: string;
               informado_por: string | null;
+              forma: string;
+              orden_de_compra: string | null;
               observaciones_factura: string | null;
           }[]
         | null;
@@ -1684,6 +1686,10 @@ export default function InscripcionShow({
                                         <EstadoBadge estado={pago.estado} />
                                     </span>
                                     <span className="text-muted-foreground text-xs">
+                                        {pago.forma}
+                                        {pago.orden_de_compra &&
+                                            ` (OC ${pago.orden_de_compra})`}
+                                        {' · '}
                                         {pago.recibido}
                                         {pago.informado_por &&
                                             ` · ${pago.informado_por}`}

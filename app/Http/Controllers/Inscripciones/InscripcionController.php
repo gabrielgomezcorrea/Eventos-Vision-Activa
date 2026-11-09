@@ -43,6 +43,7 @@ use App\Mail\OrdenConfirmada;
 use App\Mail\PagoAprobado;
 use App\Models\Event;
 use App\Models\InvoiceRecord;
+use App\Models\MagicLink;
 use App\Models\Order;
 use App\Models\Participant;
 use App\Models\Payment;
@@ -112,6 +113,9 @@ class InscripcionController extends Controller
                 'numero' => $orden->number,
                 'detalle' => self::detalleDe($orden),
                 'entidad' => $orden->payerEntity?->name ?? $orden->establishments->first()?->name,
+                // Un mismo pagador suele cubrir varios colegios: el colegio va
+                // debajo para distinguir filas que si no se ven iguales.
+                'colegio' => $orden->payerEntity !== null ? $orden->establishments->first()?->name : null,
                 'evento' => $orden->event?->name,
                 'solicitante' => self::solicitanteDe($orden),
                 'responsable' => $orden->responsableNombreCompleto(),
@@ -242,18 +246,43 @@ class InscripcionController extends Controller
     }
 
     /**
-     * Enlace del portal para que el equipo llene la ficha del colegio. Solo en
-     * inscripciones que creó el equipo y siguen abiertas.
+     * Enlace del panel que abre el portal del cliente, para que el equipo lo
+     * ayude a completar o corregir su inscripción, venga de donde venga. El
+     * invitado no tiene portal que llenar: lo gestiona el panel.
      */
-    private function enlaceDelCliente(Order $order, bool $puedeEditar, EmitirEnlaceDeAcceso $emitir): ?string
+    private function enlaceDelCliente(Order $order, bool $puedeEditar): ?string
     {
-        if (! $puedeEditar || ! $order->creadaPorElEquipo()
-            || $order->kind === OrderKind::Invitado
-            || ! in_array($order->status, [OrderStatus::Borrador, OrderStatus::Reservada], true)) {
+        if (! $puedeEditar || $order->kind === OrderKind::Invitado) {
             return null;
         }
 
-        return $this->enlaceEstableDe($order, $emitir);
+        return route('inscripciones.formulario-del-cliente', $order);
+    }
+
+    /**
+     * Emite un enlace propio de esta inscripción y lleva al portal. Siempre uno
+     * nuevo y atado a la orden: el estable de la solicitud puede abrir otra
+     * inscripción del conjunto. Mismo correo del último enlace, para que el
+     * conjunto y el código sigan a la misma persona.
+     */
+    public function abrirFormularioDelCliente(Order $order): RedirectResponse
+    {
+        Gate::authorize('update', $order);
+        abort_if($order->kind === OrderKind::Invitado, 404);
+
+        $correo = (string) ($order->magicLinks()->latest('id')->value('email') ?: $order->responsible_email);
+
+        if ($correo === '') {
+            Inertia::flash('toast', ['type' => 'error', 'message' => 'Esta inscripción todavía no tiene un correo al que asociar el formulario.']);
+
+            return back();
+        }
+
+        [, $token] = MagicLink::emitir($order->event, $correo, $order);
+
+        Auditor::registrar($order, 'orden.formulario_abierto_por_el_equipo', propiedades: ['correo' => $correo]);
+
+        return redirect()->route('inscripcion.acceso', ['token' => $token]);
     }
 
     /**
@@ -400,7 +429,7 @@ class InscripcionController extends Controller
         return to_route('inscripciones.show', $orden);
     }
 
-    public function show(Request $request, Order $order, EmitirEnlaceDeAcceso $emitir): Response
+    public function show(Request $request, Order $order): Response
     {
         Gate::authorize('view', $order);
 
@@ -534,6 +563,8 @@ class InscripcionController extends Controller
                     'monto' => $pago->amount,
                     'recibido' => $pago->created_at->format('d-m-Y H:i'),
                     'informado_por' => $pago->submitted_by_label,
+                    'forma' => $pago->method->label(),
+                    'orden_de_compra' => $pago->purchase_order,
                     'observaciones_factura' => $pago->billing_notes,
                 ])->all()
                 : null,
@@ -560,7 +591,7 @@ class InscripcionController extends Controller
             ],
             'faltan_rut' => $order->participantesVigentes()->whereNull('rut')->count(),
             'reenvio' => $puedeReemplazar ? $this->reenvioDe($order) : null,
-            'enlace_cliente' => $this->enlaceDelCliente($order, $puedeReemplazar, $emitir),
+            'enlace_cliente' => $this->enlaceDelCliente($order, $puedeReemplazar),
             // Solo sobre una reserva vigente; si algo lo impide, el botón lo dice.
             'cancelacion' => $puedeReemplazar && $order->status === OrderStatus::Reservada
                 ? ['impedimento' => CancelarOrden::impedimento($order)]

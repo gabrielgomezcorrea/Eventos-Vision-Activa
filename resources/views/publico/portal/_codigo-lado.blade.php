@@ -1,7 +1,7 @@
 {{--
-    Código de descuento en la columna izquierda, a la vista desde el inicio.
-    En borrador se aplica y se quita; con todo completo se oculta. Confirmada,
-    solo muestra el código aplicado: el precio ya está congelado y lo quita el equipo.
+    Código de descuento en la columna izquierda, en todas las pestañas y etapas.
+    En borrador se aplica y se quita. Confirmada se puede aplicar si no tenía
+    (recalcula el total, sin devolver plata); quitarlo es del equipo.
 --}}
 <div class="lado-caja" id="codigo">
     <p class="lado-titulo">Código de descuento</p>
@@ -10,6 +10,11 @@
         <p style="margin:0 0 8px;font-size:.9rem;color:var(--exito)">
             <strong>Descuento aplicado ({{ $alcance === 'Descuento completo' ? 'completo' : $alcance }})</strong>
         </p>
+        @if (($montoAPagar ?? 0) > 0 && ! $orden->payment_status->liberaCredenciales())
+            <p style="margin:0 0 8px;font-size:.9rem">
+                {{ $orden->pagado() > 0 ? 'Saldo a pagar' : 'Total a pagar' }}: <strong>${{ number_format($montoAPagar, 0, ',', '.') }}</strong>
+            </p>
+        @endif
         @if ($orden->esBorrador())
             <form method="POST" action="{{ route('inscripcion.codigo.quitar', ['token' => $token]) }}" style="margin:0">
                 <button type="submit" class="btn btn-secundario">Quitar código</button>
@@ -17,6 +22,8 @@
         @endif
     @else
         <form method="POST" action="{{ route('inscripcion.codigo.aplicar', ['token' => $token]) }}" style="margin:0">
+            <input type="hidden" name="inscripcion" value="{{ $orden->public_id }}">
+            <input type="hidden" name="pestana" value="{{ $pestana }}">
             <label for="codigo-descuento" style="font-size:.85rem">¿Tienes un código?</label>
             <input type="text" id="codigo-descuento" name="codigo" maxlength="24"
                    value="{{ $codigoEscrito ?? '' }}" autocomplete="off" autocapitalize="characters"
