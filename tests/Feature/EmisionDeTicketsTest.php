@@ -209,7 +209,7 @@ class EmisionDeTicketsTest extends TestCase
         $this->assertSame($ticket->code, Ticket::sole()->code);
     }
 
-    public function test_una_orden_pagada_no_manda_correo_por_participante(): void
+    public function test_una_orden_pagada_manda_su_credencial_a_cada_participante_con_correo(): void
     {
         $orden = $this->orden([
             ['first_name' => 'Carlos', 'email' => 'carlos@colegio.cl'],
@@ -218,11 +218,11 @@ class EmisionDeTicketsTest extends TestCase
         ]);
         $this->aprobar($orden);
 
-        // Las tres credenciales se emiten igual; el responsable las ve y
-        // reenvía desde su pestaña Credenciales.
+        // Las tres se emiten; solo el correo válido recibe la suya (09/11/2026).
         $this->assertSame(3, Ticket::count());
-        Mail::assertNotQueued(CredencialParticipante::class);
-        $this->assertSame(0, Ticket::whereNotNull('emailed_at')->count());
+        Mail::assertQueued(CredencialParticipante::class, 1);
+        Mail::assertQueued(CredencialParticipante::class, fn ($m) => $m->hasTo('carlos@colegio.cl'));
+        $this->assertSame('carlos@colegio.cl', Ticket::whereNotNull('emailed_at')->sole()->emailed_to);
     }
 
     public function test_queda_registrado_en_auditoria(): void

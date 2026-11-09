@@ -6,7 +6,6 @@ use App\Enums\PaymentReviewAction;
 use App\Enums\PaymentStatus;
 use App\Exceptions\RevisionNoValida;
 use App\Exceptions\TicketsNoLiberables;
-use App\Mail\PagoAprobado;
 use App\Mail\PagoObservado;
 use App\Mail\PagoRechazado;
 use App\Models\Order;
@@ -14,6 +13,7 @@ use App\Models\Payment;
 use App\Models\PaymentReview;
 use App\Models\User;
 use App\Support\Auditor;
+use App\Support\EnvioDeCredenciales;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -97,8 +97,14 @@ class RevisarPago
 
         // Un abono aprobado con saldo pendiente no manda correo: no pide nada,
         // y el cliente ve el abono y el saldo en la pestaña Pago.
+        // Pagada: las credenciales salen siempre, aunque la casilla de
+        // correos al cliente esté apagada (EnvioDeCredenciales).
+        if ($totalPagado) {
+            EnvioDeCredenciales::alResponsable($orden);
+        }
+
         $correo = match (true) {
-            $totalPagado => new PagoAprobado($orden),
+            $totalPagado => null,
             $nuevoEstado === PaymentStatus::Aprobado => null,
             $nuevoEstado === PaymentStatus::Observado => new PagoObservado($orden, $comentario ?? ''),
             default => new PagoRechazado($orden, $comentario ?? ''),

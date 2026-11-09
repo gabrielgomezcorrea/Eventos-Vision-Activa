@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Support\Auditor;
 use App\Support\CodigoDeDescuento;
 use App\Support\DescuentoDeCodigo;
+use App\Support\EnvioDeCredenciales;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -59,6 +60,7 @@ class AplicarCodigoDesdePanel
             try {
                 app(EmitirTickets::class)($resultado);
                 $resultado = $resultado->fresh();
+                EnvioDeCredenciales::alResponsable($resultado);
             } catch (TicketsNoLiberables $e) {
                 Log::error('No se pudieron emitir las credenciales tras aplicar el código.', [
                     'orden' => $resultado->number,

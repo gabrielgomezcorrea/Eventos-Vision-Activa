@@ -11,6 +11,7 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\Rol;
 use App\Exceptions\CodigoNoAplicable;
+use App\Mail\PagoAprobado;
 use App\Models\AccessType;
 use App\Models\DiscountCode;
 use App\Models\Event;
@@ -88,7 +89,7 @@ class CodigoDesdePanelTest extends TestCase
         return app(AplicarCodigoDesdePanel::class)($orden, $codigo, $this->coordinacion);
     }
 
-    public function test_el_caso_de_david_queda_pagado_con_credenciales_y_sin_correo(): void
+    public function test_el_caso_de_david_queda_pagado_y_las_credenciales_salen_al_responsable(): void
     {
         $orden = $this->confirmada();
         $this->assertSame(360000, (int) $orden->total);
@@ -105,8 +106,9 @@ class CodigoDesdePanelTest extends TestCase
         $this->assertSame($codigo->id, $resultado->discount_code_id);
         $this->assertSame(2, $resultado->tickets()->count());
         $this->assertSame(1, $codigo->fresh()->used_people);
-        Mail::assertNothingQueued();
-        Mail::assertNothingSent();
+        // Pagada: las credenciales salen siempre al responsable (09/11/2026).
+        Mail::assertQueued(PagoAprobado::class, fn ($m) => $m->hasTo($resultado->responsible_email));
+        $this->assertNotNull($resultado->fresh()->credentials_sent_at);
 
         $this->actingAs($this->usuarioConRol(Rol::Coordinacion))
             ->get(route('inscripciones.show', $resultado))

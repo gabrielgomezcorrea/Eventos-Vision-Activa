@@ -73,6 +73,7 @@ class Order extends Model
         return [
             'status' => OrderStatus::class,
             'payment_status' => PaymentStatus::class,
+            'credentials_sent_at' => 'datetime',
             'kind' => OrderKind::class,
             'total' => 'integer',
             'notify_client' => 'boolean',

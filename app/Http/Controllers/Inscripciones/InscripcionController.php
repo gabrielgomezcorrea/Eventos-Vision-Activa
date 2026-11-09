@@ -40,7 +40,6 @@ use App\Http\Requests\Inscripciones\RegistrarInvitadoRequest;
 use App\Mail\EnlaceDeAcceso;
 use App\Mail\FacturaEmitida;
 use App\Mail\OrdenConfirmada;
-use App\Mail\PagoAprobado;
 use App\Models\Event;
 use App\Models\InvoiceRecord;
 use App\Models\MagicLink;
@@ -50,6 +49,7 @@ use App\Models\Payment;
 use App\Models\Ticket;
 use App\Support\Auditor;
 use App\Support\DescuentoDeCodigo;
+use App\Support\EnvioDeCredenciales;
 use App\Support\GeneradorQr;
 use App\Support\Presentar;
 use App\Support\Rut;
@@ -361,8 +361,19 @@ class InscripcionController extends Controller
 
                 return back();
             }
+        } elseif ($reenvio['etapa'] === 'pagada') {
+            // Pagada: credenciales al responsable y, de nuevo, a cada participante con correo.
+            EnvioDeCredenciales::alResponsable($order);
+            $tickets = $order->tickets()->vigentes()->with('participant', 'event')->get();
+            EnvioDeCredenciales::aParticipantes($tickets);
+            $aParticipantes = $tickets->filter(fn ($t) => filter_var((string) $t->participant?->email, FILTER_VALIDATE_EMAIL))->count();
+
+            Auditor::registrar($order, 'orden.correo_reenviado', propiedades: ['etapa' => 'pagada', 'correo' => $correo, 'participantes' => $aParticipantes]);
+            Inertia::flash('toast', ['type' => 'success', 'message' => "Credenciales enviadas a {$correo} y a {$aParticipantes} participante(s) con correo."]);
+
+            return back();
         } else {
-            Mail::to($correo)->queue($reenvio['etapa'] === 'pagada' ? new PagoAprobado($order) : new OrdenConfirmada($order));
+            Mail::to($correo)->queue(new OrdenConfirmada($order));
         }
 
         Auditor::registrar($order, 'orden.correo_reenviado', propiedades: ['etapa' => $reenvio['etapa'], 'correo' => $correo]);
@@ -534,6 +545,9 @@ class InscripcionController extends Controller
                         'estado' => Presentar::estado($o->payment_status),
                     ])->values()->all()
                 : null,
+            'credenciales_al_responsable' => $order->credentials_sent_at !== null
+                ? $order->credentials_sent_to.' · '.$order->credentials_sent_at->format('d-m-Y H:i')
+                : null,
             'credenciales' => $order->tickets->map(fn (Ticket $t): array => [
                 'id' => $t->id,
                 'participante' => $t->participant?->nombre_completo,
@@ -541,7 +555,11 @@ class InscripcionController extends Controller
                 // ver credenciales no se le mandan, ni ocultos en la página.
                 'codigo' => $puedeVerCredenciales ? $t->code : null,
                 'url' => $puedeVerCredenciales ? $t->url() : null,
-                'enviada' => $t->emailed_at?->format('d-m-Y H:i'),
+                'enviada' => match (true) {
+                    $t->emailed_at !== null => trim(($t->emailed_to ?? $t->participant?->email).' · '.$t->emailed_at->format('d-m-Y H:i'), ' ·'),
+                    ! filter_var((string) $t->participant?->email, FILTER_VALIDATE_EMAIL) => 'Sin correo del participante',
+                    default => 'No enviada aún',
+                },
                 'estado' => match (true) {
                     $t->revoked_at !== null => ['value' => 'revocada', 'label' => 'Anulada', 'color' => 'danger'],
                     $t->accreditation !== null => ['value' => 'acreditada', 'label' => 'Acreditado', 'color' => 'success'],

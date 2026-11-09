@@ -46,11 +46,10 @@ class CredencialParticipante extends Mailable implements ShouldQueue
      */
     public function attachments(): array
     {
-        return $this->ticket->event->attachments
-            ->filter(fn (EventAttachment $a): bool => $a->existe())
-            ->map(fn (EventAttachment $a): Attachment => Attachment::fromStorageDisk($a->disk, $a->path)
-                ->as($a->original_name))
-            ->values()
-            ->all();
+        // Same size cap as the program email: Gmail rejects big messages and the queue would retry forever.
+        return array_map(
+            fn (EventAttachment $a): Attachment => Attachment::fromStorageDisk($a->disk, $a->path)->as($a->original_name),
+            EventAttachment::paraElCorreo($this->ticket->event->attachments),
+        );
     }
 }

@@ -143,12 +143,13 @@ type Props = {
           }[]
         | null;
     cargos: string[];
+    credenciales_al_responsable: string | null;
     credenciales: {
         id: number;
         participante: string | null;
         codigo: string | null;
         url: string | null;
-        enviada: string | null;
+        enviada: string;
         estado: Estado;
         acreditado_el: string | null;
     }[];
@@ -1232,6 +1233,7 @@ export default function InscripcionShow({
     establecimientos,
     conjunto,
     credenciales,
+    credenciales_al_responsable,
     cobranza,
     pagos,
     facturacion,
@@ -1725,6 +1727,13 @@ export default function InscripcionShow({
                             )
                         }
                     >
+                        <p className="text-muted-foreground border-b px-5 py-3 text-sm">
+                            Al responsable:{' '}
+                            <span className="text-foreground">
+                                {credenciales_al_responsable ??
+                                    'aún no enviadas'}
+                            </span>
+                        </p>
                         <Table>
                             <TableHeader>
                                 <TableRow className="hover:bg-transparent">
@@ -1736,9 +1745,7 @@ export default function InscripcionShow({
                                             Código de respaldo
                                         </TableHead>
                                     )}
-                                    <TableHead>
-                                        Enviada al participante
-                                    </TableHead>
+                                    <TableHead>Enviada a</TableHead>
                                     <TableHead>Estado</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -1772,7 +1779,7 @@ export default function InscripcionShow({
                                             </TableCell>
                                         )}
                                         <TableCell className="text-muted-foreground">
-                                            {c.enviada ?? 'Sin correo válido'}
+                                            {c.enviada}
                                         </TableCell>
                                         <TableCell>
                                             <EstadoBadge estado={c.estado} />

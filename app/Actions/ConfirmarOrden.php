@@ -13,6 +13,7 @@ use App\Models\Participant;
 use App\Models\ProgramRequest;
 use App\Support\Auditor;
 use App\Support\DescuentoDeCodigo;
+use App\Support\EnvioDeCredenciales;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -161,6 +162,7 @@ class ConfirmarOrden
         // no hay instrucciones de pago que mandar.
         if ($orden->discount_code_id !== null && (int) $orden->total === 0) {
             ($this->tickets)($orden);
+            EnvioDeCredenciales::alResponsable($orden->fresh());
 
             return $orden;
         }

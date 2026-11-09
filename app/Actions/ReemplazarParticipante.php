@@ -2,16 +2,13 @@
 
 namespace App\Actions;
 
-use App\Enums\OrderKind;
 use App\Enums\ParticipantStatus;
 use App\Exceptions\ReemplazoNoPermitido;
-use App\Mail\CredencialParticipante;
 use App\Models\Participant;
 use App\Models\User;
 use App\Support\Auditor;
 use App\Support\Rut;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 
 /**
  * Reemplaza a un participante conservando su tipo de acceso.
@@ -81,15 +78,8 @@ class ReemplazarParticipante
         // Si la orden ya tenía el pago aprobado, el entrante necesita su
         // credencial de inmediato: el evento puede ser mañana.
         if ($saliente->order->payment_status->liberaCredenciales()) {
+            // EmitirTickets le manda su credencial por correo si tiene uno.
             app(EmitirTickets::class)($saliente->order->fresh());
-
-            $nuevo = $entrante->fresh()->ticketVigente();
-
-            // Solo el invitado recibe su credencial por correo (ver EmitirTickets).
-            if ($saliente->order->kind === OrderKind::Invitado
-                && $nuevo && filled($entrante->email) && filter_var($entrante->email, FILTER_VALIDATE_EMAIL)) {
-                Mail::to($entrante->email)->queue(new CredencialParticipante($nuevo));
-            }
         }
 
         return $entrante->fresh();
