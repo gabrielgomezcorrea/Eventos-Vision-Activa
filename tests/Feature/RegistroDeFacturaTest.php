@@ -17,6 +17,7 @@ use Database\Seeders\RolesSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class RegistroDeFacturaTest extends TestCase
@@ -124,5 +125,39 @@ class RegistroDeFacturaTest extends TestCase
             $u->assignRole($rol->value);
             $this->assertFalse($u->fresh()->can('gestionar_facturas'));
         }
+    }
+
+    public function test_la_factura_con_archivo_se_abre_desde_la_ficha_solo_con_permiso(): void
+    {
+        Storage::fake(config('filesystems.private_disk'));
+        Storage::disk(config('filesystems.private_disk'))->put('facturas/boleta.pdf', '%PDF-1.4');
+        $factura = $this->orden->invoiceRecords()->create([
+            'document_type' => InvoiceDocumentType::Boleta,
+            'number' => '61',
+            'issued_on' => now(),
+            'amount' => $this->orden->total,
+            'path' => 'facturas/boleta.pdf',
+            'original_name' => 'boleta-61.pdf',
+        ]);
+
+        $this->actingAs($this->usuarioConRol(Rol::Contabilidad))
+            ->get(route('facturas.descargar', $factura))->assertOk();
+        $this->assertDatabaseHas('audit_logs', ['action' => 'factura.vista']);
+
+        $this->actingAs($this->usuarioConRol(Rol::Acreditacion))
+            ->get(route('facturas.descargar', $factura))->assertForbidden();
+    }
+
+    public function test_sin_archivo_no_hay_enlace(): void
+    {
+        $factura = $this->orden->invoiceRecords()->create([
+            'document_type' => InvoiceDocumentType::Factura,
+            'number' => '99',
+            'issued_on' => now(),
+            'amount' => $this->orden->total,
+        ]);
+
+        $this->actingAs($this->usuarioConRol(Rol::Contabilidad))
+            ->get(route('facturas.descargar', $factura))->assertNotFound();
     }
 }

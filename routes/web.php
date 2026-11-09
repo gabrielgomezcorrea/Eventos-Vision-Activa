@@ -8,6 +8,7 @@ use App\Http\Controllers\Configuracion\UsuarioController;
 use App\Http\Controllers\Configuracion\WebController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DescargarComprobanteController;
+use App\Http\Controllers\DescargarFacturaController;
 use App\Http\Controllers\Eventos\AccesoController;
 use App\Http\Controllers\Eventos\CodigoDescuentoController;
 use App\Http\Controllers\Eventos\CuposYPreciosController;
@@ -29,6 +30,11 @@ Route::get('/', fn (Request $request) => to_route($request->user() ? 'dashboard'
 Route::get('/comprobantes/archivo/{proof}', DescargarComprobanteController::class)
     ->middleware(['auth'])
     ->name('comprobantes.descargar');
+
+// Same rule for the invoice or receipt registered on an order.
+Route::get('/facturas/archivo/{invoiceRecord}', DescargarFacturaController::class)
+    ->middleware(['auth'])
+    ->name('facturas.descargar');
 
 // Modulo de acreditacion. Interfaz propia fuera del panel: se usa de pie, con
 // un telefono y con prisa. Comparte la sesion del panel para la autenticacion.

@@ -597,6 +597,7 @@ class InscripcionController extends Controller
                         'monto' => $f->amount,
                         'enviada' => $f->sent_at?->format('d-m-Y H:i'),
                         'enviada_a' => $f->sent_to,
+                        'archivo' => $f->tieneArchivo() ? route('facturas.descargar', $f) : null,
                     ])->all(),
                 ]
                 : null,

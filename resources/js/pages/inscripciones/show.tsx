@@ -176,6 +176,7 @@ type Props = {
             monto: number;
             enviada: string | null;
             enviada_a: string | null;
+            archivo: string | null;
         }[];
     } | null;
     puede: {
@@ -1810,9 +1811,23 @@ export default function InscripcionShow({
                                     key={doc.id}
                                     className="flex flex-wrap items-center justify-between gap-3 py-2"
                                 >
-                                    <span className="font-medium">
-                                        {doc.tipo} N° {doc.numero}
-                                    </span>
+                                    {doc.archivo ? (
+                                        <a
+                                            href={doc.archivo}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-primary font-medium underline-offset-4 hover:underline"
+                                        >
+                                            {doc.tipo} N° {doc.numero}
+                                        </a>
+                                    ) : (
+                                        <span className="font-medium">
+                                            {doc.tipo} N° {doc.numero}
+                                            <span className="text-muted-foreground block text-xs font-normal">
+                                                Sin archivo
+                                            </span>
+                                        </span>
+                                    )}
                                     <span className="text-muted-foreground text-right tabular-nums">
                                         {doc.emitido} · {clp(doc.monto)}
                                         <span className="block text-xs">
