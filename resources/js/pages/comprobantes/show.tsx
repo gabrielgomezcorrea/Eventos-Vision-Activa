@@ -1,6 +1,7 @@
 import { Head, Link, setLayoutProps, useForm } from '@inertiajs/react';
 import { ClipboardCheck, Download, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
 import ComprobanteController from '@/actions/App/Http/Controllers/Comprobantes/ComprobanteController';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
@@ -260,33 +261,36 @@ function ImagenExpandible({ archivo }: { archivo: Archivo }) {
                     className="mx-auto max-h-[75vh] w-auto rounded-md border"
                 />
             </button>
-            {abierta && (
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label={`Comprobante ${archivo.nombre}`}
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
-                    onClick={(evento) => {
-                        if (evento.target === evento.currentTarget) {
-                            setAbierta(false);
-                        }
-                    }}
-                >
-                    <button
-                        type="button"
-                        onClick={() => setAbierta(false)}
-                        aria-label="Cerrar imagen"
-                        className="absolute top-4 right-4 flex size-12 items-center justify-center rounded-full bg-white text-3xl leading-none text-gray-900 shadow-lg"
+            {/* Portal to <body>: inside the page content the sidebar stayed on top. */}
+            {abierta &&
+                createPortal(
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`Comprobante ${archivo.nombre}`}
+                        className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 p-6"
+                        onClick={(evento) => {
+                            if (evento.target === evento.currentTarget) {
+                                setAbierta(false);
+                            }
+                        }}
                     >
-                        ×
-                    </button>
-                    <img
-                        src={archivo.ver}
-                        alt={`Comprobante ${archivo.nombre}`}
-                        className="max-h-full max-w-full rounded-lg bg-white shadow-2xl"
-                    />
-                </div>
-            )}
+                        <button
+                            type="button"
+                            onClick={() => setAbierta(false)}
+                            aria-label="Cerrar imagen"
+                            className="absolute top-4 right-4 flex size-12 items-center justify-center rounded-full bg-white text-3xl leading-none text-gray-900 shadow-lg"
+                        >
+                            ×
+                        </button>
+                        <img
+                            src={archivo.ver}
+                            alt={`Comprobante ${archivo.nombre}`}
+                            className="max-h-full max-w-full rounded-lg bg-white shadow-2xl"
+                        />
+                    </div>,
+                    document.body,
+                )}
         </>
     );
 }
