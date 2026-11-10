@@ -1,6 +1,6 @@
 import { Head, Link, setLayoutProps, useForm } from '@inertiajs/react';
 import { ClipboardCheck, Download, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import ComprobanteController from '@/actions/App/Http/Controllers/Comprobantes/ComprobanteController';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
@@ -224,6 +224,73 @@ function Revisar({
     );
 }
 
+/**
+ * Photo of the proof: a click opens it full screen, like the banner in the
+ * client portal. Closes with the X, Escape or a click outside the image.
+ */
+function ImagenExpandible({ archivo }: { archivo: Archivo }) {
+    const [abierta, setAbierta] = useState(false);
+
+    useEffect(() => {
+        if (!abierta) {
+            return;
+        }
+
+        const alTeclado = (evento: KeyboardEvent) => {
+            if (evento.key === 'Escape') {
+                setAbierta(false);
+            }
+        };
+        window.addEventListener('keydown', alTeclado);
+
+        return () => window.removeEventListener('keydown', alTeclado);
+    }, [abierta]);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => setAbierta(true)}
+                className="block w-full cursor-zoom-in"
+                title="Ver en grande"
+            >
+                <img
+                    src={archivo.ver}
+                    alt={`Comprobante ${archivo.nombre}`}
+                    className="mx-auto max-h-[75vh] w-auto rounded-md border"
+                />
+            </button>
+            {abierta && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Comprobante ${archivo.nombre}`}
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
+                    onClick={(evento) => {
+                        if (evento.target === evento.currentTarget) {
+                            setAbierta(false);
+                        }
+                    }}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setAbierta(false)}
+                        aria-label="Cerrar imagen"
+                        className="absolute top-4 right-4 flex size-12 items-center justify-center rounded-full bg-white text-3xl leading-none text-gray-900 shadow-lg"
+                    >
+                        ×
+                    </button>
+                    <img
+                        src={archivo.ver}
+                        alt={`Comprobante ${archivo.nombre}`}
+                        className="max-h-full max-w-full rounded-lg bg-white shadow-2xl"
+                    />
+                </div>
+            )}
+        </>
+    );
+}
+
 /** El documento a la vista: se revisa sin descargar ni cambiar de ventana. */
 function Visor({ archivo }: { archivo: Archivo | undefined }) {
     if (!archivo) {
@@ -235,13 +302,7 @@ function Visor({ archivo }: { archivo: Archivo | undefined }) {
     }
 
     if (archivo.tipo === 'imagen') {
-        return (
-            <img
-                src={archivo.ver}
-                alt={`Comprobante ${archivo.nombre}`}
-                className="mx-auto max-h-[75vh] w-auto rounded-md border"
-            />
-        );
+        return <ImagenExpandible archivo={archivo} />;
     }
 
     if (archivo.tipo === 'pdf') {
