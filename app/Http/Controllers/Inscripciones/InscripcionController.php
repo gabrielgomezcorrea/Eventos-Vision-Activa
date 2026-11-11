@@ -7,6 +7,7 @@ use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\CancelarOrden;
 use App\Actions\CrearInscripcionDesdePanel;
 use App\Actions\EmitirEnlaceDeAcceso;
+use App\Actions\InformeDeInscritos;
 use App\Actions\QuitarCodigoDesdePanel;
 use App\Actions\ReactivarReserva;
 use App\Actions\ReemplazarParticipante;
@@ -51,6 +52,7 @@ use App\Support\Auditor;
 use App\Support\DescuentoDeCodigo;
 use App\Support\EnvioDeCredenciales;
 use App\Support\GeneradorQr;
+use App\Support\HojaDeCalculo;
 use App\Support\Presentar;
 use App\Support\Rut;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -64,6 +66,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * La orden es la entidad central. Montos y estados salen del flujo del cliente
@@ -73,6 +76,29 @@ use Inertia\Response;
  */
 class InscripcionController extends Controller
 {
+    /**
+     * Excel with two sheets (enrollments and participants) for whoever has to
+     * report numbers. Follows the event and search chosen on screen, not the
+     * card: the boss asked for everyone, with each one's state.
+     */
+    public function informe(Request $request, InformeDeInscritos $informe): BinaryFileResponse
+    {
+        Gate::authorize('viewAny', Order::class);
+
+        $filtros = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:120'],
+            'evento' => ['nullable', 'integer'],
+        ]);
+
+        $evento = isset($filtros['evento']) ? Event::query()->find($filtros['evento'])?->slug : null;
+
+        return response()
+            ->download(HojaDeCalculo::xlsx($informe($filtros)), 'inscritos-'.($evento ?? 'todos').'-'.now()->format('Y-m-d').'.xlsx', [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])
+            ->deleteFileAfterSend();
+    }
+
     public function index(Request $request): Response
     {
         Gate::authorize('viewAny', Order::class);
@@ -171,7 +197,7 @@ class InscripcionController extends Controller
      *
      * @return array{value: string, label: string, color: string}
      */
-    private static function estadoDeLaFila(Order $orden): array
+    public static function estadoDeLaFila(Order $orden): array
     {
         $estado = fn (string $valor, string $texto, string $color): array => ['value' => $valor, 'label' => $texto, 'color' => $color];
 

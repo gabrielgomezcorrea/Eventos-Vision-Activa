@@ -105,6 +105,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('comprobantes/{payment}/revisar', [ComprobanteController::class, 'revisar'])->name('comprobantes.revisar');
 
     Route::get('inscripciones', [InscripcionController::class, 'index'])->name('inscripciones.index');
+    Route::get('inscripciones/informe', [InscripcionController::class, 'informe'])->name('inscripciones.informe');
     Route::post('inscripciones/nueva', [InscripcionController::class, 'crearDesdePanel'])->name('inscripciones.crear');
     Route::post('inscripciones/invitado', [InscripcionController::class, 'registrarInvitado'])->name('inscripciones.invitado');
     Route::get('inscripciones/{order}', [InscripcionController::class, 'show'])->name('inscripciones.show');

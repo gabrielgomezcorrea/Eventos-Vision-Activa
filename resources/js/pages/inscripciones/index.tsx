@@ -1,5 +1,5 @@
 import { Head, Link, router, setLayoutProps, useForm } from '@inertiajs/react';
-import { Plus, Search, UserPlus } from 'lucide-react';
+import { Download, Plus, Search, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import InscripcionController from '@/actions/App/Http/Controllers/Inscripciones/InscripcionController';
@@ -502,6 +502,25 @@ export default function InscripcionesIndex({
                             Quitar búsqueda
                         </Button>
                     )}
+                    <Button asChild variant="outline" className="sm:ml-auto">
+                        <a
+                            href={
+                                InscripcionController.informe({
+                                    query: {
+                                        ...(filtros.evento
+                                            ? { evento: filtros.evento }
+                                            : {}),
+                                        ...(filtros.buscar
+                                            ? { buscar: filtros.buscar }
+                                            : {}),
+                                    },
+                                }).url
+                            }
+                        >
+                            <Download />
+                            Descargar Excel
+                        </a>
+                    </Button>
                 </div>
 
                 <div className="bg-card rounded-xl border shadow-xs">
