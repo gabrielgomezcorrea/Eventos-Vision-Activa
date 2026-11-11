@@ -167,13 +167,8 @@ class InscripcionDirectaTest extends TestCase
 
         $this->assertStringContainsString('También puedes reenviar este correo a tu encargado de inscribir', $html);
         $this->assertStringContainsString('O puedes copiar el siguiente enlace a la persona encargada', $html);
-        $this->assertStringContainsString('El enlace sirve por', $html);
-
-        $this->event->update(['starts_on' => now()->addMonth()->toDateString()]);
-        RateLimiter::clear('magic-link:email:'.sha1('ana@colegio.cl'));
-        $this->pedirEnlace();
-
-        $this->assertStringContainsString('El enlace sirve hasta el', Mail::queued(EnlaceDeAcceso::class)->last()->render());
+        // While the event is open the link never expires: no date is promised.
+        $this->assertStringNotContainsString('El enlace sirve', $html);
     }
 
     public function test_la_pagina_del_correo_muestra_la_presentacion_del_evento_y_no_el_banner(): void

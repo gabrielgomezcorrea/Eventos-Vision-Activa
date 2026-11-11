@@ -154,7 +154,7 @@ class EventoController extends Controller
                 'reservation_duration_value' => $event->reservation_duration_value,
                 'reservation_duration_unit' => $event->reservation_duration_unit->value,
                 'reserva' => self::plazo($event),
-                'fecha_limite_reemplazos' => $event->limiteDeReemplazos()?->format('d/m/Y \a \l\a\s H:i'),
+                'fecha_limite_reemplazos' => $event->estaCerrado() ? 'Ya no: el evento está cerrado' : 'Hasta que se cierre el evento',
                 'organizer_name' => $event->organizer_name,
                 'logo' => $event->tieneLogo() ? $event->logoUrl() : null,
                 'logo_max_mb' => Event::LOGO_MAX_MB,

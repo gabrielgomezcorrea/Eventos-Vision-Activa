@@ -107,11 +107,15 @@ class CambiosDelClienteTest extends TestCase
 
     public function test_pasado_el_limite_o_fuera_de_reserva_o_invitado_no_cambia_nada(): void
     {
-        // Evento que empieza hoy: el límite fue ayer a las 23:59.
+        // No date cutoff (11/11/2026): an event starting today still allows changes.
         $this->event->update(['starts_on' => now()->toDateString()]);
+        $this->assertSame(NivelDeCambio::Completo, $this->orden->fresh()->nivelDeCambioDelCliente());
+
+        // Only closing the event stops them.
+        $this->event->update(['status' => 'closed']);
         $this->assertSame(NivelDeCambio::Ninguno, $this->orden->fresh()->nivelDeCambioDelCliente());
 
-        $this->event->update(['starts_on' => now()->addMonth()->toDateString()]);
+        $this->event->update(['status' => 'published']);
         $this->assertSame(NivelDeCambio::Completo, $this->orden->fresh()->nivelDeCambioDelCliente());
 
         $this->orden->update(['status' => OrderStatus::Vencida]);
@@ -322,9 +326,9 @@ class CambiosDelClienteTest extends TestCase
         $this->assertSame('ana@colegio.cl', $orden->responsible_email);
     }
 
-    public function test_pasado_el_limite_no_se_corrige_nada(): void
+    public function test_con_el_evento_cerrado_no_se_corrige_nada(): void
     {
-        $this->event->update(['starts_on' => now()->toDateString()]);
+        $this->event->update(['status' => 'closed']);
         $carlos = $this->orden->participantesVigentes()->sole();
 
         $this->patch($this->ruta('participantes.corregir', ['participante' => $carlos->id]), [

@@ -172,25 +172,24 @@ class ReemplazoDeParticipanteTest extends TestCase
         $this->reemplazar();
     }
 
-    public function test_el_plazo_cierra_a_las_23_59_del_dia_anterior_al_evento(): void
+    public function test_solo_se_cierra_cuando_se_cierra_el_evento(): void
     {
-        $this->event->update(['starts_on' => now()->addDays(2)->toDateString()]);
-        $this->assertSame(
-            now()->addDay()->endOfDay()->format('Y-m-d H:i'),
-            $this->event->fresh()->limiteDeReemplazos()->format('Y-m-d H:i'),
-        );
-
-        // The day before, right after the deadline, it is closed.
-        $this->event->update(['starts_on' => now()->addDay()->toDateString()]);
-        $this->travelTo(now()->endOfDay()->addSecond());
+        // Event day: no date cutoff (11/11/2026).
+        $this->event->update(['starts_on' => now()->toDateString(), 'status' => 'closed']);
 
         try {
             $this->reemplazar();
             $this->fail('Debio negarse.');
         } catch (ReemplazoNoPermitido $e) {
-            $this->assertStringContainsString('plazo para reemplazar', $e->getMessage());
-            $this->assertStringContainsString('23:59', $e->getMessage());
+            $this->assertStringContainsString('evento está cerrado', $e->getMessage());
         }
+    }
+
+    public function test_el_dia_del_evento_todavia_se_reemplaza(): void
+    {
+        $this->event->update(['starts_on' => now()->toDateString()]);
+
+        $this->assertNotNull($this->reemplazar());
     }
 
     public function test_normaliza_el_rut_del_entrante(): void

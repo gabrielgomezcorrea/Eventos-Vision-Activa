@@ -484,8 +484,7 @@ class InscripcionController extends Controller
         $usuario = $request->user();
         $puedeReemplazar = $usuario->can('update', $order);
         $puedeVerCredenciales = $usuario->can('verCredenciales', $order);
-        $limite = $order->event->limiteDeReemplazos();
-        $plazoVencido = $limite !== null && $limite->isPast();
+        $plazoVencido = $order->event->estaCerrado();
 
         return Inertia::render('inscripciones/show', [
             'cargos' => $order->event->cargosDeParticipante(),
@@ -551,7 +550,7 @@ class InscripcionController extends Controller
                 'no_reemplazable' => match (true) {
                     $p->status === ParticipantStatus::Reemplazado => 'Ya fue reemplazado.',
                     $p->accreditation !== null => 'Ya fue acreditado y retiró su pulsera.',
-                    $plazoVencido => 'El plazo para reemplazar venció el '.$limite->format('d-m-Y').'.',
+                    $plazoVencido => 'El evento está cerrado: ya no se reemplazan participantes.',
                     default => null,
                 },
             ])->all(),

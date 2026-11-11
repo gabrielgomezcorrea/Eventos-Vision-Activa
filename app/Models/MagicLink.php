@@ -147,6 +147,11 @@ class MagicLink extends Model
             return false;
         }
 
+        // Mientras el evento siga abierto, el enlace no vence.
+        if ($this->event !== null && ! $this->event->estaCerrado()) {
+            return true;
+        }
+
         $cierre = $this->event?->cierreDeEnlaces();
 
         return $cierre ? $cierre->isFuture() : $this->expires_at->isFuture();

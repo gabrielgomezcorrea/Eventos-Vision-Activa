@@ -41,10 +41,9 @@ tus datos quedan guardados.
 
 <p style="word-break:break-all;overflow-wrap:anywhere;font-size:15px;margin:0 0 16px"><a href="{{ $url }}">{{ $url }}</a></p>
 
-@if ($event->cierreDeEnlaces())
+{{-- Mientras el evento siga abierto el enlace no vence: no se anuncia fecha. --}}
+@if ($event->estaCerrado() && $event->cierreDeEnlaces())
 El enlace sirve hasta el {{ $event->cierreDeEnlaces()->translatedFormat('d \d\e F \d\e Y') }}. Si expira, puedes pedir uno nuevo con tu correo.
-@else
-El enlace sirve por {{ (int) round(config('magic_links.ttl_minutes') / 1440) }} días. Si expira, puedes pedir uno nuevo con tu correo.
 @endif
 
 @include('mail._contacto', ['evento' => $event])

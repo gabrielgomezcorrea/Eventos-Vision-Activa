@@ -98,12 +98,8 @@ class ReemplazarParticipante
             );
         }
 
-        $limite = $saliente->order->event->limiteDeReemplazos();
-
-        if ($limite && $limite->isPast()) {
-            throw ReemplazoNoPermitido::porque(
-                'El plazo para reemplazar participantes venció el '.$limite->format('d-m-Y').' a las 23:59.'
-            );
+        if ($saliente->order->event->estaCerrado()) {
+            throw ReemplazoNoPermitido::porque('El evento está cerrado: ya no se reemplazan participantes.');
         }
     }
 }

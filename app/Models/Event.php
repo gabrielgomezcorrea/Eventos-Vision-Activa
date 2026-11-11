@@ -82,14 +82,13 @@ class Event extends Model
     }
 
     /**
-     * Replacements close at the end of the day before the event: the event
-     * starts the next day, so the cutoff is the end of that day, not the
-     * afternoon. Fixed, not configurable: one decision less for whoever sets
-     * up the event.
+     * Client changes, replacements and links never close by date (Gabriel,
+     * 11/11/2026: the day-before cutoff locked people out on event day). They
+     * close only when the team closes the event.
      */
-    public function limiteDeReemplazos(): ?CarbonInterface
+    public function estaCerrado(): bool
     {
-        return $this->starts_on?->copy()->subDay()->endOfDay();
+        return $this->status === EventStatus::Cerrado;
     }
 
     /**
@@ -107,12 +106,12 @@ class Event extends Model
     }
 
     /**
-     * Hasta cuándo sirven los enlaces del cliente: una semana después del
-     * evento, para que nadie pierda su enlace mientras el evento sigue andando.
+     * Hasta cuándo sirven los enlaces del cliente: mientras el evento no se
+     * cierre, siempre (nulo). Cerrado, una semana después de que termina.
      */
     public function cierreDeEnlaces(): ?CarbonInterface
     {
-        return $this->finDelEvento()?->copy()->addDays(7)->endOfDay();
+        return $this->estaCerrado() ? $this->finDelEvento()?->copy()->addDays(7)->endOfDay() : null;
     }
 
     /**

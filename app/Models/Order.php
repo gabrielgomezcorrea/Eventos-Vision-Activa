@@ -332,7 +332,7 @@ class Order extends Model
      * Cuánto puede cambiar el cliente por su cuenta (portal V2).
      *
      * Un borrador sigue como siempre: todo editable y sin límite. Una reserva
-     * se cierra el día anterior al evento (`Event::limiteDeReemplazos()`), con
+     * se cierra solo cuando se cierra el evento (`Event::estaCerrado()`), con
      * un abono pasa a solo corregir datos y un invitado no cambia nada: nadie
      * paga por él y lo gestiona Administración.
      */
@@ -346,9 +346,7 @@ class Order extends Model
             return NivelDeCambio::Ninguno;
         }
 
-        $limite = $this->event?->limiteDeReemplazos();
-
-        if ($limite !== null && now()->isAfter($limite)) {
+        if ($this->event?->estaCerrado()) {
             return NivelDeCambio::Ninguno;
         }
 

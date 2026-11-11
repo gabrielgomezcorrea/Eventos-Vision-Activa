@@ -72,7 +72,7 @@ class ExperienciaDeUsoTest extends TestCase
         [, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
         $this->get(route('inscripcion.acceso', ['token' => $token]));
 
-        MagicLink::query()->update(['expires_at' => now()->subDay()]);
+        MagicLink::query()->update(['revoked_at' => now()]);
 
         $this->get(route('inscripcion.portal.pago', ['token' => $token]))
             ->assertForbidden()

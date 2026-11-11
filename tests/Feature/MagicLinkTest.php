@@ -57,6 +57,9 @@ class MagicLinkTest extends TestCase
         [$link, $token] = MagicLink::emitir($this->event, 'ana@colegio.cl');
         $link->forceFill(['expires_at' => now()->subMinute()])->save();
 
+        // Open event: never expires. Closed: its own expiry applies again.
+        $this->assertTrue($link->is(MagicLink::resolver($token)));
+        $this->event->update(['status' => 'closed']);
         $this->assertNull(MagicLink::resolver($token));
     }
 
@@ -163,7 +166,11 @@ class MagicLinkTest extends TestCase
     public function test_un_enlace_de_un_evento_terminado_hace_ocho_dias_muestra_el_cierre(): void
     {
         $evento = $this->eventoQueTerminoHace(8);
-        [, $token] = MagicLink::emitir($evento, 'ana@colegio.cl');
+        [$link, $token] = MagicLink::emitir($evento, 'ana@colegio.cl');
+
+        // Still open: the link keeps working however long ago it ended.
+        $this->assertTrue($link->is(MagicLink::resolver($token)));
+        $evento->update(['status' => EventStatus::Cerrado]);
 
         $this->get(route('inscripcion.acceso', ['token' => $token]))
             ->assertForbidden()
@@ -185,6 +192,7 @@ class MagicLinkTest extends TestCase
         $this->assertTrue($link->is(MagicLink::resolver($token)));
 
         $link->forceFill(['expires_at' => now()->subMinute()])->save();
+        $this->event->update(['status' => 'closed']);
         $this->assertNull(MagicLink::resolver($token));
     }
 }
