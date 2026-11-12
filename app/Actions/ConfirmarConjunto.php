@@ -33,9 +33,9 @@ class ConfirmarConjunto
      * @throws OrdenNoConfirmable
      * @throws CuposInsuficientes
      */
-    public function __invoke(Order $borrador): array
+    public function __invoke(Order $borrador, ?string $actorLabel = null): array
     {
-        return DB::transaction(function () use ($borrador) {
+        return DB::transaction(function () use ($borrador, $actorLabel) {
             $ordenes = $this->dividirPorEstablecimiento($borrador);
 
             // ConfirmarOrden no muta la instancia que recibe: recarga su
@@ -49,7 +49,7 @@ class ConfirmarConjunto
             $ordenes = array_map(
                 fn (Order $orden) => ($this->confirmar)(
                     $orden,
-                    actorLabel: $orden->responsible_email,
+                    actorLabel: $actorLabel ?? $orden->responsible_email,
                     enviarCorreo: false,
                     descuentoAsignado: $asignados[$orden->getKey()] ?? null,
                 ),

@@ -33,10 +33,10 @@ class CrearInscripcionDesdePanel
      *
      * @throws LockTimeoutException
      */
-    public function __invoke(Event $event, string $email, User $user, EmitirEnlaceDeAcceso $emitir, bool $avisarAlCliente = true): array
+    public function __invoke(Event $event, string $email, User $user, EmitirEnlaceDeAcceso $emitir, bool $avisarAlCliente = true, ?string $actorLabel = null): array
     {
         return Cache::lock('inscripcion-directa:'.$event->getKey().':'.sha1($email), 10)
-            ->block(5, fn (): array => DB::transaction(function () use ($event, $email, $user, $emitir, $avisarAlCliente): array {
+            ->block(5, fn (): array => DB::transaction(function () use ($event, $email, $user, $emitir, $avisarAlCliente, $actorLabel): array {
                 $colegios = $emitir->colegiosVigentesDe($event, $email);
                 $existente = $colegios?->first() ?? $emitir->ordenVigenteDe($event, $email);
 
@@ -76,7 +76,7 @@ class CrearInscripcionDesdePanel
                     Mail::to($email)->queue(new EnlaceDeAcceso(event: $event, url: $url));
                 }
 
-                Auditor::registrar($orden, 'orden.creada_desde_panel', propiedades: ['correo' => $email]);
+                Auditor::registrar($orden, 'orden.creada_desde_panel', propiedades: ['correo' => $email], actorLabel: $actorLabel);
 
                 return [$orden, true];
             }));
