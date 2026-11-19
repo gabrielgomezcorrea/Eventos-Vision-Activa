@@ -106,6 +106,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('inscripciones', [InscripcionController::class, 'index'])->name('inscripciones.index');
     Route::get('inscripciones/informe', [InscripcionController::class, 'informe'])->name('inscripciones.informe');
+    Route::get('inscripciones/asistencia', [InscripcionController::class, 'asistencia'])->name('inscripciones.asistencia');
     Route::post('inscripciones/nueva', [InscripcionController::class, 'crearDesdePanel'])->name('inscripciones.crear');
     Route::post('inscripciones/invitado', [InscripcionController::class, 'registrarInvitado'])->name('inscripciones.invitado');
     Route::get('inscripciones/{order}', [InscripcionController::class, 'show'])->name('inscripciones.show');

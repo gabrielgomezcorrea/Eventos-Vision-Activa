@@ -145,6 +145,98 @@ function NuevaInscripcion({ eventos }: { eventos: Record<string, string> }) {
     );
 }
 
+/** Excel de asistencia por jornada de un evento, para los certificados. */
+function DescargarAsistencia({
+    eventos,
+    eventoElegido,
+}: {
+    eventos: Record<string, string>;
+    eventoElegido: number | null | undefined;
+}) {
+    const [abierto, setAbierto] = useState(false);
+    const ids = Object.keys(eventos);
+    const inicial = (): string =>
+        eventoElegido ? String(eventoElegido) : (ids[0] ?? '');
+    const [evento, setEvento] = useState(inicial);
+    const [soloAsistieron, setSoloAsistieron] = useState(false);
+
+    function descargar(e: FormEvent) {
+        e.preventDefault();
+        window.location.href = InscripcionController.asistencia({
+            query: {
+                evento,
+                ...(soloAsistieron ? { solo_asistieron: 1 } : {}),
+            },
+        }).url;
+        setAbierto(false);
+    }
+
+    return (
+        <Panel
+            titulo="Descargar asistencia"
+            descripcion="Excel con quienes pagaron y a qué jornadas asistieron."
+            trigger={
+                <Button variant="outline">
+                    <Download />
+                    Asistencia
+                </Button>
+            }
+            abierto={abierto}
+            onOpenChange={(valor) => {
+                setAbierto(valor);
+
+                if (valor) {
+                    setEvento(inicial());
+                    setSoloAsistieron(false);
+                }
+            }}
+            onSubmit={descargar}
+            procesando={false}
+            textoEnviar="Descargar Excel"
+        >
+            <Campo label="Evento" htmlFor="a-event">
+                <NativeSelect
+                    id="a-event"
+                    required
+                    value={evento}
+                    onChange={(e) => setEvento(e.target.value)}
+                >
+                    {ids.map((id) => (
+                        <option key={id} value={id}>
+                            {eventos[id]}
+                        </option>
+                    ))}
+                </NativeSelect>
+            </Campo>
+            <fieldset className="space-y-3">
+                <legend className="mb-2 text-sm font-medium">
+                    ¿A quiénes incluir?
+                </legend>
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="radio"
+                        name="a-quienes"
+                        className="size-4"
+                        checked={!soloAsistieron}
+                        onChange={() => setSoloAsistieron(false)}
+                    />
+                    Todos los que pagaron, asistieran o no
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="radio"
+                        name="a-quienes"
+                        className="size-4"
+                        checked={soloAsistieron}
+                        onChange={() => setSoloAsistieron(true)}
+                    />
+                    Solo los que asistieron
+                </label>
+            </fieldset>
+        </Panel>
+    );
+}
+
 /** Invitado sin costo: ocupa cupo y recibe su credencial al guardar. */
 function NuevoInvitado({
     opciones,
@@ -404,6 +496,10 @@ export default function InscripcionesIndex({
                         Inscripciones
                     </h1>
                     <div className="flex flex-wrap gap-2">
+                        <DescargarAsistencia
+                            eventos={eventos}
+                            eventoElegido={filtros.evento}
+                        />
                         {invitados && (
                             <NuevoInvitado
                                 opciones={invitados}

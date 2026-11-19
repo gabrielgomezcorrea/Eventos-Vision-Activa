@@ -7,6 +7,7 @@ use App\Actions\CambiarCorreoDelResponsable;
 use App\Actions\CancelarOrden;
 use App\Actions\CrearInscripcionDesdePanel;
 use App\Actions\EmitirEnlaceDeAcceso;
+use App\Actions\InformeDeAsistencia;
 use App\Actions\InformeDeInscritos;
 use App\Actions\QuitarCodigoDesdePanel;
 use App\Actions\ReactivarReserva;
@@ -94,6 +95,27 @@ class InscripcionController extends Controller
 
         return response()
             ->download(HojaDeCalculo::xlsx($informe($filtros)), 'inscritos-'.($evento ?? 'todos').'-'.now()->format('Y-m-d').'.xlsx', [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])
+            ->deleteFileAfterSend();
+    }
+
+    /**
+     * Attendance Excel for certificates: one event, everyone who paid, one
+     * column per session. Needs an event: sessions differ between events.
+     */
+    public function asistencia(Request $request, InformeDeAsistencia $informe): BinaryFileResponse
+    {
+        Gate::authorize('viewAny', Order::class);
+
+        $filtros = $request->validate([
+            'evento' => ['required', 'integer', 'exists:events,id'],
+            'solo_asistieron' => ['nullable', 'boolean'],
+        ]);
+        $evento = Event::query()->findOrFail($filtros['evento']);
+
+        return response()
+            ->download(HojaDeCalculo::xlsx($informe($evento, (bool) ($filtros['solo_asistieron'] ?? false))), 'asistencia-'.$evento->slug.'-'.now()->format('Y-m-d').'.xlsx', [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ])
             ->deleteFileAfterSend();
