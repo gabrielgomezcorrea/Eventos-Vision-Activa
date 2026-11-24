@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Database\Faker\ChileProvider;
 use Faker\Factory;
 use Faker\Generator;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +48,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        // `composer run dev` also runs the scheduler: without it, certificates
+        // and expiring reservations never move locally (24/11/2026).
+        DevCommands::artisan('schedule:work', 'scheduler');
     }
 
     /**

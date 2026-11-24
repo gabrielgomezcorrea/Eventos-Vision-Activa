@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Eventos;
 
 use App\Console\Commands\RecordarReservas;
+use App\Enums\CertificateStatus;
 use App\Enums\EtapaDeSeguimiento;
 use App\Enums\EventModality;
 use App\Enums\EventStatus;
@@ -20,6 +21,7 @@ use App\Http\Requests\Eventos\LogoRequest;
 use App\Http\Requests\Eventos\UbicacionesBannerRequest;
 use App\Models\AccessType;
 use App\Models\BankAccount;
+use App\Models\Certificate;
 use App\Models\DiscountCode;
 use App\Models\Event;
 use App\Models\EventSession;
@@ -225,7 +227,13 @@ class EventoController extends Controller
                     fn (Invitation $i): string => $i->email.' · '.$i->estadoEtiqueta()
                 )->values()->all()
                 : [],
+            'certificados' => $usuario->can('viewAny', Certificate::class)
+                ? $event->certificates()->toBase()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status')
+                    ->map(fn ($total, string $estado): string => CertificateStatus::from($estado)->label().': '.$total)
+                    ->values()->all()
+                : [],
             'puede' => [
+                'certificados' => $usuario->can('viewAny', Certificate::class),
                 'editar' => $usuario->can('update', $event),
                 'eliminar' => $usuario->can('delete', $event),
                 'descuentos' => $usuario->can(Permiso::VerDescuentos->value),

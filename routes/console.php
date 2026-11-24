@@ -27,3 +27,10 @@ Schedule::command('respaldo:crear')
     ->dailyAt('03:00')
     ->withoutOverlapping()
     ->onOneServer();
+
+// Certificados de a uno, espaciados: un envío masivo desde Gmail termina en spam
+// o con la cuenta bloqueada (24/11/2026). El ritmo vive en config/certificados.php.
+Schedule::command('certificados:enviar')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();

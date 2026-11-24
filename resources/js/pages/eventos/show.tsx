@@ -10,6 +10,7 @@ import { ArrowRight, Copy, Flag, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
+import CertificadoController from '@/actions/App/Http/Controllers/Eventos/CertificadoController';
 import CuentaBancariaController from '@/actions/App/Http/Controllers/Configuracion/CuentaBancariaController';
 import CodigoDescuentoController from '@/actions/App/Http/Controllers/Eventos/CodigoDescuentoController';
 import InvitacionController from '@/actions/App/Http/Controllers/Eventos/InvitacionController';
@@ -128,12 +129,14 @@ type Props = {
     };
     codigos: string[];
     invitaciones: string[];
+    certificados: string[];
     puede: {
         editar: boolean;
         eliminar: boolean;
         descuentos: boolean;
         gestionar_descuentos: boolean;
         invitaciones: boolean;
+        certificados: boolean;
     };
 };
 
@@ -615,6 +618,7 @@ export default function EventoShow({
     opciones,
     codigos,
     invitaciones,
+    certificados,
     puede,
 }: Props) {
     setLayoutProps({
@@ -1076,6 +1080,25 @@ export default function EventoShow({
                         <Lista
                             items={invitaciones}
                             vacio="Todavía no hay invitaciones."
+                        />
+                    </SeccionFicha>
+                )}
+
+                {puede.certificados && (
+                    <SeccionFicha
+                        titulo="Certificados"
+                        accion={
+                            <IrA
+                                href={CertificadoController.index.url(
+                                    evento.id,
+                                )}
+                                texto="Ir a certificados"
+                            />
+                        }
+                    >
+                        <Lista
+                            items={certificados}
+                            vacio="Todavía no hay certificados."
                         />
                     </SeccionFicha>
                 )}

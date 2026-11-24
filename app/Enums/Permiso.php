@@ -42,6 +42,9 @@ enum Permiso: string
     // Invitaciones personales e invitado especial: también Coordinación, que no puede crear códigos.
     case GestionarInvitaciones = 'gestionar_invitaciones';
 
+    // Upload certificates made outside and send them to participants (24/11/2026).
+    case GestionarCertificados = 'gestionar_certificados';
+
     case GestionarCuentasBancarias = 'gestionar_cuentas_bancarias';
 
     case GestionarUsuarios = 'gestionar_usuarios';

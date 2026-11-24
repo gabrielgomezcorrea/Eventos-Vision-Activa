@@ -61,6 +61,7 @@ enum Rol: string
                 Permiso::GestionarInvitaciones,
                 Permiso::VerDescuentos,
                 Permiso::VerReporteAcreditacion,
+                Permiso::GestionarCertificados,
             ],
 
             // Contabilidad no configura eventos ni hace seguimiento comercial:

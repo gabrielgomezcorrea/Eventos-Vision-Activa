@@ -10,6 +10,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DescargarComprobanteController;
 use App\Http\Controllers\DescargarFacturaController;
 use App\Http\Controllers\Eventos\AccesoController;
+use App\Http\Controllers\Eventos\CertificadoController;
 use App\Http\Controllers\Eventos\CodigoDescuentoController;
 use App\Http\Controllers\Eventos\CuposYPreciosController;
 use App\Http\Controllers\Eventos\EventoController;
@@ -93,6 +94,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('eventos/{event}/invitaciones', [InvitacionController::class, 'index'])->name('eventos.invitaciones.index');
         Route::post('eventos/{event}/invitaciones', [InvitacionController::class, 'store'])->name('eventos.invitaciones.store');
         Route::patch('eventos/{event}/invitaciones/{invitation}/anular', [InvitacionController::class, 'anular'])->name('eventos.invitaciones.anular');
+
+        Route::get('eventos/{event}/certificados', [CertificadoController::class, 'index'])->name('eventos.certificados.index');
+        Route::post('eventos/{event}/certificados', [CertificadoController::class, 'store'])->name('eventos.certificados.store');
+        Route::post('eventos/{event}/certificados/enviar', [CertificadoController::class, 'enviar'])->name('eventos.certificados.enviar');
+        Route::post('eventos/{event}/certificados/pausar', [CertificadoController::class, 'pausar'])->name('eventos.certificados.pausar');
+        Route::post('eventos/{event}/certificados/reanudar', [CertificadoController::class, 'reanudar'])->name('eventos.certificados.reanudar');
+        Route::patch('eventos/{event}/certificados/{certificate}', [CertificadoController::class, 'asignar'])->name('eventos.certificados.asignar');
+        Route::post('eventos/{event}/certificados/{certificate}/reenviar', [CertificadoController::class, 'reenviar'])->name('eventos.certificados.reenviar');
+        Route::get('eventos/{event}/certificados/{certificate}/archivo', [CertificadoController::class, 'archivo'])->name('eventos.certificados.archivo');
+        Route::delete('eventos/{event}/certificados/{certificate}', [CertificadoController::class, 'destroy'])->name('eventos.certificados.destroy');
 
         Route::get('eventos/{event}/codigos', [CodigoDescuentoController::class, 'index'])->name('eventos.codigos.index');
         Route::post('eventos/{event}/codigos', [CodigoDescuentoController::class, 'store'])->name('eventos.codigos.store');
